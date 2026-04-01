@@ -1,4 +1,5 @@
 ﻿using FinanceManagementApplication.Domain.Entities;
+using FinancialManagementApplication.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using System.Collections.Generic;
 
@@ -12,4 +13,5 @@ public class ApplicationDbContext : DbContext
     }
 
     public DbSet<Account> Accounts => Set<Account>();
+    public DbSet<User> Users => Set<User>();
 }
