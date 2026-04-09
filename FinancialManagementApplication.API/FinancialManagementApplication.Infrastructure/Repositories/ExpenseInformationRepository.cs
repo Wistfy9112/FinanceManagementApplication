@@ -8,14 +8,14 @@ using System.Text;
 
 namespace FinancialManagementApplication.Infrastructure.Repositories
 {
-    public class ExpenseRepository : IExpenseRepository
+    public class ExpenseInformationRepository : IExpenseInformationRepository
     {
         private readonly ApplicationDbContext _context;
-        public ExpenseRepository(ApplicationDbContext context)
+        public ExpenseInformationRepository(ApplicationDbContext context)
         {
             _context = context;
         }
-        public async Task<Expense?> CreateExpenseAsync(Expense expense)
+        public async Task<ExpenseInformation?> CreateExpenseAsync(ExpenseInformation expense)
         {
             await _context.Expenses.AddAsync(expense);
             await _context.SaveChangesAsync();
@@ -29,27 +29,27 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
             return true;
         }
 
-        public async Task<IEnumerable<Expense>> GetAllExpensesAsync()
+        public async Task<IEnumerable<ExpenseInformation>> GetAllExpensesAsync()
         {
             return await _context.Expenses.ToListAsync();
         }
 
-        public async Task<Expense?> GetByCategoryIDAsync(Guid categoryID)
+        public async Task<IEnumerable<ExpenseInformation>> GetByCategoryIDAsync(Guid categoryID)
         {
-            return await _context.Expenses.FirstOrDefaultAsync(x => x.CategoryID == categoryID);
+            return await _context.Expenses.Where(x => x.CategoryID == categoryID).ToListAsync();
         }
 
-        public async Task<Expense?> GetExpenseByAccountIDAsync(Guid accountID)
+        public async Task<ExpenseInformation?> GetExpenseByAccountIDAsync(Guid accountID)
         {
             return await _context.Expenses.FirstOrDefaultAsync(x => x.AccountID == accountID);
         }
 
-        public async Task<Expense?> GetExpenseByIDAsync(Guid id)
+        public async Task<ExpenseInformation?> GetExpenseByIDAsync(Guid id)
         {
             return await _context.Expenses.FirstOrDefaultAsync(x => x.ExpenseID == id);
         }
 
-        public async Task<Expense?> UpdateExpenseAsync(Expense expense)
+        public async Task<ExpenseInformation?> UpdateExpenseAsync(ExpenseInformation expense)
         {
             await _context.Expenses.Where(x => x.ExpenseID == expense.ExpenseID).ExecuteUpdateAsync(x =>
                 x.SetProperty(e => e.Amount, expense.Amount)

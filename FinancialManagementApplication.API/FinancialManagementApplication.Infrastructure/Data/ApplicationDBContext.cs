@@ -14,6 +14,6 @@ public class ApplicationDbContext : DbContext
 
     public DbSet<Account> Accounts => Set<Account>();
     public DbSet<User> Users => Set<User>();
-    public DbSet<Category> Categories => Set<Category>();
-    public DbSet<Expense> Expenses => Set<Expense>();
+    public DbSet<ExpenseCategory> Categories => Set<ExpenseCategory>();
+    public DbSet<ExpenseInformation> Expenses => Set<ExpenseInformation>();
 }
