@@ -12,8 +12,10 @@ namespace FinancialManagementApplication.Domain.Entities
         public string LastName { get; set; }
         public string PhoneNumber { get; set; }
         public DateTime DateOfBirth { get; set; }
-        public Guid AccountID { get; set; }
         public DateTime CreateAt { get; set; }
         public DateTime UpdateAt { get; set; }
+
+        // Navigation properties
+        public virtual Account Account { get; set; }
     }
 }

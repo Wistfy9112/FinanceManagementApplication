@@ -47,9 +47,9 @@ namespace FinancialManagementApplication.Application.Services
                 LastName = "",
                 PhoneNumber = "",
                 DateOfBirth = DateTime.UtcNow,
-                AccountID = account.AccountID
+                Account = account
             };
-            account.UserID = user.UserID;
+            account.User = user;
 
             await _repo.AddAsync(account);
             await _userRepo.CreateUserAsync(user);

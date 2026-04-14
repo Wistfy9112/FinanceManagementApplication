@@ -39,7 +39,7 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
 
         public async Task<User?> GetUserByAccountIDAsync(Guid id)
         {
-            return await _context.Users.FirstOrDefaultAsync(x => x.AccountID == id);
+            return await _context.Users.FirstOrDefaultAsync(x => x.Account.AccountID == id);
         }
 
         public async Task<User?> GetUserByEmailAsync(string email)
@@ -48,7 +48,7 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
             if (account == null) {
                 return null;
             }
-            return await _context.Users.FirstOrDefaultAsync(x => x.AccountID == account.AccountID);
+            return await _context.Users.FirstOrDefaultAsync(x => x.Account.AccountID == account.AccountID);
         }
 
         public async Task<User?> GetUserByIdAsync(Guid id)

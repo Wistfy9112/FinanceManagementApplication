@@ -37,7 +37,7 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
 
         public async Task<ExpenseCategory?> GetByAccountIDAsync(Guid accountId)
         {
-            return await _context.Categories.FirstOrDefaultAsync(x => x.AccountID == accountId);
+            return await _context.Categories.FirstOrDefaultAsync(x => x.Account.AccountID == accountId);
         }
 
         public async Task<ExpenseCategory?> GetCategoryByIdAsync(Guid id)

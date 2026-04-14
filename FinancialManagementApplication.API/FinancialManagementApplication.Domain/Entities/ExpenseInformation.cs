@@ -11,9 +11,10 @@ namespace FinancialManagementApplication.Domain.Entities
         public string Name { get; set; } = default!;
         public decimal Amount { get; set; }
         public float AllocatedPercentage { get; set; }
-        public Guid CategoryID { get; set; }
-        public Guid AccountID { get; set; }
         public DateTime CreateAt { get; set; }
         public DateTime UpdateAt { get; set; }
+
+        // Navigation properties
+        public virtual ExpenseCategory ExpenseCategory { get; set; } = default!;
     }
 }

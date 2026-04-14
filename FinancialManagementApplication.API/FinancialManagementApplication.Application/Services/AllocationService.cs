@@ -22,7 +22,7 @@ namespace FinancialManagementApplication.Application.Services
             foreach (var expense in expenses)
             {
                 var allocationAmount = totalIncome * (float)(expense.AllocatedPercentage / 100);
-                allocations[expense.CategoryID] = allocationAmount;
+                allocations[expense.ExpenseCategory.CategoryID] = allocationAmount;
             }
             return allocations;
         }
@@ -39,7 +39,7 @@ namespace FinancialManagementApplication.Application.Services
                 var allocatedAmout = totalIncome * (expense.AllocatedPercentage / 100);
                 var adjustedAmount = allocatedAmout - categoryReduction;
 
-                adjustAllocation[expense.CategoryID] = adjustedAmount;
+                adjustAllocation[expense.ExpenseCategory.CategoryID] = adjustedAmount;
             }
 
             return adjustAllocation;

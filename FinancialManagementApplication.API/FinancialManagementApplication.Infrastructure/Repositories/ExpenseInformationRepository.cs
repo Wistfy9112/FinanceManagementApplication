@@ -36,12 +36,12 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
 
         public async Task<IEnumerable<ExpenseInformation>> GetByCategoryIDAsync(Guid categoryID)
         {
-            return await _context.Expenses.Where(x => x.CategoryID == categoryID).ToListAsync();
+            return await _context.Expenses.Where(x => x.ExpenseCategory.CategoryID == categoryID).ToListAsync();
         }
 
         public async Task<ExpenseInformation?> GetExpenseByAccountIDAsync(Guid accountID)
         {
-            return await _context.Expenses.FirstOrDefaultAsync(x => x.AccountID == accountID);
+            return await _context.Expenses.FirstOrDefaultAsync(x => x.ExpenseCategory.Account.AccountID == accountID);
         }
 
         public async Task<ExpenseInformation?> GetExpenseByIDAsync(Guid id)
@@ -54,7 +54,7 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
             await _context.Expenses.Where(x => x.ExpenseID == expense.ExpenseID).ExecuteUpdateAsync(x =>
                 x.SetProperty(e => e.Amount, expense.Amount)
                 .SetProperty(e => e.Name, expense.Name)
-                .SetProperty(e => e.CategoryID, expense.CategoryID)
+                .SetProperty(e => e.ExpenseCategory.CategoryID, expense.ExpenseCategory.CategoryID)
                 .SetProperty(e => e.UpdateAt, DateTime.UtcNow)
             ).ContinueWith(t => t.Result > 0 ? expense : null);
             await _context.SaveChangesAsync();
