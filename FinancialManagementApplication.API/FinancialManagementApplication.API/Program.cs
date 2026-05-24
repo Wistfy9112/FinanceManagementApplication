@@ -21,9 +21,9 @@ builder.Configuration
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<IAccountRepository, AccountRepository>();
 builder.Services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
-builder.Services.AddScoped<IUserRepository, UserRepository>();
-builder.Services.AddScoped<IExpenseCategoryRepository, ExpenseCategoryRepository>();
-builder.Services.AddScoped<IExpenseInformationRepository, ExpenseInformationRepository>();
+builder.Services.AddScoped<IAssetsRepository, AssetsRepository>();
+builder.Services.AddScoped<IPortfolioRepository, PortfolioRepository>();
+builder.Services.AddScoped<IPortfolioAllocationRepository, PortfolioAllocationRepository>();
 builder.Services.AddScoped<AllocationService>();
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(

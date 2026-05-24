@@ -13,27 +13,27 @@ public class ApplicationDbContext : DbContext
     }
 
     public DbSet<Account> Accounts => Set<Account>();
-    public DbSet<User> Users => Set<User>();
-    public DbSet<ExpenseCategory> Categories => Set<ExpenseCategory>();
-    public DbSet<ExpenseInformation> Expenses => Set<ExpenseInformation>();
+    public DbSet<Assets> Assets => Set<Assets>();
+    public DbSet<Portfolio> Portfolio => Set<Portfolio>();
+    public DbSet<PortfolioAllocation> PortfolioAllocations => Set<PortfolioAllocation>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
         // Configure relationships
         modelBuilder.Entity<Account>()
-            .HasOne(a => a.User)
+            .HasMany(a => a.Assets)
             .WithOne(u => u.Account)
-            .HasForeignKey<User>(u => u.Account.AccountID);
+            .HasForeignKey(a => a.AccountID);
 
         modelBuilder.Entity<Account>()
-            .HasMany(a => a.ExpenseCategories)
-            .WithOne(ec => ec.Account)
-            .HasForeignKey(ec => ec.Account.AccountID);
+            .HasMany(a => a.Portfolios)
+            .WithOne(p => p.Account)
+            .HasForeignKey(p => p.AccountID);
 
-        modelBuilder.Entity<ExpenseCategory>()
-            .HasMany(ec => ec.ExpenseInformations)
-            .WithOne(ei => ei.ExpenseCategory)
-            .HasForeignKey(ei => ei.ExpenseCategory.CategoryID);
+        modelBuilder.Entity<Portfolio>()
+            .HasMany(p => p.PortfolioAllocations)
+            .WithOne(pa => pa.Portfolio)
+            .HasForeignKey(pa => pa.PortfolioId);
     }
 }
