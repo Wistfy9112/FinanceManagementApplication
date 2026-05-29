@@ -124,11 +124,11 @@ const DEFAULT_ALLOCATIONS = [
   { Id: 'al11', PortfolioId: 'p1', FinancialCategory: 'Saving', Name: 'Emergency', TargetPercentage: 0.65703, CurrentAmount: 125753 },
   { Id: 'al12', PortfolioId: 'p1', FinancialCategory: 'Saving', Name: 'Health', TargetPercentage: 11.16951, CurrentAmount: 2137795 },
   { Id: 'al13', PortfolioId: 'p1', FinancialCategory: 'Saving', Name: 'Unemployment fund', TargetPercentage: 0.65703, CurrentAmount: 125753 },
-  { Id: 'al14', PortfolioId: 'p1', FinancialCategory: 'Saving', Name: 'Funds (Stock)', TargetPercentage: 20.49934, CurrentAmount: 3923482 },
-  { Id: 'al15', PortfolioId: 'p1', FinancialCategory: 'Saving', Name: 'ETF (Stock)', TargetPercentage: 9.85545, CurrentAmount: 1886289 },
-  { Id: 'al16', PortfolioId: 'p1', FinancialCategory: 'Saving', Name: 'Chứng chỉ quỹ', TargetPercentage: 9.85545, CurrentAmount: 1886289 },
-  { Id: 'al17', PortfolioId: 'p1', FinancialCategory: 'Saving', Name: 'Margin (Stock)', TargetPercentage: 0.00000, CurrentAmount: 0 },
-  { Id: 'al18', PortfolioId: 'p1', FinancialCategory: 'Saving', Name: 'Gold', TargetPercentage: 3.28515, CurrentAmount: 628763 }
+  { Id: 'al14', PortfolioId: 'p1', FinancialCategory: 'Investment', Name: 'Funds (Stock)', TargetPercentage: 20.49934, CurrentAmount: 3923482 },
+  { Id: 'al15', PortfolioId: 'p1', FinancialCategory: 'Investment', Name: 'ETF (Stock)', TargetPercentage: 9.85545, CurrentAmount: 1886289 },
+  { Id: 'al16', PortfolioId: 'p1', FinancialCategory: 'Investment', Name: 'Chứng chỉ quỹ', TargetPercentage: 9.85545, CurrentAmount: 1886289 },
+  { Id: 'al17', PortfolioId: 'p1', FinancialCategory: 'Investment', Name: 'Margin (Stock)', TargetPercentage: 0.00000, CurrentAmount: 0 },
+  { Id: 'al18', PortfolioId: 'p1', FinancialCategory: 'Investment', Name: 'Gold', TargetPercentage: 3.28515, CurrentAmount: 628763 }
 ];
 
 const getStorage = <T>(key: string, defaultValue: T): T => {

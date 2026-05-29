@@ -8,11 +8,25 @@ import {
   getLoggedUser
 } from './services/api';
 
+// Format number with commas, no decimals (for input display)
+const formatInputNumber = (value: number) => {
+  if (isNaN(value)) return '0';
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  }).format(value);
+};
+
+// Parse comma-formatted input string back to number
+const parseInputNumber = (str: string) => {
+  return parseFloat(str.replace(/,/g, '')) || 0;
+};
+
 // Format currency in USD (or VND with $ symbol as in the spreadsheets)
 const formatCurrency = (value: number) => {
   const formatted = new Intl.NumberFormat('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
   }).format(Math.abs(value));
   return `${value < 0 ? '-' : ''}$${formatted}`;
 };
@@ -20,7 +34,7 @@ const formatCurrency = (value: number) => {
 // Format percentages cleanly
 const formatPercentage = (value: number) => {
   if (isNaN(value) || !isFinite(value)) return '0.00%';
-  return `${value.toFixed(5)}%`;
+  return `${value.toFixed(4)}%`;
 };
 
 export default function App() {
@@ -261,8 +275,6 @@ export default function App() {
   };
 
   const handleSetupAmountChange = (val: number) => {
-    const otherTotal = setupAllocations.reduce((sum, al) => sum + (al.setupAmount || 0), 0);
-    if (otherTotal > val) return;
     setSetupAmount(val);
     const updated = setupAllocations.map(al => {
       const newPercent = val > 0 ? (al.setupAmount / val) * 100 : 0;
@@ -293,7 +305,10 @@ export default function App() {
   const handleSetupAddAllocation = () => {
     const totalAllocated = setupAllocations.reduce((sum, al) => sum + (al.setupAmount || 0), 0);
     const totalPercent = setupAllocations.reduce((sum, al) => sum + al.TargetPercentage, 0);
-    if (totalAllocated >= setupAmount || totalPercent >= 100) return;
+    if (totalAllocated > setupAmount || totalPercent > 100) {
+      setError('Không thể thêm danh mục mới vì đã đạt hoặc vượt quá phân bổ gốc / 100%.');
+      return;
+    }
     const newId = 'al-' + Math.random().toString(36).substr(2, 9);
     const newAl = {
       Id: newId,
@@ -343,6 +358,11 @@ export default function App() {
         setError('Vui lòng nhập tên cho tất cả danh mục.');
         return;
       }
+      const totalPct = setupAllocations.reduce((sum, al) => sum + al.TargetPercentage, 0);
+      if (totalPct > 100) {
+        setError('Tổng tỉ trọng vượt quá 100%. Vui lòng điều chỉnh lại.');
+        return;
+      }
 
       await portfolioService.updateAmount(portfolio?.Id || 'p1', setupAmount, 'Kế Hoạch Phân Bổ Tổng Thể', user.id);
 
@@ -366,17 +386,15 @@ export default function App() {
   };
 
   // Dynamic values calculated from allocations
-  const totalAllocatedPercentage = allocations.reduce((sum, al) => sum + al.TargetPercentage, 0);
-  const totalAllocatedCash = allocations.reduce((sum, al) => sum + al.CurrentAmount, 0);
-
-  // Calculates reduction and actual values dynamically based on exclusions
   const calculateAllocationsData = () => {
     return allocations.map(al => {
+      const currentAmount = income > 0 ? income * (al.TargetPercentage / 100) : al.CurrentAmount;
       const isExcluded = exclusions.includes(al.Id);
       const reduction = isExcluded ? 0 : targetReduction * (al.TargetPercentage / 100);
-      const actual = al.CurrentAmount - reduction;
+      const actual = currentAmount - reduction;
       return {
         ...al,
+        CurrentAmount: currentAmount,
         reduction,
         actual,
         isExcluded
@@ -387,11 +405,16 @@ export default function App() {
   const calculatedAllocs = calculateAllocationsData();
   const calculatedExpenses = calculatedAllocs.filter(al => al.FinancialCategory === 'Expense');
   const calculatedSavings = calculatedAllocs.filter(al => al.FinancialCategory === 'Saving');
+  const calculatedInvestments = calculatedAllocs.filter(al => al.FinancialCategory === 'Investment');
 
   const totalReductionAmount = calculatedAllocs.reduce((sum, al) => sum + al.reduction, 0);
   const totalActualAmount = calculatedAllocs.reduce((sum, al) => sum + al.actual, 0);
 
+  const totalAllocatedPercentage = allocations.reduce((sum, al) => sum + al.TargetPercentage, 0);
+  const totalAllocatedCash = calculatedAllocs.reduce((sum, al) => sum + al.CurrentAmount, 0);
+
   const totalSavingCash = calculatedSavings.reduce((sum, al) => sum + al.CurrentAmount, 0);
+  const totalInvestmentCash = calculatedInvestments.reduce((sum, al) => sum + al.CurrentAmount, 0);
 
   // Dynamic calculations for Assets
   const totalInitial = assets.reduce((sum, a) => sum + a.InitialValue, 0);
@@ -540,7 +563,9 @@ export default function App() {
             targetReduction={targetReduction}
             calculatedExpenses={calculatedExpenses}
             calculatedSavings={calculatedSavings}
+            calculatedInvestments={calculatedInvestments}
             totalSavingCash={totalSavingCash}
+            totalInvestmentCash={totalInvestmentCash}
             totalReductionAmount={totalReductionAmount}
             totalActualAmount={totalActualAmount}
             totalAllocatedPercentage={totalAllocatedPercentage}
@@ -587,27 +612,19 @@ export default function App() {
               </div>
               <div className="form-group">
                 <label className="form-label">Vốn ban đầu (Funds)</label>
-                <input 
-                  type="number" 
-                  step="0.01"
+                <MoneyInput 
                   className="form-control" 
-                  min="0"
-                  required
-                  value={assetModal.data.InitialValue || ''}
-                  onChange={(e) => setAssetModal({ ...assetModal, data: { ...assetModal.data, InitialValue: parseFloat(e.target.value) || 0 } })}
+                  value={assetModal.data.InitialValue}
+                  onChange={(val) => setAssetModal({ ...assetModal, data: { ...assetModal.data, InitialValue: val } })}
                   placeholder="Nhập số tiền vốn ban đầu"
                 />
               </div>
               <div className="form-group">
                 <label className="form-label">Giá trị hiện tại (Current)</label>
-                <input 
-                  type="number" 
-                  step="0.01"
+                <MoneyInput 
                   className="form-control" 
-                  min="0"
-                  required
-                  value={assetModal.data.CurrentValue || ''}
-                  onChange={(e) => setAssetModal({ ...assetModal, data: { ...assetModal.data, CurrentValue: parseFloat(e.target.value) || 0 } })}
+                  value={assetModal.data.CurrentValue}
+                  onChange={(val) => setAssetModal({ ...assetModal, data: { ...assetModal.data, CurrentValue: val } })}
                   placeholder="Nhập giá trị tài sản hiện tại"
                 />
               </div>
@@ -1117,37 +1134,7 @@ function AssetsPage({
                 );
               })
             )}
-            {/* Total Row */}
-            {assets.length > 0 && (
-              <tr className="total-row">
-                <td colSpan={2} style={{ textAlign: 'left', paddingLeft: '18px' }}>Tổng tài sản (Total)</td>
-                <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)' }}>{formatCurrency(totalInitial)}</td>
-                <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)' }}>{formatCurrency(totalCurrent)}</td>
-                <td style={{ 
-                  textAlign: 'right', 
-                  fontFamily: 'var(--font-display)',
-                  color: totalInterest > 0 ? 'var(--success)' : totalInterest < 0 ? 'var(--danger)' : 'inherit'
-                }}>
-                  {totalInterest > 0 ? '+' : ''}{formatCurrency(totalInterest)}
-                </td>
-                <td style={{ 
-                  textAlign: 'right', 
-                  fontFamily: 'var(--font-display)',
-                  color: totalInterest > 0 ? 'var(--success)' : totalInterest < 0 ? 'var(--danger)' : 'inherit'
-                }}>
-                  {totalInitial > 0 ? (
-                    <>
-                      {totalInterest > 0 ? '+' : ''}
-                      {totalInterestRatio.toFixed(2)}%
-                    </>
-                  ) : (
-                    '-'
-                  )}
-                </td>
-                <td style={{ textAlign: 'center', color: 'var(--text-muted)' }}>26/05/2026</td>
-                <td></td>
-              </tr>
-            )}
+
           </tbody>
         </table>
       </div>
@@ -1163,7 +1150,9 @@ function PortfolioPage({
   targetReduction,
   calculatedExpenses,
   calculatedSavings,
+  calculatedInvestments,
   totalSavingCash,
+  totalInvestmentCash,
   totalReductionAmount,
   totalActualAmount,
   totalAllocatedPercentage,
@@ -1191,7 +1180,9 @@ function PortfolioPage({
   targetReduction: number;
   calculatedExpenses: any[];
   calculatedSavings: any[];
+  calculatedInvestments: any[];
   totalSavingCash: number;
+  totalInvestmentCash: number;
   totalReductionAmount: number;
   totalActualAmount: number;
   totalAllocatedPercentage: number;
@@ -1248,17 +1239,15 @@ function PortfolioPage({
         <div className="budget-cut-header">
           <div className="budget-input-item">
             <label>Phân bổ gốc (Base Amount)</label>
-            <input 
-              type="number" 
-              step="0.01"
+            <MoneyInput 
               value={setupAmount} 
-              onChange={(e) => onSetupAmountChange(parseFloat(e.target.value) || 0)} 
+              onChange={(val) => onSetupAmountChange(val)} 
             />
           </div>
           <div className="budget-input-item">
             <label>Tổng đã phân bổ</label>
             <div style={{ padding: '8px 12px', background: 'rgba(99,102,241,0.05)', border: '1px solid rgba(99,102,241,0.15)', borderRadius: '6px', fontWeight: 700, fontFamily: 'var(--font-display)', fontSize: '1rem', color: Math.abs(setupTotalPercent - 100) < 0.01 ? 'var(--success)' : 'var(--warning)' }}>
-              {setupTotalPercent.toFixed(5)}%
+              {setupTotalPercent.toFixed(4)}%
             </div>
           </div>
           <div style={{ flex: 1, minWidth: '220px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
@@ -1272,7 +1261,7 @@ function PortfolioPage({
           <table className="custom-table">
             <thead>
               <tr>
-                <th style={{ width: '80px' }}>Khối</th>
+                <th style={{ width: '160px' }}>Phân loại</th>
                 <th>Tên danh mục</th>
                 <th style={{ textAlign: 'right', width: '160px' }}>Số tiền (Cash)</th>
                 <th style={{ textAlign: 'right', width: '140px' }}>Tỉ trọng (%)</th>
@@ -1297,7 +1286,8 @@ function PortfolioPage({
                         onChange={(e) => onSetupEditAllocation(al.Id, 'FinancialCategory', e.target.value)}
                       >
                         <option value="Expense">Sinh hoạt</option>
-                        <option value="Saving">Saving</option>
+                        <option value="Saving">Tiết kiệm</option>
+                        <option value="Investment">Đầu tư</option>
                       </select>
                     </td>
                     <td>
@@ -1311,17 +1301,15 @@ function PortfolioPage({
                       />
                     </td>
                     <td style={{ textAlign: 'right' }}>
-                      <input 
-                        type="number" 
-                        step="0.01"
+                      <MoneyInput 
                         className="form-control"
                         style={{ textAlign: 'right', padding: '4px 8px', width: '140px', display: 'inline-block', height: '32px', fontSize: '0.85rem', fontFamily: 'var(--font-display)' }}
                         value={al.setupAmount || 0}
-                        onChange={(e) => onSetupAllocationAmountChange(al.Id, parseFloat(e.target.value) || 0)}
+                        onChange={(val) => onSetupAllocationAmountChange(al.Id, val)}
                       />
                     </td>
                     <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 600 }}>
-                      {al.TargetPercentage.toFixed(5)}%
+                      {al.TargetPercentage.toFixed(4)}%
                     </td>
                     <td style={{ textAlign: 'center' }}>
                       <button 
@@ -1346,7 +1334,7 @@ function PortfolioPage({
                     {formatCurrency(setupTotalAmount)}
                   </td>
                   <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', color: Math.abs(setupTotalPercent - 100) < 0.01 ? 'var(--success)' : '#f59e0b' }}>
-                    {setupTotalPercent.toFixed(5)}%
+                    {setupTotalPercent.toFixed(4)}%
                   </td>
                   <td></td>
                 </tr>
@@ -1372,7 +1360,7 @@ function PortfolioPage({
       <div className="tab-header">
         <div>
           <h2 className="section-title">Phân Bổ Danh Mục & Cắt Giảm Ngân Sách</h2>
-          <p className="section-desc">Phân bố thu nhập thành hai khối Sinh hoạt & Tích lũy, tích hợp bộ lập kế hoạch cắt giảm tự động</p>
+          <p className="section-desc">Phân bố thu nhập thành ba khối Sinh hoạt, Tiết kiệm & Đầu tư, tích hợp bộ lập kế hoạch cắt giảm tự động</p>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
           <button className="btn btn-secondary" onClick={onStartSetup} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -1396,20 +1384,16 @@ function PortfolioPage({
       <div className="budget-cut-header">
         <div className="budget-input-item">
           <label>Thu nhập (Income)</label>
-          <input 
-            type="number" 
-            step="0.01"
+          <MoneyInput 
             value={income} 
-            onChange={(e) => onUpdateIncome(parseFloat(e.target.value) || 0)} 
+            onChange={(val) => onUpdateIncome(val)} 
           />
         </div>
         <div className="budget-input-item">
           <label>Số tiền cần giảm (Target)</label>
-          <input 
-            type="number" 
-            step="0.01"
+          <MoneyInput 
             value={targetReduction} 
-            onChange={(e) => onUpdateTargetReduction(parseFloat(e.target.value) || 0)} 
+            onChange={(val) => onUpdateTargetReduction(val)} 
           />
         </div>
         <div style={{ flex: 1, minWidth: '220px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
@@ -1423,7 +1407,7 @@ function PortfolioPage({
         <div style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', padding: '12px 16px', borderRadius: '8px', marginBottom: '20px', color: '#fbd38d', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
           <span style={{ fontSize: '1.2rem' }}>⚠️</span>
           <span>
-            Tổng tỉ trọng hiện tại đang là <strong>{totalAllocatedPercentage.toFixed(5)}%</strong>. Vui lòng điều chỉnh tỉ trọng các quỹ về đúng <strong>100.00%</strong> để dòng tiền phân bổ cân bằng hoàn toàn.
+            Tổng tỉ trọng hiện tại đang là <strong>{totalAllocatedPercentage.toFixed(4)}%</strong>. Vui lòng điều chỉnh tỉ trọng các quỹ về đúng <strong>100.00%</strong> để dòng tiền phân bổ cân bằng hoàn toàn.
           </span>
         </div>
       )}
@@ -1462,25 +1446,14 @@ function PortfolioPage({
                 )}
                 <td style={{ fontWeight: 500, paddingLeft: '16px' }}>{al.Name}</td>
                 <td style={{ textAlign: 'right' }}>
-                  <input 
-                    type="number" 
-                    step="0.00001"
-                    className="form-control"
-                    style={{ textAlign: 'right', padding: '4px 8px', width: '120px', display: 'inline-block', height: '28px', fontSize: '0.85rem' }}
-                    value={al.TargetPercentage}
-                    onChange={(e) => onUpdateAllocationPercent(al.Id, parseFloat(e.target.value) || 0)}
-                  />
-                  <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginLeft: '4px' }}>%</span>
+                  <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600 }}>
+                    {al.TargetPercentage.toFixed(4)}%
+                  </span>
                 </td>
                 <td style={{ textAlign: 'right' }}>
-                  <input 
-                    type="number" 
-                    step="0.01"
-                    className="form-control"
-                    style={{ textAlign: 'right', padding: '4px 8px', width: '130px', display: 'inline-block', height: '28px', fontSize: '0.85rem', fontFamily: 'var(--font-display)' }}
-                    value={al.CurrentAmount}
-                    onChange={(e) => onUpdateAllocationCash(al.Id, parseFloat(e.target.value) || 0)}
-                  />
+                  <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600 }}>
+                    {formatCurrency(al.CurrentAmount)}
+                  </span>
                 </td>
                 <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', color: al.reduction > 0 ? 'var(--warning)' : 'var(--text-muted)', fontWeight: 500 }}>
                   {formatCurrency(al.reduction)}
@@ -1500,7 +1473,7 @@ function PortfolioPage({
               </tr>
             ))}
 
-            {/* divider: Còn lại (Remaining of saving block) */}
+            {/* divider: Còn lại (Saving Base) */}
             <tr className="table-section-divider">
               <td style={{ borderRight: '1px solid var(--border-light)' }}></td>
               <td style={{ fontWeight: 700, paddingLeft: '16px' }}>Còn lại (Saving Base)</td>
@@ -1513,7 +1486,7 @@ function PortfolioPage({
               <td></td>
             </tr>
 
-            {/* 2. SAVING BLOCK */}
+            {/* 2. TIẾT KIỆM BLOCK */}
             {calculatedSavings.map((al, idx) => (
               <tr key={al.Id}>
                 {idx === 0 && (
@@ -1526,30 +1499,19 @@ function PortfolioPage({
                       borderRight: '1px solid var(--border-light)'
                     }}
                   >
-                    Saving
+                    Tiết kiệm
                   </td>
                 )}
                 <td style={{ fontWeight: 500, paddingLeft: '16px' }}>{al.Name}</td>
                 <td style={{ textAlign: 'right' }}>
-                  <input 
-                    type="number" 
-                    step="0.00001"
-                    className="form-control"
-                    style={{ textAlign: 'right', padding: '4px 8px', width: '120px', display: 'inline-block', height: '28px', fontSize: '0.85rem' }}
-                    value={al.TargetPercentage}
-                    onChange={(e) => onUpdateAllocationPercent(al.Id, parseFloat(e.target.value) || 0)}
-                  />
-                  <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginLeft: '4px' }}>%</span>
+                  <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600 }}>
+                    {al.TargetPercentage.toFixed(4)}%
+                  </span>
                 </td>
                 <td style={{ textAlign: 'right' }}>
-                  <input 
-                    type="number" 
-                    step="0.01"
-                    className="form-control"
-                    style={{ textAlign: 'right', padding: '4px 8px', width: '130px', display: 'inline-block', height: '28px', fontSize: '0.85rem', fontFamily: 'var(--font-display)' }}
-                    value={al.CurrentAmount}
-                    onChange={(e) => onUpdateAllocationCash(al.Id, parseFloat(e.target.value) || 0)}
-                  />
+                  <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600 }}>
+                    {formatCurrency(al.CurrentAmount)}
+                  </span>
                 </td>
                 <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', color: al.reduction > 0 ? 'var(--warning)' : 'var(--text-muted)', fontWeight: 500 }}>
                   {formatCurrency(al.reduction)}
@@ -1568,6 +1530,66 @@ function PortfolioPage({
                 </td>
               </tr>
             ))}
+
+            {/* 3. ĐẦU TƯ BLOCK */}
+            {calculatedInvestments.length > 0 && (
+              <>
+            <tr className="table-section-divider">
+              <td style={{ borderRight: '1px solid var(--border-light)' }}></td>
+              <td style={{ fontWeight: 700, paddingLeft: '16px' }}>Đầu tư (Investment Base)</td>
+              <td style={{ textAlign: 'right' }}></td>
+              <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 700 }}>
+                {formatCurrency(totalInvestmentCash)}
+              </td>
+              <td></td>
+              <td></td>
+              <td></td>
+            </tr>
+            {calculatedInvestments.map((al, idx) => (
+              <tr key={al.Id}>
+                {idx === 0 && (
+                  <td 
+                    className="span-col" 
+                    rowSpan={calculatedInvestments.length} 
+                    style={{ 
+                      verticalAlign: 'middle', 
+                      background: 'rgba(16,185,129,0.02)',
+                      borderRight: '1px solid var(--border-light)'
+                    }}
+                  >
+                    Đầu tư
+                  </td>
+                )}
+                <td style={{ fontWeight: 500, paddingLeft: '16px' }}>{al.Name}</td>
+                <td style={{ textAlign: 'right' }}>
+                  <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600 }}>
+                    {al.TargetPercentage.toFixed(4)}%
+                  </span>
+                </td>
+                <td style={{ textAlign: 'right' }}>
+                  <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600 }}>
+                    {formatCurrency(al.CurrentAmount)}
+                  </span>
+                </td>
+                <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', color: al.reduction > 0 ? 'var(--warning)' : 'var(--text-muted)', fontWeight: 500 }}>
+                  {formatCurrency(al.reduction)}
+                </td>
+                <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 600 }}>
+                  {formatCurrency(al.actual)}
+                </td>
+                <td style={{ textAlign: 'center' }}>
+                  <button 
+                    className={`exclude-btn ${al.isExcluded ? 'excluded' : ''}`}
+                    onClick={() => onToggleExclusion(al.Id)}
+                    title={al.isExcluded ? 'Đã được loại trừ khỏi cắt giảm' : 'Bật khiên bảo vệ loại trừ khỏi cắt giảm'}
+                  >
+                    {al.isExcluded ? '🛡️ Khóa' : '🔓'}
+                  </button>
+                </td>
+              </tr>
+            ))}
+            </>
+            )}
 
             {/* Total Row */}
             <tr className="total-row">
@@ -1592,5 +1614,55 @@ function PortfolioPage({
         </table>
       </div>
     </div>
+  );
+}
+
+// Money input component with real-time comma formatting and cursor position handling
+function MoneyInput({ value, onChange, className = '', style, placeholder }: {
+  value: number;
+  onChange: (val: number) => void;
+  className?: string;
+  style?: React.CSSProperties;
+  placeholder?: string;
+}) {
+  const [display, setDisplay] = useState<string>(() => formatInputNumber(value));
+  const [isFocused, setIsFocused] = useState(false);
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!isFocused) {
+      setDisplay(formatInputNumber(value));
+    }
+  }, [value, isFocused]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    setDisplay(raw);
+    onChange(parseInputNumber(raw));
+  };
+
+  const handleFocus = () => {
+    setIsFocused(true);
+    setDisplay(value.toString());
+  };
+
+  const handleBlur = () => {
+    setIsFocused(false);
+    setDisplay(formatInputNumber(value));
+  };
+
+  return (
+    <input
+      ref={inputRef}
+      type="text"
+      inputMode="decimal"
+      className={className}
+      style={style}
+      value={display}
+      onChange={handleChange}
+      onFocus={handleFocus}
+      onBlur={handleBlur}
+      placeholder={placeholder}
+    />
   );
 }
