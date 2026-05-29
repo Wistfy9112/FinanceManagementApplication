@@ -387,10 +387,16 @@ export default function App() {
 
   // Dynamic values calculated from allocations
   const calculateAllocationsData = () => {
+    const nonExcludedPct = allocations
+      .filter(al => !exclusions.includes(al.Id))
+      .reduce((sum, al) => sum + al.TargetPercentage, 0);
+
     return allocations.map(al => {
       const currentAmount = income > 0 ? income * (al.TargetPercentage / 100) : al.CurrentAmount;
       const isExcluded = exclusions.includes(al.Id);
-      const reduction = isExcluded ? 0 : targetReduction * (al.TargetPercentage / 100);
+      const reduction = (!isExcluded && nonExcludedPct > 0)
+        ? targetReduction * (al.TargetPercentage / nonExcludedPct)
+        : 0;
       const actual = currentAmount - reduction;
       return {
         ...al,
