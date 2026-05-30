@@ -39,5 +39,13 @@ namespace FinancialManagementApplication.API.Controller
             var history = await _allocationRepository.GetHistoryAsync(allocationId);
             return Ok(history);
         }
+
+        [HttpPost("asset/restore/{historyId:guid}")]
+        public async Task<ActionResult> RestoreFromHistory(Guid historyId)
+        {
+            var success = await _assetsRepository.RestoreFromHistoryAsync(historyId);
+            if (!success) return NotFound();
+            return Ok(new { message = "Khôi phục thành công" });
+        }
     }
 }

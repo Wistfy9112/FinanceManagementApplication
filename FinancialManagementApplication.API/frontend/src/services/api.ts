@@ -60,6 +60,18 @@ const mapAssetToFrontend = (a: any) => ({
   Type: mapType(a.type !== undefined ? a.type : a.Type)
 });
 
+const mapHistoryToFrontend = (r: any) => ({
+  Id: r.id || r.Id,
+  RecordedAt: r.recordedAt || r.RecordedAt,
+  Details: (r.details || r.Details || []).map((d: any) => ({
+    Id: d.id || d.Id,
+    Name: d.name || d.Name,
+    InitialValue: d.initialValue !== undefined ? Number(d.initialValue) : Number(d.InitialValue || 0),
+    CurrentValue: d.currentValue !== undefined ? Number(d.currentValue) : Number(d.CurrentValue || 0),
+    Type: d.type || d.Type || 'Saving'
+  }))
+});
+
 const mapPortfolioToFrontend = (p: any) => ({
   Id: p.id || p.Id,
   Name: p.name || p.Name,
@@ -586,7 +598,10 @@ export const historyService = {
       const res = await fetch(`${API_URL}/history/asset/${accountId}`, {
         headers: { ...getAuthHeader() }
       });
-      if (res.ok) return await res.json();
+      if (res.ok) {
+        const data = await res.json();
+        return (Array.isArray(data) ? data : []).map(mapHistoryToFrontend);
+      }
     } catch (e) {
       console.error('Error fetching asset history:', e);
     }
@@ -606,6 +621,21 @@ export const historyService = {
       console.error('Error saving history snapshot:', e);
     }
     return null;
+  },
+
+  restoreSnapshot: async (historyId: string): Promise<boolean> => {
+    await checkConnection();
+    if (isDemoMode) return false;
+    try {
+      const res = await fetch(`${API_URL}/history/asset/restore/${historyId}`, {
+        method: 'POST',
+        headers: { ...getAuthHeader() }
+      });
+      return res.ok;
+    } catch (e) {
+      console.error('Error restoring history:', e);
+    }
+    return false;
   },
 
   getAllocationHistory: async (allocationId: string): Promise<any[]> => {

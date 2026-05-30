@@ -38,6 +38,19 @@ const formatPercentage = (value: number) => {
   return `${value.toFixed(4)}%`;
 };
 
+const formatDateTime = (iso: string) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = String(d.getFullYear()).slice(-2);
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const secs = String(d.getSeconds()).padStart(2, '0');
+  return `${day}/${month}/${year} ${hours}:${minutes}:${secs}`;
+};
+
 export default function App() {
   const [user, setUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'assets' | 'portfolio'>('dashboard');
@@ -47,6 +60,7 @@ export default function App() {
   const [assets, setAssets] = useState<any[]>([]);
   const [portfolio, setPortfolio] = useState<any>(null);
   const [allocations, setAllocations] = useState<any[]>([]);
+  const [historyRecords, setHistoryRecords] = useState<any[]>([]);
   
   // Budget cut states
   const [income, setIncome] = useState<number>(19139550);
@@ -115,6 +129,9 @@ export default function App() {
       setIncome(config.income);
       setTargetReduction(config.targetReduction);
       setExclusions(config.exclusions);
+      
+      const history = await historyService.getAssetHistory(user.id);
+      setHistoryRecords(history);
     } catch (err: any) {
       setError(err.message || 'Không thể tải dữ liệu.');
     }
@@ -216,6 +233,22 @@ export default function App() {
       addToast({ title: 'Đã lưu thông tin tài sản!', variant: 'success' });
     } catch (err: any) {
       addToast({ title: 'Lỗi lưu tài sản', description: err.message, variant: 'error' });
+    }
+  };
+
+  const handleRestoreFromHistory = async (historyId: string) => {
+    try {
+      setError(null);
+      if (!user) return;
+      const ok = await historyService.restoreSnapshot(historyId);
+      if (ok) {
+        await loadData();
+        addToast({ title: 'Đã khôi phục thông tin tài sản!', variant: 'success' });
+      } else {
+        addToast({ title: 'Khôi phục thất bại', variant: 'error' });
+      }
+    } catch (err: any) {
+      addToast({ title: 'Lỗi khôi phục', description: err.message, variant: 'error' });
     }
   };
 
@@ -574,6 +607,7 @@ export default function App() {
         {activeTab === 'assets' && (
           <AssetsPage 
             assets={assets}
+            historyRecords={historyRecords}
             totalInitial={totalInitial}
             totalCurrent={totalCurrent}
             totalInterest={totalInterest}
@@ -582,6 +616,7 @@ export default function App() {
             onEdit={(a: any) => setAssetModal({ isOpen: true, mode: 'edit', data: { Id: a.Id, Name: a.Name, InitialValue: a.InitialValue, CurrentValue: a.CurrentValue, Type: a.Type } })}
             onDelete={handleDeleteAsset}
             onSave={handleSaveAllAssets}
+            onRestore={handleRestoreFromHistory}
           />
         )}
 
@@ -1143,6 +1178,7 @@ function DashboardPage({
 // 3. ASSETS LIST COMPONENT
 function AssetsPage({ 
   assets, 
+  historyRecords,
   totalInitial, 
   totalCurrent, 
   totalInterest, 
@@ -1150,9 +1186,11 @@ function AssetsPage({
   onAdd, 
   onEdit, 
   onDelete,
-  onSave
+  onSave,
+  onRestore
 }: { 
   assets: any[]; 
+  historyRecords: any[];
   totalInitial: number; 
   totalCurrent: number; 
   totalInterest: number; 
@@ -1160,8 +1198,10 @@ function AssetsPage({
   onAdd: any; 
   onEdit: any; 
   onDelete: any;
-  onSave: any
+  onSave: any;
+  onRestore: any
 }) {
+  const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
   const expenseAssets = assets.filter(a => a.Type === 'Expense');
   const savingAssets = assets.filter(a => a.Type === 'Saving');
   const investmentAssets = assets.filter(a => a.Type === 'Investment');
@@ -1323,6 +1363,103 @@ function AssetsPage({
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Lịch sử tài sản */}
+      <div className="card" style={{ marginTop: '24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+          <div>
+            <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>Lịch sử lưu thông tin</h3>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Chọn một bản ghi để xem chi tiết danh mục tài sản tại thời điểm đó</p>
+          </div>
+        </div>
+
+        {historyRecords.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+            Chưa có dữ liệu lịch sử. Nhấn "Lưu thông tin" để tạo bản ghi.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: '16px' }}>
+            <div style={{ flex: '0 0 280px', maxHeight: '360px', overflowY: 'auto' }}>
+              {historyRecords.map((r: any) => (
+                <div key={r.Id} onClick={() => setSelectedHistoryId(selectedHistoryId === r.Id ? null : r.Id)}
+                  style={{
+                    padding: '10px 14px', borderRadius: '6px', cursor: 'pointer', marginBottom: '4px',
+                    background: selectedHistoryId === r.Id ? 'rgba(99,102,241,0.1)' : 'transparent',
+                    border: selectedHistoryId === r.Id ? '1px solid rgba(99,102,241,0.3)' : '1px solid transparent',
+                    transition: 'all 0.15s'
+                  }}
+                >
+                  <div style={{ fontWeight: 500, fontSize: '0.85rem' }}>
+                    {formatDateTime(r.RecordedAt)}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    {r.Details?.length || 0} tài sản · tổng {formatCurrency((r.Details || []).reduce((s: number, d: any) => s + d.CurrentValue, 0))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ flex: 1 }}>
+              {selectedHistoryId ? (
+                (() => {
+                  const record = historyRecords.find((r: any) => r.Id === selectedHistoryId);
+                  if (!record) return null;
+                  return (
+                    <div style={{ overflowX: 'auto' }}>
+                      <table className="custom-table" style={{ minWidth: '450px' }}>
+                        <thead>
+                          <tr>
+                            <th>Tên tài sản</th>
+                            <th style={{ textAlign: 'right' }}>Vốn ban đầu</th>
+                            <th style={{ textAlign: 'right' }}>Giá trị hiện tại</th>
+                            <th style={{ textAlign: 'center' }}>Loại</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(record.Details || []).map((d: any) => (
+                            <tr key={d.Id}>
+                              <td style={{ fontWeight: 600 }}>{d.Name}</td>
+                              <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)' }}>{formatCurrency(d.InitialValue)}</td>
+                              <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', color: d.CurrentValue >= d.InitialValue ? 'var(--success)' : 'var(--danger)' }}>
+                                {formatCurrency(d.CurrentValue)}
+                              </td>
+                              <td style={{ textAlign: 'center' }}>
+                                <span style={{
+                                  fontSize: '0.75rem', padding: '2px 8px', borderRadius: '10px', fontWeight: 600,
+                                  background: d.Type === 'Saving' ? 'rgba(99,102,241,0.15)' : 'rgba(16,185,129,0.15)',
+                                  color: d.Type === 'Saving' ? 'var(--primary)' : '#10b981'
+                                }}>
+                                  {d.Type === 'Saving' ? 'Tiết kiệm' : d.Type === 'Investment' ? 'Đầu tư' : d.Type}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <div style={{ marginTop: '12px', textAlign: 'right' }}>
+                        <button onClick={() => onRestore(record.Id)} style={{
+                          background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)',
+                          color: 'var(--primary)', borderRadius: '6px', padding: '8px 20px', cursor: 'pointer',
+                          fontSize: '0.85rem', fontWeight: 600
+                        }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px', verticalAlign: 'middle' }}>
+                            <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                          </svg>
+                          Khôi phục
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()
+              ) : (
+                <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                  Chọn một bản ghi từ danh sách bên trái để xem chi tiết
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

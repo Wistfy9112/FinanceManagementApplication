@@ -1,5 +1,6 @@
 ﻿using FinancialManagementApplication.Application.Interface.Repositories;
 using FinancialManagementApplication.Domain.Entities;
+using FinancialManagementApplication.Domain.Enums;
 using FinancialManagementApplication.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -99,6 +100,61 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
                 .Where(h => h.AccountId == accountId)
                 .OrderByDescending(h => h.RecordedAt)
                 .ToListAsync();
+        }
+
+        public async Task<bool> RestoreFromHistoryAsync(Guid historyId)
+        {
+            var history = await _context.AssetHistories
+                .Include(h => h.Details)
+                .FirstOrDefaultAsync(h => h.Id == historyId);
+
+            if (history == null) return false;
+
+            var historyAssetIds = history.Details.Select(d => d.AssetId).ToHashSet();
+
+            var existingAssets = await _context.Assets
+                .Include(a => a.PortfolioAllocation)
+                .Where(a => a.AccountID == history.AccountId)
+                .ToListAsync();
+
+            foreach (var asset in existingAssets)
+            {
+                if (historyAssetIds.Contains(asset.Id))
+                {
+                    var detail = history.Details.First(d => d.AssetId == asset.Id);
+                    asset.Name = detail.Name;
+                    asset.InitialValue = detail.InitialValue;
+                    asset.CurrentValue = detail.CurrentValue;
+                    asset.Type = Enum.Parse<AssetType>(detail.Type);
+                }
+                else
+                {
+                    if (asset.PortfolioAllocation != null)
+                    {
+                        asset.PortfolioAllocation.AssetId = null;
+                    }
+                    _context.Assets.Remove(asset);
+                }
+            }
+
+            foreach (var detail in history.Details)
+            {
+                if (!existingAssets.Any(a => a.Id == detail.AssetId))
+                {
+                    _context.Assets.Add(new Assets
+                    {
+                        Id = detail.AssetId,
+                        AccountID = history.AccountId,
+                        Name = detail.Name,
+                        InitialValue = detail.InitialValue,
+                        CurrentValue = detail.CurrentValue,
+                        Type = Enum.Parse<AssetType>(detail.Type)
+                    });
+                }
+            }
+
+            await _context.SaveChangesAsync();
+            return true;
         }
     }
 }

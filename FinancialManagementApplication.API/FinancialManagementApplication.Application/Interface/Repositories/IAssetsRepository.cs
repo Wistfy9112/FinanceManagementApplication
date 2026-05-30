@@ -11,5 +11,6 @@ namespace FinancialManagementApplication.Application.Interface.Repositories
         Task<bool> DeleteAsync(Guid id);
         Task<AssetHistory> SaveSnapshotAsync(Guid accountId);
         Task<IEnumerable<AssetHistory>> GetHistoryAsync(Guid accountId);
+        Task<bool> RestoreFromHistoryAsync(Guid historyId);
     }
 }
