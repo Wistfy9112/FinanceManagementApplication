@@ -42,7 +42,8 @@ namespace FinancialManagementApplication.API.Controller
                 CurrentAmount = dto.CurrentAmount,
                 TargetPercentage = dto.TargetPercentage,
                 UpdateAt = dto.UpdateAt,
-                AssetType = dto.AssetType
+                AssetType = dto.AssetType,
+                AssetId = dto.AssetId
             };
             var result = await _portfolioAllocationRepository.CreateAsync(allocation);
             return CreatedAtAction(nameof(GetByPortfolioId), new { id = result.Id }, result);
@@ -60,6 +61,7 @@ namespace FinancialManagementApplication.API.Controller
             allocation.TargetPercentage = dto.TargetPercentage;
             allocation.UpdateAt = dto.UpdateAt;
             allocation.AssetType = dto.AssetType;
+            allocation.AssetId = dto.AssetId;
 
             await _portfolioAllocationRepository.UpdateAsync(allocation);
             return NoContent();

@@ -29,12 +29,16 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
 
         public async Task<IEnumerable<PortfolioAllocation>> GetAllByPortfolioIdAsync(Guid portfolioId)
         {
-            return await _context.PortfolioAllocations.Where(x => x.PortfolioId == portfolioId).ToListAsync();
+            return await _context.PortfolioAllocations
+                .Include(x => x.Asset)
+                .Where(x => x.PortfolioId == portfolioId).ToListAsync();
         }
 
         public async Task<PortfolioAllocation> GetAsync(Guid id)
         {
-            return await _context.PortfolioAllocations.Where(x => x.Id == id).FirstOrDefaultAsync();
+            return await _context.PortfolioAllocations
+                .Include(x => x.Asset)
+                .Where(x => x.Id == id).FirstOrDefaultAsync();
         }
 
         public async Task<PortfolioAllocation> UpdateAsync(PortfolioAllocation portfolioAllocation)

@@ -16,8 +16,9 @@ namespace FinancialManagementApplication.Domain.Entities
         public decimal TargetPercentage { get; set; }
         public DateTime UpdateAt { get; set; }
         public AssetType AssetType { get; set; } = AssetType.Saving;
+        public Guid? AssetId { get; set; }
         // Navigation properties
         public virtual Portfolio Portfolio { get; set; }
-
+        public virtual Assets Asset { get; set; }
     }
 }

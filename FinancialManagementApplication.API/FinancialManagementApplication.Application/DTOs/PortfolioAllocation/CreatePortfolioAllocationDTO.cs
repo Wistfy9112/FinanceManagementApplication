@@ -14,5 +14,6 @@ namespace FinancialManagementApplication.Application.DTOs.PortfolioAllocation
         public decimal TargetPercentage { get; set; }
         public DateTime UpdateAt { get; set; }
         public AssetType AssetType { get; set; } = AssetType.Saving;
+        public Guid? AssetId { get; set; }
     }
 }

@@ -3,6 +3,7 @@ using FinanceManagementApplication.Domain.Entities;
 using System;
 using System.Collections.Generic;
 using System.Text;
+using System.Text.Json.Serialization;
 
 namespace FinancialManagementApplication.Domain.Entities
 {
@@ -16,5 +17,7 @@ namespace FinancialManagementApplication.Domain.Entities
         public AssetType Type { get; set; } = AssetType.Saving;
         // Navigation properties
         public virtual Account Account { get; set; }
+        [JsonIgnore]
+        public virtual PortfolioAllocation PortfolioAllocation { get; set; }
     }
 }

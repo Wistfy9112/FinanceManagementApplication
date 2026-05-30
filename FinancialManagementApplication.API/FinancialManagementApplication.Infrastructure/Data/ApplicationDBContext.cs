@@ -48,5 +48,12 @@ public class ApplicationDbContext : DbContext
             .HasMany(p => p.PortfolioAllocations)
             .WithOne(pa => pa.Portfolio)
             .HasForeignKey(pa => pa.PortfolioId);
+
+        modelBuilder.Entity<PortfolioAllocation>()
+            .HasOne(pa => pa.Asset)
+            .WithOne(a => a.PortfolioAllocation)
+            .HasForeignKey<PortfolioAllocation>(pa => pa.AssetId)
+            .IsRequired(false)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }

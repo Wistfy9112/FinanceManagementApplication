@@ -225,31 +225,26 @@ export default function App() {
     portfolioService.saveBudgetCutConfig({ income, targetReduction, exclusions: updated });
   };
 
-  // Two-way Portfolio allocation adjustments
-  const handleUpdateAllocationPercent = (id: string, newPercent: number) => {
-    const updated = allocations.map(al => {
-      if (al.Id === id) {
-        const newAmount = (portfolio?.Amount || 0) * (newPercent / 100);
-        return { ...al, TargetPercentage: newPercent, CurrentAmount: newAmount };
-      }
-      return al;
-    });
-    setAllocations(updated);
-    portfolioService.updateAllocations(updated);
+  const handleApplyToAsset = async (allocation: any) => {
+    if (!allocation.AssetId) return;
+    const asset = assets.find(a => a.Id === allocation.AssetId);
+    if (!asset) return;
+    try {
+      setError(null);
+      await assetService.update(asset.Id, {
+        Id: asset.Id,
+        Name: asset.Name,
+        InitialValue: asset.InitialValue + allocation.CurrentAmount,
+        CurrentValue: asset.CurrentValue,
+        Type: asset.Type
+      });
+      await loadData();
+      addToast({ title: 'Đã cập nhật giá trị tài sản!', variant: 'success' });
+    } catch (err: any) {
+      addToast({ title: 'Lỗi cập nhật tài sản', description: err.message, variant: 'error' });
+    }
   };
 
-  const handleUpdateAllocationCash = (id: string, newCash: number) => {
-    const remain = portfolio?.Amount || 1;
-    const updated = allocations.map(al => {
-      if (al.Id === id) {
-        const newPercent = (newCash / remain) * 100;
-        return { ...al, TargetPercentage: newPercent, CurrentAmount: newCash };
-      }
-      return al;
-    });
-    setAllocations(updated);
-    portfolioService.updateAllocations(updated);
-  };
   const handleAllocateActual = async () => {
     try {
       await portfolioService.saveAllocations(allocations);
@@ -317,7 +312,8 @@ export default function App() {
       Name: '',
       CurrentAmount: 0,
       TargetPercentage: 0,
-      setupAmount: 0
+      setupAmount: 0,
+      AssetId: null
     };
     setSetupAllocations([...setupAllocations, newAl]);
   };
@@ -381,12 +377,13 @@ export default function App() {
         FinancialCategory: al.FinancialCategory,
         Name: al.Name,
         CurrentAmount: al.CurrentAmount,
-        TargetPercentage: al.TargetPercentage
+        TargetPercentage: al.TargetPercentage,
+        AssetId: al.AssetId || null
       }));
 
       await portfolioService.saveAllocations(savedAllocs);
       setAllocations(savedAllocs);
-      setPortfolio(prev => prev ? { ...prev, Amount: setupAmount } : prev);
+      setPortfolio((prev: any) => prev ? { ...prev, Amount: setupAmount } : prev);
       setShowSetup(false);
       addToast({ title: 'Thiết lập danh mục thành công!', variant: 'success' });
     } catch (err: any) {
@@ -572,7 +569,7 @@ export default function App() {
 
         {activeTab === 'portfolio' && (
           <PortfolioPage 
-            portfolio={portfolio}
+            assets={assets}
             income={income}
             onAllocateActual={handleAllocateActual}
             targetReduction={targetReduction}
@@ -588,8 +585,6 @@ export default function App() {
             onUpdateIncome={handleUpdateIncome}
             onUpdateTargetReduction={handleUpdateTargetReduction}
             onToggleExclusion={handleToggleExclusion}
-            onUpdateAllocationPercent={handleUpdateAllocationPercent}
-            onUpdateAllocationCash={handleUpdateAllocationCash}
             showSetup={showSetup}
             setupAmount={setupAmount}
             setupAllocations={setupAllocations}
@@ -601,6 +596,7 @@ export default function App() {
             onSetupEditAllocation={handleSetupEditAllocation}
             onSetupDeleteAllocation={handleSetupDeleteAllocation}
             onSetupAllocationAmountChange={handleSetupAllocationAmountChange}
+            onApplyToAsset={handleApplyToAsset}
           />
         )}
       </main>
@@ -1222,7 +1218,7 @@ function AssetsPage({
 
 // 4. PORTFOLIO & BUDGET CUT PLANNING COMPONENT
 function PortfolioPage({
-  portfolio,
+  assets,
   income,
   onAllocateActual,
   targetReduction,
@@ -1238,8 +1234,6 @@ function PortfolioPage({
   onUpdateIncome,
   onUpdateTargetReduction,
   onToggleExclusion,
-  onUpdateAllocationPercent,
-  onUpdateAllocationCash,
   showSetup,
   setupAmount,
   setupAllocations,
@@ -1250,9 +1244,10 @@ function PortfolioPage({
   onSetupAddAllocation,
   onSetupEditAllocation,
   onSetupDeleteAllocation,
-  onSetupAllocationAmountChange
+  onSetupAllocationAmountChange,
+  onApplyToAsset
 }: {
-  portfolio: any;
+  assets: any[];
   income: number;
   onAllocateActual: () => void;
   targetReduction: number;
@@ -1268,8 +1263,6 @@ function PortfolioPage({
   onUpdateIncome: any;
   onUpdateTargetReduction: any;
   onToggleExclusion: any;
-  onUpdateAllocationPercent: any;
-  onUpdateAllocationCash: any;
   showSetup: boolean;
   setupAmount: number;
   setupAllocations: any[];
@@ -1281,6 +1274,7 @@ function PortfolioPage({
   onSetupEditAllocation: (id: string, field: string, value: any) => void;
   onSetupDeleteAllocation: (id: string) => void;
   onSetupAllocationAmountChange: (id: string, amount: number) => void;
+  onApplyToAsset: (allocation: any) => void;
 }) {
 
   // Visual warnings for total percentages
@@ -1354,7 +1348,7 @@ function PortfolioPage({
                   </td>
                 </tr>
               ) : (
-                setupAllocations.map((al, idx) => (
+                setupAllocations.map((al) => (
                   <tr key={al.Id}>
                     <td>
                       <select
@@ -1377,6 +1371,18 @@ function PortfolioPage({
                         onChange={(e) => onSetupEditAllocation(al.Id, 'Name', e.target.value)}
                         placeholder="Tên danh mục..."
                       />
+                      <div style={{ marginTop: '4px' }}>
+                        <select
+                          style={{ fontSize: '0.75rem', padding: '2px 4px', height: '26px', width: '100%', background: '#1a1b26', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '4px', color: '#e2e8f0' }}
+                          value={al.AssetId || ''}
+                          onChange={(e) => onSetupEditAllocation(al.Id, 'AssetId', e.target.value || null)}
+                        >
+                          <option value="">-- Liên kết tài sản --</option>
+                          {assets.map(a => (
+                            <option key={a.Id} value={a.Id} style={{ background: '#1a1b26', color: '#e2e8f0' }}>{a.Name}</option>
+                          ))}
+                        </select>
+                      </div>
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       <MoneyInput 
@@ -1502,6 +1508,7 @@ function PortfolioPage({
               <th style={{ textAlign: 'right', width: '160px' }}>Số tiền giảm</th>
               <th style={{ textAlign: 'right', width: '160px' }}>Số tiền thực tế</th>
               <th style={{ textAlign: 'center', width: '90px' }}>Loại trừ</th>
+              <th style={{ textAlign: 'center', width: '100px' }}>Áp dụng</th>
             </tr>
           </thead>
           <tbody>
@@ -1548,6 +1555,19 @@ function PortfolioPage({
                     {al.isExcluded ? '🛡️ Khóa' : '🔓'}
                   </button>
                 </td>
+                <td style={{ textAlign: 'center' }}>
+                  <button
+                    className="btn-icon"
+                    onClick={() => onApplyToAsset(al)}
+                    disabled={!al.AssetId}
+                    title={al.AssetId ? 'Áp dụng số tiền sang tài sản' : 'Chưa liên kết tài sản'}
+                    style={{ opacity: al.AssetId ? 1 : 0.3, cursor: al.AssetId ? 'pointer' : 'not-allowed', background: 'transparent', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '4px', padding: '4px 8px', color: '#10b981' }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                  </button>
+                </td>
               </tr>
             ))}
 
@@ -1559,6 +1579,7 @@ function PortfolioPage({
               <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 700 }}>
                 {formatCurrency(totalSavingCash)}
               </td>
+              <td></td>
               <td></td>
               <td></td>
               <td></td>
@@ -1606,6 +1627,19 @@ function PortfolioPage({
                     {al.isExcluded ? '🛡️ Khóa' : '🔓'}
                   </button>
                 </td>
+                <td style={{ textAlign: 'center' }}>
+                  <button
+                    className="btn-icon"
+                    onClick={() => onApplyToAsset(al)}
+                    disabled={!al.AssetId}
+                    title={al.AssetId ? 'Áp dụng số tiền sang tài sản' : 'Chưa liên kết tài sản'}
+                    style={{ opacity: al.AssetId ? 1 : 0.3, cursor: al.AssetId ? 'pointer' : 'not-allowed', background: 'transparent', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '4px', padding: '4px 8px', color: '#10b981' }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                  </button>
+                </td>
               </tr>
             ))}
 
@@ -1619,6 +1653,7 @@ function PortfolioPage({
               <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 700 }}>
                 {formatCurrency(totalInvestmentCash)}
               </td>
+              <td></td>
               <td></td>
               <td></td>
               <td></td>
@@ -1664,6 +1699,19 @@ function PortfolioPage({
                     {al.isExcluded ? '🛡️ Khóa' : '🔓'}
                   </button>
                 </td>
+                <td style={{ textAlign: 'center' }}>
+                  <button
+                    className="btn-icon"
+                    onClick={() => onApplyToAsset(al)}
+                    disabled={!al.AssetId}
+                    title={al.AssetId ? 'Áp dụng số tiền sang tài sản' : 'Chưa liên kết tài sản'}
+                    style={{ opacity: al.AssetId ? 1 : 0.3, cursor: al.AssetId ? 'pointer' : 'not-allowed', background: 'transparent', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '4px', padding: '4px 8px', color: '#10b981' }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                  </button>
+                </td>
               </tr>
             ))}
             </>
@@ -1685,6 +1733,7 @@ function PortfolioPage({
               <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', color: 'var(--success)' }}>
                 {formatCurrency(totalActualAmount)}
               </td>
+              <td></td>
               <td></td>
             </tr>
 

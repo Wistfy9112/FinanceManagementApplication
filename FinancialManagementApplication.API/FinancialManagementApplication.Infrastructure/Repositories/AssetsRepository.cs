@@ -26,11 +26,24 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
         {
             try
             {
-                await _context.Assets.Where(x => x.Id == id).ExecuteDeleteAsync();
-            } catch (Exception e){
+                var asset = await _context.Assets
+                    .Include(a => a.PortfolioAllocation)
+                    .FirstOrDefaultAsync(x => x.Id == id);
+                if (asset == null) return false;
+
+                if (asset.PortfolioAllocation != null)
+                {
+                    asset.PortfolioAllocation.AssetId = null;
+                }
+
+                _context.Assets.Remove(asset);
+                await _context.SaveChangesAsync();
+                return true;
+            }
+            catch (Exception)
+            {
                 return false;
             }
-            return true;
         }
 
         public async Task<IEnumerable<Assets>> GetAllByAccountIdAsync(Guid accountID)

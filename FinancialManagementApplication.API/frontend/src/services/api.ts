@@ -74,7 +74,8 @@ const mapAllocationToFrontend = (al: any) => ({
   FinancialCategory: al.financialCategory || al.FinancialCategory,
   Name: al.name || al.Name,
   CurrentAmount: al.currentAmount !== undefined ? Number(al.currentAmount) : Number(al.CurrentAmount || 0),
-  TargetPercentage: al.targetPercentage !== undefined ? Number(al.targetPercentage) : Number(al.TargetPercentage || 0)
+  TargetPercentage: al.targetPercentage !== undefined ? Number(al.targetPercentage) : Number(al.TargetPercentage || 0),
+  AssetId: al.assetId !== undefined ? al.assetId : al.AssetId || null
 });
 
 export const checkConnection = async (): Promise<boolean> => {
@@ -327,7 +328,7 @@ export const assetService = {
     throw new Error('Không thể tạo tài sản trên máy chủ.');
   },
 
-  update: async (id: string, asset: { Id: string; Name: string; InitialValue: number; CurrentValue: number; Type: string }, userId: string = getLoggedUserId()): Promise<void> => {
+  update: async (id: string, asset: { Id: string; Name: string; InitialValue: number; CurrentValue: number; Type: string }, _userId: string = getLoggedUserId()): Promise<void> => {
     await checkConnection();
     if (isDemoMode) {
       const list = getStorage('fm_assets', DEFAULT_ASSETS);
@@ -458,7 +459,7 @@ export const portfolioService = {
     throw new Error('Không thể tạo danh mục trên máy chủ.');
   },
 
-  updateAmount: async (id: string, amount: number, name: string = 'Kế Hoạch Phân Bổ Tổng Thể', userId: string = getLoggedUserId()): Promise<void> => {
+  updateAmount: async (id: string, amount: number, name: string = 'Kế Hoạch Phân Bổ Tổng Thể', _userId: string = getLoggedUserId()): Promise<void> => {
     await checkConnection();
     if (isDemoMode) {
       const p = getStorage('fm_portfolios', [DEFAULT_PORTFOLIO])[0];
@@ -507,6 +508,7 @@ export const portfolioService = {
             name: al.Name,
             currentAmount: al.CurrentAmount,
             targetPercentage: al.TargetPercentage,
+            assetId: al.AssetId || null,
             updateAt: new Date().toISOString()
           };
 
@@ -524,6 +526,7 @@ export const portfolioService = {
             name: al.Name,
             currentAmount: al.CurrentAmount,
             targetPercentage: al.TargetPercentage,
+            assetId: al.AssetId || null,
             updateAt: new Date().toISOString()
           };
 
