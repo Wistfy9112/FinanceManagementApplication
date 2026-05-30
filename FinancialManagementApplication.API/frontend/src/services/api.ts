@@ -577,3 +577,48 @@ export const portfolioService = {
     setStorage('fm_exclusions', config.exclusions);
   }
 };
+
+export const historyService = {
+  getAssetHistory: async (accountId: string): Promise<any[]> => {
+    await checkConnection();
+    if (isDemoMode) return [];
+    try {
+      const res = await fetch(`${API_URL}/history/asset/${accountId}`, {
+        headers: { ...getAuthHeader() }
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {
+      console.error('Error fetching asset history:', e);
+    }
+    return [];
+  },
+
+  saveSnapshot: async (accountId: string): Promise<any> => {
+    await checkConnection();
+    if (isDemoMode) return null;
+    try {
+      const res = await fetch(`${API_URL}/history/asset/snapshot/${accountId}`, {
+        method: 'POST',
+        headers: { ...getAuthHeader() }
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {
+      console.error('Error saving history snapshot:', e);
+    }
+    return null;
+  },
+
+  getAllocationHistory: async (allocationId: string): Promise<any[]> => {
+    await checkConnection();
+    if (isDemoMode) return [];
+    try {
+      const res = await fetch(`${API_URL}/history/allocation/${allocationId}`, {
+        headers: { ...getAuthHeader() }
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {
+      console.error('Error fetching allocation history:', e);
+    }
+    return [];
+  }
+};

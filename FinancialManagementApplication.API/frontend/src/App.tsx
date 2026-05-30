@@ -4,6 +4,7 @@ import {
   authService, 
   assetService, 
   portfolioService, 
+  historyService,
   checkConnection, 
   getLoggedUser
 } from './services/api';
@@ -203,6 +204,18 @@ export default function App() {
       await loadData();
     } catch (err: any) {
       setError(err.message);
+    }
+  };
+
+  const handleSaveAllAssets = async () => {
+    try {
+      setError(null);
+      if (!user) return;
+      await historyService.saveSnapshot(user.id);
+      await loadData();
+      addToast({ title: 'Đã lưu thông tin tài sản!', variant: 'success' });
+    } catch (err: any) {
+      addToast({ title: 'Lỗi lưu tài sản', description: err.message, variant: 'error' });
     }
   };
 
@@ -568,6 +581,7 @@ export default function App() {
             onAdd={() => setAssetModal({ isOpen: true, mode: 'add', data: { Name: '', InitialValue: 0, CurrentValue: 0, Type: 'Saving' } })}
             onEdit={(a: any) => setAssetModal({ isOpen: true, mode: 'edit', data: { Id: a.Id, Name: a.Name, InitialValue: a.InitialValue, CurrentValue: a.CurrentValue, Type: a.Type } })}
             onDelete={handleDeleteAsset}
+            onSave={handleSaveAllAssets}
           />
         )}
 
@@ -814,34 +828,74 @@ function DashboardPage({
   setActiveTab: any 
 }) {
   const [chartMode, setChartMode] = useState<'overview' | 'detail'>('overview');
+  const [timeMode, setTimeMode] = useState<'yearly' | 'monthly' | 'oneYear'>('monthly');
   
-  // Build stacked area chart from real asset data (InitialValue -> CurrentValue)
   const chartHeight = 220;
   const chartWidth = 600;
-  const pointsCount = 12;
 
   const activeAssets = assets.filter(a => a.InitialValue > 0 || a.CurrentValue > 0);
 
+  // Determine data points based on time mode
+  const { pointsCount, labels, stackedTotal } = (() => {
+    if (timeMode === 'yearly') {
+      // Show last 5 years (or fewer if no data)
+      const years = 5;
+      const count = years + 1; // including starting point
+      const curves = activeAssets.map(a => {
+        const diff = a.CurrentValue - a.InitialValue;
+        return Array.from({ length: count }, (_, i) => a.InitialValue + diff * (i / years));
+      });
+      const total = Array.from({ length: count }, (_, i) =>
+        curves.reduce((s, c) => s + c[i], 0)
+      );
+      const now = new Date();
+      const lbls = Array.from({ length: count }, (_, i) => String(now.getFullYear() - years + i));
+      return { pointsCount: count, labels: lbls, stackedTotal: total };
+    }
 
-  // For each asset, interpolate growth from InitialValue to CurrentValue over 12 months
-  const assetCurves = activeAssets.map(a => {
-    return Array.from({ length: pointsCount }, (_, i) => {
-      const t = i / (pointsCount - 1);
-      const curve = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
-      return a.InitialValue + (a.CurrentValue - a.InitialValue) * curve;
+    if (timeMode === 'monthly') {
+      // Show 12 months of current year
+      const count = 12;
+      const curves = activeAssets.map(a => {
+        const diff = a.CurrentValue - a.InitialValue;
+        return Array.from({ length: count }, (_, i) => {
+          const t = i / (count - 1);
+          const curve = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+          return a.InitialValue + diff * curve;
+        });
+      });
+      const total = Array.from({ length: count }, (_, i) =>
+        curves.reduce((s, c) => s + c[i], 0)
+      );
+      const months = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'T9', 'T10', 'T11', 'T12'];
+      return { pointsCount: count, labels: months, stackedTotal: total };
+    }
+
+    // oneYear: 12 months from 1 year ago to now
+    const count = 12;
+    const curves = activeAssets.map(a => {
+      const diff = a.CurrentValue - a.InitialValue;
+      return Array.from({ length: count }, (_, i) => {
+        const t = i / (count - 1);
+        const curve = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+        return a.InitialValue + diff * curve;
+      });
     });
-  });
-
-  // Stack all asset curves to get the total trend
-  const stackedTotal = Array.from({ length: pointsCount }, (_, i) =>
-    assetCurves.reduce((sum, curve) => sum + curve[i], 0)
-  );
+    const total = Array.from({ length: count }, (_, i) =>
+      curves.reduce((s, c) => s + c[i], 0)
+    );
+    const now = new Date();
+    const lbls = Array.from({ length: count }, (_, i) => {
+      const d = new Date(now.getFullYear() - 1, now.getMonth() + 1 + i, 1);
+      return `T${d.getMonth() + 1}/${d.getFullYear()}`;
+    });
+    return { pointsCount: count, labels: lbls, stackedTotal: total };
+  })();
 
   const minVal = Math.min(...stackedTotal) * 0.95;
   const maxVal = Math.max(...stackedTotal) * 1.05;
   const valRange = (maxVal - minVal) || 1;
 
-  // Total trend path
   const totalPoints = stackedTotal.map((val, i) => {
     const x = (i / (pointsCount - 1)) * chartWidth;
     const y = chartHeight - ((val - minVal) / valRange) * (chartHeight - 40) - 20;
@@ -946,8 +1000,24 @@ function DashboardPage({
       <div className="grid-2-1">
         {/* SVG Stacked Area Chart from real asset data */}
         <div className="card">
-          <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '8px', color: 'var(--text-primary)' }}>Xu Hướng Tài Sản Tổng Thể</h3>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>Mô phỏng 12 tháng tăng trưởng tích lũy ròng gần nhất</p>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>Xu Hướng Tài Sản Tổng Thể</h3>
+            <div style={{ display: 'flex', gap: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '6px', padding: '2px' }}>
+              {([['yearly', 'Theo năm'], ['monthly', 'Theo tháng'], ['oneYear', '1 năm trước']] as const).map(([key, label]) => (
+                <button key={key} onClick={() => setTimeMode(key)}
+                  style={{
+                    padding: '3px 10px', fontSize: '0.7rem', borderRadius: '4px', border: 'none', cursor: 'pointer',
+                    background: timeMode === key ? '#6366f1' : 'transparent',
+                    color: timeMode === key ? '#fff' : 'var(--text-secondary)',
+                    fontWeight: timeMode === key ? 600 : 400
+                  }}
+                >{label}</button>
+              ))}
+            </div>
+          </div>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+            {timeMode === 'yearly' ? 'Tổng giá trị tài sản qua các năm' : timeMode === 'monthly' ? 'Tổng giá trị tài sản từng tháng trong năm' : 'Tổng giá trị tài sản 12 tháng gần nhất'}
+          </p>
           <div className="chart-container">
             <svg className="chart-svg" viewBox={`0 0 ${chartWidth} ${chartHeight}`}>
               {/* Grid Lines */}
@@ -978,7 +1048,7 @@ function DashboardPage({
                     className="chart-label" 
                     textAnchor="middle"
                   >
-                    T{idx + 1}
+                    {labels[idx]}
                   </text>
                 </g>
               ))}
@@ -1079,7 +1149,8 @@ function AssetsPage({
   totalInterestRatio, 
   onAdd, 
   onEdit, 
-  onDelete 
+  onDelete,
+  onSave
 }: { 
   assets: any[]; 
   totalInitial: number; 
@@ -1088,7 +1159,8 @@ function AssetsPage({
   totalInterestRatio: number; 
   onAdd: any; 
   onEdit: any; 
-  onDelete: any 
+  onDelete: any;
+  onSave: any
 }) {
   const expenseAssets = assets.filter(a => a.Type === 'Expense');
   const savingAssets = assets.filter(a => a.Type === 'Saving');
@@ -1152,12 +1224,24 @@ function AssetsPage({
           <h2 className="section-title">Bảng Quản Lý Tài Sản Chi Tiết</h2>
           <p className="section-desc">Theo dõi giá trị ban đầu, giá trị thực tế hiện tại và mức độ sinh trưởng của từng tài sản</p>
         </div>
-        <button className="btn btn-primary" onClick={onAdd}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-          </svg>
-          Thêm Tài Sản
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button className="btn btn-primary" onClick={onAdd}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Thêm Tài Sản
+          </button>
+          <button className="btn" onClick={onSave} style={{
+            background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)',
+            color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '6px'
+          }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+              <polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+            </svg>
+            Lưu thông tin
+          </button>
+        </div>
       </div>
 
       <div className="table-container">

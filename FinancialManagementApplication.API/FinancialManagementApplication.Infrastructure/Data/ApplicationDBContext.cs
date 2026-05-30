@@ -18,6 +18,9 @@ public class ApplicationDbContext : DbContext
     public DbSet<Assets> Assets => Set<Assets>();
     public DbSet<Portfolio> Portfolio => Set<Portfolio>();
     public DbSet<PortfolioAllocation> PortfolioAllocations => Set<PortfolioAllocation>();
+    public DbSet<AssetHistory> AssetHistories => Set<AssetHistory>();
+    public DbSet<AllocationHistory> AllocationHistories => Set<AllocationHistory>();
+    public DbSet<AssetHistoryDetail> AssetHistoryDetails => Set<AssetHistoryDetail>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -55,5 +58,17 @@ public class ApplicationDbContext : DbContext
             .HasForeignKey<PortfolioAllocation>(pa => pa.AssetId)
             .IsRequired(false)
             .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<AllocationHistory>()
+            .HasOne(ah => ah.Allocation)
+            .WithMany()
+            .HasForeignKey(ah => ah.AllocationId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<AssetHistoryDetail>()
+            .HasOne(d => d.AssetHistory)
+            .WithMany(ah => ah.Details)
+            .HasForeignKey(d => d.AssetHistoryId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

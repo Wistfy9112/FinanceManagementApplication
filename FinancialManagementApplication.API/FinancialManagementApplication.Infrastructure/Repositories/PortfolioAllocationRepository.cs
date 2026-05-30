@@ -19,6 +19,17 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
         {
             await _context.PortfolioAllocations.AddAsync(portfolioAllocation);
             await _context.SaveChangesAsync();
+
+            _context.AllocationHistories.Add(new AllocationHistory
+            {
+                Id = Guid.NewGuid(),
+                AllocationId = portfolioAllocation.Id,
+                CurrentAmount = portfolioAllocation.CurrentAmount,
+                TargetPercentage = portfolioAllocation.TargetPercentage,
+                RecordedAt = DateTime.UtcNow
+            });
+            await _context.SaveChangesAsync();
+
             return portfolioAllocation;
         }
 
@@ -45,7 +56,26 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
         {
             _context.PortfolioAllocations.Update(portfolioAllocation);
             await _context.SaveChangesAsync();
+
+            _context.AllocationHistories.Add(new AllocationHistory
+            {
+                Id = Guid.NewGuid(),
+                AllocationId = portfolioAllocation.Id,
+                CurrentAmount = portfolioAllocation.CurrentAmount,
+                TargetPercentage = portfolioAllocation.TargetPercentage,
+                RecordedAt = DateTime.UtcNow
+            });
+            await _context.SaveChangesAsync();
+
             return portfolioAllocation;
+        }
+
+        public async Task<IEnumerable<AllocationHistory>> GetHistoryAsync(Guid allocationId)
+        {
+            return await _context.AllocationHistories
+                .Where(h => h.AllocationId == allocationId)
+                .OrderByDescending(h => h.RecordedAt)
+                .ToListAsync();
         }
     }
 }
