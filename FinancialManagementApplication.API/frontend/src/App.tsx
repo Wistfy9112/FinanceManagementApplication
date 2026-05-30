@@ -433,6 +433,8 @@ export default function App() {
   const totalCurrent = assets.reduce((sum, a) => sum + a.CurrentValue, 0);
   const totalInterest = totalCurrent - totalInitial;
   const totalInterestRatio = totalInitial > 0 ? (totalInterest / totalInitial) * 100 : 0;
+  const totalSavingAssets = assets.filter(a => a.Type === 'Saving').reduce((sum, a) => sum + a.CurrentValue, 0);
+  const totalInvestmentAssets = assets.filter(a => a.Type === 'Investment').reduce((sum, a) => sum + a.CurrentValue, 0);
 
   if (loading) {
     return (
@@ -548,8 +550,10 @@ export default function App() {
             totalInterest={totalInterest}
             totalInterestRatio={totalInterestRatio}
             portfolio={portfolio}
-            allocations={allocations}
             totalSavingCash={totalSavingCash}
+            totalSavingAssets={totalSavingAssets}
+            assets={assets}
+            totalInvestmentAssets={totalInvestmentAssets}
             setActiveTab={setActiveTab}
           />
         )}
@@ -647,7 +651,6 @@ export default function App() {
                   onChange={(e) => setAssetModal({ ...assetModal, data: { ...assetModal.data, Type: e.target.value } })}
                   style={{ padding: '8px 12px', height: '40px' }}
                 >
-                  <option value="Expense">Sinh hoạt</option>
                   <option value="Saving">Tiết kiệm</option>
                   <option value="Investment">Đầu tư</option>
                 </select>
@@ -794,66 +797,76 @@ function DashboardPage({
   totalInterest, 
   totalInterestRatio, 
   portfolio, 
-  allocations, 
   totalSavingCash, 
+  totalSavingAssets,
+  totalInvestmentAssets,
+  assets,
   setActiveTab 
 }: { 
   totalCurrent: number; 
   totalInterest: number; 
   totalInterestRatio: number; 
   portfolio: any; 
-  allocations: any[]; 
   totalSavingCash: number; 
+  totalSavingAssets: number;
+  totalInvestmentAssets: number;
+  assets: any[];
   setActiveTab: any 
 }) {
+  const [chartMode, setChartMode] = useState<'overview' | 'detail'>('overview');
   
-  // Custom SVG Area Chart coordinates calculations (simulate historical net worth)
-  // Let's create a beautiful curve from total current assets
+  // Build stacked area chart from real asset data (InitialValue -> CurrentValue)
   const chartHeight = 220;
   const chartWidth = 600;
   const pointsCount = 12;
-  const baseValue = totalCurrent ?? 0;
-  
-  // Create 12 historical simulation points leading up to current Net Worth
-  const historyData = [
-    baseValue * 0.58,
-    baseValue * 0.63,
-    baseValue * 0.67,
-    baseValue * 0.71,
-    baseValue * 0.75,
-    baseValue * 0.79,
-    baseValue * 0.83,
-    baseValue * 0.80,
-    baseValue * 0.87,
-    baseValue * 0.91,
-    baseValue * 0.96,
-    baseValue
-  ];
 
-  const minVal = Math.min(...historyData) * 0.95;
-  const maxVal = Math.max(...historyData) * 1.05;
+  const activeAssets = assets.filter(a => a.InitialValue > 0 || a.CurrentValue > 0);
+
+
+  // For each asset, interpolate growth from InitialValue to CurrentValue over 12 months
+  const assetCurves = activeAssets.map(a => {
+    return Array.from({ length: pointsCount }, (_, i) => {
+      const t = i / (pointsCount - 1);
+      const curve = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+      return a.InitialValue + (a.CurrentValue - a.InitialValue) * curve;
+    });
+  });
+
+  // Stack all asset curves to get the total trend
+  const stackedTotal = Array.from({ length: pointsCount }, (_, i) =>
+    assetCurves.reduce((sum, curve) => sum + curve[i], 0)
+  );
+
+  const minVal = Math.min(...stackedTotal) * 0.95;
+  const maxVal = Math.max(...stackedTotal) * 1.05;
   const valRange = (maxVal - minVal) || 1;
 
-  const points = historyData.map((val, idx) => {
-    const x = (idx / (pointsCount - 1)) * chartWidth;
+  // Total trend path
+  const totalPoints = stackedTotal.map((val, i) => {
+    const x = (i / (pointsCount - 1)) * chartWidth;
     const y = chartHeight - ((val - minVal) / valRange) * (chartHeight - 40) - 20;
     return { x, y, value: val };
   });
-
-  const pathD = `M ${points.map(p => `${p.x} ${p.y}`).join(' L ')}`;
-  const areaD = `${pathD} L ${points[points.length - 1].x} ${chartHeight} L ${points[0].x} ${chartHeight} Z`;
+  const totalPathD = `M ${totalPoints.map(p => `${p.x} ${p.y}`).join(' L ')}`;
 
   // Dynamic values for Donut Allocation Chart
-  // We take top 5 allocations, group remaining into "Khác"
-  const sortedAllocs = [...allocations].sort((a,b) => b.CurrentAmount - a.CurrentAmount);
-  const topAllocs = sortedAllocs.slice(0, 4);
-  const otherSum = sortedAllocs.slice(4).reduce((sum, al) => sum + al.CurrentAmount, 0);
-  
-  const donutData = topAllocs.map(al => ({ name: al.Name, value: al.CurrentAmount }));
-  if (otherSum > 0) donutData.push({ name: 'Khác', value: otherSum });
+  const colors = ['#6366f1', '#10b981', '#f59e0b', '#d946ef', '#64748b'];
+
+  const donutData = chartMode === 'overview'
+    ? [
+        { name: 'Tiết kiệm', value: totalSavingAssets },
+        { name: 'Đầu tư', value: totalInvestmentAssets }
+      ]
+    : (() => {
+        const sortedAssets = [...assets].sort((a,b) => b.CurrentValue - a.CurrentValue);
+        const topAssets = sortedAssets.slice(0, 4);
+        const otherSum = sortedAssets.slice(4).reduce((sum, a) => sum + a.CurrentValue, 0);
+        const data = topAssets.map(a => ({ name: a.Name, value: a.CurrentValue }));
+        if (otherSum > 0) data.push({ name: 'Khác', value: otherSum });
+        return data;
+      })();
 
   const totalDonutValue = donutData.reduce((sum, d) => sum + d.value, 0) || 1;
-  const colors = ['#6366f1', '#10b981', '#f59e0b', '#d946ef', '#64748b'];
 
   // Calculate donut segments stroke-dasharray
   let accumulatedPercent = 0;
@@ -914,7 +927,7 @@ function DashboardPage({
 
         <div className="card" onClick={() => setActiveTab('portfolio')} style={{ cursor: 'pointer' }}>
           <div className="metric-header">
-            <span className="metric-title">Gốc Phân Bổ Danh Mục (Remain)</span>
+            <span className="metric-title">Gốc Phân Bổ Tài Sản (Remain)</span>
             <span className="metric-icon" style={{ color: 'var(--warning)' }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <rect x="3" y="3" width="18" height="18" rx="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -931,36 +944,25 @@ function DashboardPage({
 
       {/* Charts Row */}
       <div className="grid-2-1">
-        {/* SVG Area Chart */}
+        {/* SVG Stacked Area Chart from real asset data */}
         <div className="card">
           <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '8px', color: 'var(--text-primary)' }}>Xu Hướng Tài Sản Tổng Thể</h3>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>Mô phỏng 12 tháng tăng trưởng tích lũy ròng gần nhất</p>
-          
           <div className="chart-container">
             <svg className="chart-svg" viewBox={`0 0 ${chartWidth} ${chartHeight}`}>
-              <defs>
-                <linearGradient id="chart-gradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.25"/>
-                  <stop offset="100%" stopColor="var(--primary)" stopOpacity="0.0"/>
-                </linearGradient>
-              </defs>
-
               {/* Grid Lines */}
               <line x1="0" y1={chartHeight * 0.25} x2={chartWidth} y2={chartHeight * 0.25} className="chart-grid-line" />
               <line x1="0" y1={chartHeight * 0.5} x2={chartWidth} y2={chartHeight * 0.5} className="chart-grid-line" />
               <line x1="0" y1={chartHeight * 0.75} x2={chartWidth} y2={chartHeight * 0.75} className="chart-grid-line" />
 
-              {/* Area */}
-              <path d={areaD} className="chart-area" />
-
-              {/* Path Line */}
-              <path d={pathD} className="chart-path" />
+              {/* Total Path Line */}
+              <path d={totalPathD} fill="none" stroke="#6366f1" strokeWidth="2.5" />
+              <path d={totalPathD} fill="none" stroke="#6366f1" strokeWidth="6" opacity="0.15" />
 
               {/* Points & Labels */}
-              {points.map((p, idx) => (
+              {totalPoints.map((p, idx) => (
                 <g key={idx}>
-                  <circle cx={p.x} cy={p.y} r="5" className="chart-dot" />
-                  {/* Tooltip-like value display on points */}
+                  <circle cx={p.x} cy={p.y} r="4" fill="#e2e8f0" />
                   <text 
                     x={p.x} 
                     y={p.y - 12} 
@@ -982,13 +984,39 @@ function DashboardPage({
               ))}
             </svg>
           </div>
+
+          
         </div>
 
         {/* SVG Donut Allocation Chart */}
         <div className="card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
           <div>
-            <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '4px', color: 'var(--text-primary)' }}>Phân Bổ Danh Mục</h3>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>Cơ cấu tỉ trọng các quỹ lớn nhất</p>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+              <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>Phân Bổ Tài Sản</h3>
+              <div style={{ display: 'flex', gap: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '6px', padding: '2px' }}>
+                <button
+                  onClick={() => setChartMode('overview')}
+                  style={{
+                    padding: '4px 12px', fontSize: '0.75rem', borderRadius: '4px', border: 'none', cursor: 'pointer',
+                    background: chartMode === 'overview' ? '#6366f1' : 'transparent',
+                    color: chartMode === 'overview' ? '#fff' : 'var(--text-secondary)',
+                    fontWeight: chartMode === 'overview' ? 600 : 400
+                  }}
+                >Tổng quan</button>
+                <button
+                  onClick={() => setChartMode('detail')}
+                  style={{
+                    padding: '4px 12px', fontSize: '0.75rem', borderRadius: '4px', border: 'none', cursor: 'pointer',
+                    background: chartMode === 'detail' ? '#6366f1' : 'transparent',
+                    color: chartMode === 'detail' ? '#fff' : 'var(--text-secondary)',
+                    fontWeight: chartMode === 'detail' ? 600 : 400
+                  }}
+                >Chi tiết</button>
+              </div>
+            </div>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+              {chartMode === 'overview' ? 'Tổng giá trị Tiết kiệm và Đầu tư' : 'Chi tiết từng tài sản trong danh mục'}
+            </p>
           </div>
 
           <div style={{ position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
@@ -1443,7 +1471,7 @@ function PortfolioPage({
     <div>
       <div className="tab-header">
         <div>
-          <h2 className="section-title">Phân Bổ Danh Mục & Cắt Giảm Ngân Sách</h2>
+          <h2 className="section-title">Phân Bổ Tài Sản & Cắt Giảm Ngân Sách</h2>
           <p className="section-desc">Phân bố thu nhập thành ba khối Sinh hoạt, Tiết kiệm & Đầu tư, tích hợp bộ lập kế hoạch cắt giảm tự động</p>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
