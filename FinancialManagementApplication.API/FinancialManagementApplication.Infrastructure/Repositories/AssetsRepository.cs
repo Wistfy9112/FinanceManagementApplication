@@ -102,6 +102,19 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
                 .ToListAsync();
         }
 
+        public async Task<IEnumerable<SnapshotSummary>> GetSnapshotValuesAsync(Guid accountId)
+        {
+            return await _context.AssetHistories
+                .Where(h => h.AccountId == accountId)
+                .Select(h => new SnapshotSummary
+                {
+                    RecordedAt = h.RecordedAt,
+                    TotalValue = h.Details.Sum(d => d.CurrentValue)
+                })
+                .OrderBy(s => s.RecordedAt)
+                .ToListAsync();
+        }
+
         public async Task<bool> RestoreFromHistoryAsync(Guid historyId)
         {
             var history = await _context.AssetHistories

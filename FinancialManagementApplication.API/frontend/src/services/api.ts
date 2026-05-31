@@ -720,3 +720,159 @@ export const historyService = {
     return false;
   }
 };
+
+// Generate demo cash flow growth data
+const generateDemoCashFlowGrowth = (mode: string, year?: number) => {
+  const demoSnapshots = [
+    { date: '2022-03-15', value: 85000000 },
+    { date: '2022-07-20', value: 92000000 },
+    { date: '2022-12-31', value: 100000000 },
+    { date: '2023-02-10', value: 105000000 },
+    { date: '2023-06-05', value: 130000000 },
+    { date: '2023-09-18', value: 145000000 },
+    { date: '2023-12-31', value: 150000000 },
+    { date: '2024-01-10', value: 155000000 },
+    { date: '2024-04-22', value: 170000000 },
+    { date: '2024-08-15', value: 195000000 },
+    { date: '2024-12-31', value: 220000000 },
+    { date: '2025-01-12', value: 225000000 },
+    { date: '2025-03-25', value: 240000000 },
+    { date: '2025-05-10', value: 260000000 },
+    { date: '2025-07-30', value: 275000000 },
+    { date: '2025-10-15', value: 290000000 },
+    { date: '2025-12-31', value: 300000000 },
+    { date: '2026-02-01', value: 310000000 },
+    { date: '2026-04-10', value: 335000000 },
+    { date: '2026-05-26', value: 350000000 },
+  ];
+
+  const now = new Date();
+  const currentYear = now.getFullYear();
+
+  if (mode === 'yearly') {
+    const yearly: Record<number, number> = {};
+    for (const s of demoSnapshots) {
+      const y = new Date(s.date).getFullYear();
+      yearly[y] = s.value;
+    }
+    const years = Object.keys(yearly).map(Number).sort();
+    const data: any[] = [];
+    for (let i = 0; i < years.length; i++) {
+      const y = years[i];
+      const point: any = {
+        period: String(y),
+        date: new Date(y, 0, 1).toISOString(),
+        value: yearly[y]
+      };
+      if (i > 0) {
+        const prev = yearly[years[i - 1]];
+        point.changeFromPrevious = yearly[y] - prev;
+        point.changePercentage = prev !== 0 ? ((point.changeFromPrevious / prev) * 100) : null;
+      }
+      data.push(point);
+    }
+    return { mode: 'yearly', data };
+  }
+
+  if (mode === 'monthly') {
+    const targetYear = year || currentYear;
+    const monthly: Record<number, number> = {};
+    for (const s of demoSnapshots) {
+      const d = new Date(s.date);
+      if (d.getFullYear() === targetYear) {
+        monthly[d.getMonth() + 1] = s.value;
+      }
+    }
+    const months = Object.keys(monthly).map(Number).sort();
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const data: any[] = [];
+    for (let i = 0; i < months.length; i++) {
+      const m = months[i];
+      const dt = new Date(targetYear, m - 1, 1);
+      const point: any = {
+        period: monthNames[m - 1],
+        date: dt.toISOString(),
+        value: monthly[m]
+      };
+      if (i > 0) {
+        const prev = monthly[months[i - 1]];
+        point.changeFromPrevious = monthly[m] - prev;
+        point.changePercentage = prev !== 0 ? ((point.changeFromPrevious / prev) * 100) : null;
+      }
+      data.push(point);
+    }
+    return { mode: 'monthly', year: targetYear, data };
+  }
+
+  if (mode === 'last12months') {
+    const months: { year: number; month: number; label: string }[] = [];
+    const start = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+    for (let d = new Date(start); d <= now; d.setMonth(d.getMonth() + 1)) {
+      const y = d.getFullYear();
+      const m = d.getMonth() + 1;
+      months.push({ year: y, month: m, label: `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1]} ${y}` });
+    }
+
+    const grouped: Record<string, number> = {};
+    for (const s of demoSnapshots) {
+      const d = new Date(s.date);
+      const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
+      grouped[key] = s.value;
+    }
+
+    const data: any[] = [];
+    let carryForward: number | null = null;
+    for (let i = 0; i < months.length; i++) {
+      const { year: y, month: m, label } = months[i];
+      const key = `${y}-${m}`;
+      let val: number;
+      if (key in grouped) {
+        val = grouped[key];
+        carryForward = val;
+      } else if (carryForward !== null) {
+        val = carryForward;
+      } else {
+        continue;
+      }
+      const dt = new Date(y, m - 1, 1);
+      const point: any = {
+        period: label,
+        date: dt.toISOString(),
+        value: val
+      };
+      if (i > 0 && data.length > 0) {
+        const prevVal = data[data.length - 1].value;
+        point.changeFromPrevious = val - prevVal;
+        point.changePercentage = prevVal !== 0 ? ((point.changeFromPrevious / prevVal) * 100) : null;
+      }
+      data.push(point);
+    }
+    return { mode: 'last12months', data };
+  }
+
+  return { mode, data: [] };
+};
+
+// Cash Flow Growth Service
+export const cashFlowService = {
+  getGrowthData: async (accountId: string, mode: string = 'yearly', year?: number): Promise<any> => {
+    await checkConnection();
+    if (isDemoMode) {
+      return generateDemoCashFlowGrowth(mode, year);
+    }
+    try {
+      let url = `${API_URL}/cashflow/growth/${accountId}?mode=${mode}`;
+      if (year) url += `&year=${year}`;
+      const res = await fetch(url, {
+        headers: { ...getAuthHeader() }
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (e) {
+      console.error('Error fetching cash flow growth:', e);
+    }
+    // Fallback: generate demo data if API fails
+    return generateDemoCashFlowGrowth(mode, year);
+  }
+};

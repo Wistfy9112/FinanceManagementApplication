@@ -1,13 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useToast } from "./components/ui/Toast";
 import { 
   authService, 
   assetService, 
   portfolioService, 
   historyService,
+  cashFlowService,
   checkConnection, 
   getLoggedUser
 } from './services/api';
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
+  ResponsiveContainer, Area, AreaChart
+} from 'recharts';
 
 // Format number with commas, no decimals (for input display)
 const formatInputNumber = (value: number) => {
@@ -638,6 +643,7 @@ export default function App() {
         {activeTab === 'dashboard' && (
           <DashboardPage 
             totalCurrent={totalCurrent}
+            totalInitial={totalInitial}
             totalInterest={totalInterest}
             totalInterestRatio={totalInterestRatio}
             portfolio={portfolio}
@@ -920,6 +926,7 @@ function AuthPage({ onLogin, onRegister, onDemo, error, isDemo }: { onLogin: any
 // 2. DASHBOARD COMPONENT
 function DashboardPage({ 
   totalCurrent, 
+  totalInitial, 
   totalInterest, 
   totalInterestRatio, 
   portfolio, 
@@ -930,6 +937,7 @@ function DashboardPage({
   setActiveTab 
 }: { 
   totalCurrent: number; 
+  totalInitial: number; 
   totalInterest: number; 
   totalInterestRatio: number; 
   portfolio: any; 
@@ -940,80 +948,6 @@ function DashboardPage({
   setActiveTab: any 
 }) {
   const [chartMode, setChartMode] = useState<'overview' | 'detail'>('overview');
-  const [timeMode, setTimeMode] = useState<'yearly' | 'monthly' | 'oneYear'>('monthly');
-  
-  const chartHeight = 220;
-  const chartWidth = 600;
-
-  const activeAssets = assets.filter(a => a.InitialValue > 0 || a.CurrentValue > 0);
-
-  // Determine data points based on time mode
-  const { pointsCount, labels, stackedTotal } = (() => {
-    if (timeMode === 'yearly') {
-      // Show last 5 years (or fewer if no data)
-      const years = 5;
-      const count = years + 1; // including starting point
-      const curves = activeAssets.map(a => {
-        const diff = a.CurrentValue - a.InitialValue;
-        return Array.from({ length: count }, (_, i) => a.InitialValue + diff * (i / years));
-      });
-      const total = Array.from({ length: count }, (_, i) =>
-        curves.reduce((s, c) => s + c[i], 0)
-      );
-      const now = new Date();
-      const lbls = Array.from({ length: count }, (_, i) => String(now.getFullYear() - years + i));
-      return { pointsCount: count, labels: lbls, stackedTotal: total };
-    }
-
-    if (timeMode === 'monthly') {
-      // Show 12 months of current year
-      const count = 12;
-      const curves = activeAssets.map(a => {
-        const diff = a.CurrentValue - a.InitialValue;
-        return Array.from({ length: count }, (_, i) => {
-          const t = i / (count - 1);
-          const curve = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
-          return a.InitialValue + diff * curve;
-        });
-      });
-      const total = Array.from({ length: count }, (_, i) =>
-        curves.reduce((s, c) => s + c[i], 0)
-      );
-      const months = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'T9', 'T10', 'T11', 'T12'];
-      return { pointsCount: count, labels: months, stackedTotal: total };
-    }
-
-    // oneYear: 12 months from 1 year ago to now
-    const count = 12;
-    const curves = activeAssets.map(a => {
-      const diff = a.CurrentValue - a.InitialValue;
-      return Array.from({ length: count }, (_, i) => {
-        const t = i / (count - 1);
-        const curve = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
-        return a.InitialValue + diff * curve;
-      });
-    });
-    const total = Array.from({ length: count }, (_, i) =>
-      curves.reduce((s, c) => s + c[i], 0)
-    );
-    const now = new Date();
-    const lbls = Array.from({ length: count }, (_, i) => {
-      const d = new Date(now.getFullYear() - 1, now.getMonth() + 1 + i, 1);
-      return `T${d.getMonth() + 1}/${d.getFullYear()}`;
-    });
-    return { pointsCount: count, labels: lbls, stackedTotal: total };
-  })();
-
-  const minVal = Math.min(...stackedTotal) * 0.95;
-  const maxVal = Math.max(...stackedTotal) * 1.05;
-  const valRange = (maxVal - minVal) || 1;
-
-  const totalPoints = stackedTotal.map((val, i) => {
-    const x = (i / (pointsCount - 1)) * chartWidth;
-    const y = chartHeight - ((val - minVal) / valRange) * (chartHeight - 40) - 20;
-    return { x, y, value: val };
-  });
-  const totalPathD = `M ${totalPoints.map(p => `${p.x} ${p.y}`).join(' L ')}`;
 
   // Dynamic values for Donut Allocation Chart
   const colors = ['#6366f1', '#10b981', '#f59e0b', '#d946ef', '#64748b'];
@@ -1060,10 +994,25 @@ function DashboardPage({
       <div className="grid-3">
         <div className="card" onClick={() => setActiveTab('assets')} style={{ cursor: 'pointer' }}>
           <div className="metric-header">
-            <span className="metric-title">Tổng Giá Trị Tài Sản (Net Worth)</span>
+            <span className="metric-title">Tổng Giá Trị Tài Sản Gốc (Original Value)</span>
             <span className="metric-icon" style={{ color: 'var(--primary)' }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
+              </svg>
+            </span>
+          </div>
+          <div className="metric-value">{formatCurrency(totalInitial)}</div>
+          <div className="metric-change" style={{ color: 'var(--text-secondary)' }}>
+            Tổng vốn gốc đã đầu tư
+          </div>
+        </div>
+
+        <div className="card" onClick={() => setActiveTab('assets')} style={{ cursor: 'pointer' }}>
+          <div className="metric-header">
+            <span className="metric-title">Tổng Giá Trị Tài Sản (Net Worth)</span>
+            <span className="metric-icon" style={{ color: 'var(--success)' }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M23 6l-9.5 9.5-5-5L1 18M17 6h6v6" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </span>
           </div>
@@ -1077,9 +1026,10 @@ function DashboardPage({
         <div className="card" onClick={() => setActiveTab('assets')} style={{ cursor: 'pointer' }}>
           <div className="metric-header">
             <span className="metric-title">Hiệu Suất Đầu Tư (Growth Rate)</span>
-            <span className="metric-icon" style={{ color: 'var(--success)' }}>
+            <span className="metric-icon" style={{ color: 'var(--warning)' }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M23 6l-9.5 9.5-5-5L1 18M17 6h6v6" strokeLinecap="round" strokeLinejoin="round"/>
+                <rect x="3" y="3" width="18" height="18" rx="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/>
               </svg>
             </span>
           </div>
@@ -1090,85 +1040,12 @@ function DashboardPage({
             Lãi thuần ròng từ vốn đầu tư
           </div>
         </div>
-
-        <div className="card" onClick={() => setActiveTab('portfolio')} style={{ cursor: 'pointer' }}>
-          <div className="metric-header">
-            <span className="metric-title">Gốc Phân Bổ Tài Sản (Remain)</span>
-            <span className="metric-icon" style={{ color: 'var(--warning)' }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <rect x="3" y="3" width="18" height="18" rx="2" strokeLinecap="round" strokeLinejoin="round"/>
-                <line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/>
-              </svg>
-            </span>
-          </div>
-          <div className="metric-value">{formatCurrency(portfolio?.Amount ?? 0)}</div>
-          <div className="metric-change" style={{ color: 'var(--text-secondary)' }}>
-            Ngân sách khả dụng phân bổ
-          </div>
-        </div>
       </div>
 
       {/* Charts Row */}
       <div className="grid-2-1">
-        {/* SVG Stacked Area Chart from real asset data */}
-        <div className="card">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-            <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>Xu Hướng Tài Sản Tổng Thể</h3>
-            <div style={{ display: 'flex', gap: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '6px', padding: '2px' }}>
-              {([['yearly', 'Theo năm'], ['monthly', 'Theo tháng'], ['oneYear', '1 năm trước']] as const).map(([key, label]) => (
-                <button key={key} onClick={() => setTimeMode(key)}
-                  style={{
-                    padding: '3px 10px', fontSize: '0.7rem', borderRadius: '4px', border: 'none', cursor: 'pointer',
-                    background: timeMode === key ? '#6366f1' : 'transparent',
-                    color: timeMode === key ? '#fff' : 'var(--text-secondary)',
-                    fontWeight: timeMode === key ? 600 : 400
-                  }}
-                >{label}</button>
-              ))}
-            </div>
-          </div>
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
-            {timeMode === 'yearly' ? 'Tổng giá trị tài sản qua các năm' : timeMode === 'monthly' ? 'Tổng giá trị tài sản từng tháng trong năm' : 'Tổng giá trị tài sản 12 tháng gần nhất'}
-          </p>
-          <div className="chart-container">
-            <svg className="chart-svg" viewBox={`0 0 ${chartWidth} ${chartHeight}`}>
-              {/* Grid Lines */}
-              <line x1="0" y1={chartHeight * 0.25} x2={chartWidth} y2={chartHeight * 0.25} className="chart-grid-line" />
-              <line x1="0" y1={chartHeight * 0.5} x2={chartWidth} y2={chartHeight * 0.5} className="chart-grid-line" />
-              <line x1="0" y1={chartHeight * 0.75} x2={chartWidth} y2={chartHeight * 0.75} className="chart-grid-line" />
-
-              {/* Total Path Line */}
-              <path d={totalPathD} fill="none" stroke="#6366f1" strokeWidth="2.5" />
-              <path d={totalPathD} fill="none" stroke="#6366f1" strokeWidth="6" opacity="0.15" />
-
-              {/* Points & Labels */}
-              {totalPoints.map((p, idx) => (
-                <g key={idx}>
-                  <circle cx={p.x} cy={p.y} r="4" fill="#e2e8f0" />
-                  <text 
-                    x={p.x} 
-                    y={p.y - 12} 
-                    className="chart-label" 
-                    textAnchor="middle"
-                    style={{ fontWeight: 600, fill: 'var(--text-primary)' }}
-                  >
-                    {formatCurrency(p.value).split('.')[0]}
-                  </text>
-                  <text 
-                    x={p.x} 
-                    y={chartHeight + 14} 
-                    className="chart-label" 
-                    textAnchor="middle"
-                  >
-                    {labels[idx]}
-                  </text>
-                </g>
-              ))}
-            </svg>
-          </div>
-
-          
-        </div>
+        {/* Cash Flow Growth Chart */}
+        <CashFlowGrowthChart userId={getLoggedUser()?.id || 'u1'} />
 
         {/* SVG Donut Allocation Chart */}
         <div className="card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
@@ -1248,6 +1125,182 @@ function DashboardPage({
           Để điều chỉnh cơ cấu phân bổ, tối ưu thuế hoặc lên kế hoạch cắt giảm chi phí sinh hoạt, vui lòng chuyển qua tab **Phân bổ Danh mục** để sử dụng tính năng lập kế hoạch giảm tải ngân sách chi tiết.
         </p>
       </div>
+    </div>
+  );
+}
+
+// ======================== CASH FLOW GROWTH CHART COMPONENT ========================
+function CashFlowGrowthChart({ userId }: { userId: string }) {
+  const [mode, setMode] = useState<'yearly' | 'monthly' | 'last12months'>('yearly');
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [chartData, setChartData] = useState<any[]>([]);
+  const [availableYears, setAvailableYears] = useState<number[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const result = await cashFlowService.getGrowthData(userId, mode, mode === 'monthly' ? selectedYear : undefined);
+      setChartData(result.data || []);
+
+      if (mode === 'yearly') {
+        const years = (result.data || []).map((d: any) => parseInt(d.period));
+        setAvailableYears(years);
+      }
+    } catch (e) {
+      console.error('Error loading cash flow growth:', e);
+    } finally {
+      setLoading(false);
+    }
+  }, [userId, mode, selectedYear]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleModeChange = (newMode: 'yearly' | 'monthly' | 'last12months') => {
+    setMode(newMode);
+    if (newMode === 'monthly' && availableYears.length > 0) {
+      const currentYear = new Date().getFullYear();
+      if (availableYears.includes(currentYear)) {
+        setSelectedYear(currentYear);
+      } else {
+        setSelectedYear(availableYears[availableYears.length - 1]);
+      }
+    }
+  };
+
+  const formatValue = (v: number) => {
+    if (v >= 1000000000) return `$${(v / 1000000000).toFixed(1)}B`;
+    if (v >= 1000000) return `$${(v / 1000000).toFixed(1)}M`;
+    if (v >= 1000) return `$${(v / 1000).toFixed(0)}K`;
+    return `$${v}`;
+  };
+
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      const changeStr = data.changeFromPrevious !== undefined && data.changeFromPrevious !== null
+        ? `${data.changeFromPrevious >= 0 ? '+' : ''}${formatCurrency(data.changeFromPrevious)}`
+        : '--';
+      const changePctStr = data.changePercentage !== undefined && data.changePercentage !== null
+        ? `${data.changePercentage >= 0 ? '+' : ''}${data.changePercentage.toFixed(2)}%`
+        : '--';
+      return (
+        <div className="chart-tooltip">
+          <div className="chart-tooltip-header">{data.period}</div>
+          <div className="chart-tooltip-row">
+            <span>Giá trị:</span>
+            <span className="chart-tooltip-value">{formatCurrency(data.value)}</span>
+          </div>
+          <div className="chart-tooltip-row">
+            <span>Thay đổi:</span>
+            <span className="chart-tooltip-value" style={{ color: data.changeFromPrevious >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+              {changeStr} ({changePctStr})
+            </span>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  const gradientId = 'cashFlowGradient';
+
+  return (
+    <div className="card">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+        <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>Cash Flow Growth</h3>
+        <div style={{ display: 'flex', gap: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '6px', padding: '2px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {([['yearly', 'Theo năm'], ['monthly', 'Theo tháng'], ['last12months', '12 tháng']] as const).map(([key, label]) => (
+            <button key={key} onClick={() => handleModeChange(key)}
+              style={{
+                padding: '3px 10px', fontSize: '0.7rem', borderRadius: '4px', border: 'none', cursor: 'pointer',
+                background: mode === key ? '#6366f1' : 'transparent',
+                color: mode === key ? '#fff' : 'var(--text-secondary)',
+                fontWeight: mode === key ? 600 : 400
+              }}
+            >{label}</button>
+          ))}
+          {mode === 'monthly' && (
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+              style={{
+                marginLeft: '4px', padding: '2px 6px', fontSize: '0.7rem', borderRadius: '4px',
+                border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)',
+                color: 'var(--text-primary)', cursor: 'pointer'
+              }}
+            >
+              {availableYears.length > 0 ? availableYears.map(y => (
+                <option key={y} value={y}>{y}</option>
+              )) : (
+                <option value={selectedYear}>{selectedYear}</option>
+              )}
+            </select>
+          )}
+        </div>
+      </div>
+      <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+        {mode === 'yearly' ? 'Tổng giá trị tài sản qua các năm' : 
+         mode === 'monthly' ? `Tổng giá trị tài sản từng tháng năm ${selectedYear}` : 
+         'Tổng giá trị tài sản 12 tháng gần nhất'}
+      </p>
+      {loading ? (
+        <div style={{ height: '280px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ border: '3px solid rgba(99,102,241,0.1)', borderTop: '3px solid #6366f1', borderRadius: '50%', width: '30px', height: '30px', animation: 'spin 1s linear infinite' }} />
+        </div>
+      ) : chartData.length === 0 ? (
+        <div style={{ height: '280px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+          Chưa có dữ liệu lịch sử. Hãy lưu snapshot tài sản để bắt đầu theo dõi.
+        </div>
+      ) : (
+        <div className="chart-container">
+          <svg style={{ position: 'absolute', width: 0, height: 0 }}>
+            <defs>
+              <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+          </svg>
+          <ResponsiveContainer width="100%" height={280}>
+            <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+              <XAxis 
+                dataKey="period" 
+                tick={{ fill: '#64748b', fontSize: 10 }}
+                axisLine={{ stroke: 'rgba(255,255,255,0.06)' }}
+                tickLine={false}
+              />
+              <YAxis 
+                tickFormatter={formatValue}
+                tick={{ fill: '#64748b', fontSize: 10 }}
+                axisLine={false}
+                tickLine={false}
+                width={50}
+              />
+              <RechartsTooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(99,102,241,0.3)', strokeDasharray: '3 3' }} />
+              <Area 
+                type="monotone" 
+                dataKey="value" 
+                stroke="#6366f1" 
+                strokeWidth={2.5}
+                fill={`url(#${gradientId})`}
+                dot={{ r: 4, fill: '#6366f1', stroke: '#11131c', strokeWidth: 2 }}
+                activeDot={{ r: 6, fill: '#6366f1', stroke: '#fff', strokeWidth: 2 }}
+                animationDuration={800}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 using FinanceManagementApplication.Application.Interface.Repositories;
 using FinancialManagementApplication.Application.Interface.Repositories;
 using FinancialManagementApplication.Application.Interface.Securitiy;
+using FinancialManagementApplication.Application.Interface.Services;
 using FinancialManagementApplication.Application.Services;
 using FinancialManagementApplication.Infrastructure.Data;
 using FinancialManagementApplication.Infrastructure.Repositories;
@@ -28,6 +29,7 @@ builder.Services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
 builder.Services.AddScoped<IAssetsRepository, AssetsRepository>();
 builder.Services.AddScoped<IPortfolioRepository, PortfolioRepository>();
 builder.Services.AddScoped<IPortfolioAllocationRepository, PortfolioAllocationRepository>();
+builder.Services.AddScoped<ICashFlowGrowthService, CashFlowGrowthService>();
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(
         builder.Configuration.GetConnectionString("DefaultConnection")

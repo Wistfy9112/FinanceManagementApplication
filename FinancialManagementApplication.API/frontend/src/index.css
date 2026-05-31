@@ -588,6 +588,57 @@ button, input, select, textarea {
   font-family: var(--font-sans);
 }
 
+/* Recharts Tooltip Override */
+.chart-tooltip {
+  background: rgba(22, 26, 43, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 10px 14px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.chart-tooltip-header {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.chart-tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  padding: 2px 0;
+}
+
+.chart-tooltip-value {
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: right;
+}
+
+/* Recharts default style overrides */
+.recharts-default-tooltip {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+}
+
+.recharts-tooltip-wrapper {
+  outline: none;
+}
+
+.recharts-surface {
+  overflow: visible;
+}
+
 /* Donut Chart */
 .donut-svg {
   width: 100%;
