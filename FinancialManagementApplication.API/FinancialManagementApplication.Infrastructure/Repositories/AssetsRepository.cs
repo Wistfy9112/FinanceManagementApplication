@@ -109,7 +109,8 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
                 .Select(h => new SnapshotSummary
                 {
                     RecordedAt = h.RecordedAt,
-                    TotalValue = h.Details.Sum(d => d.CurrentValue)
+                    TotalValue = h.Details.Sum(d => d.CurrentValue),
+                    TotalInitialValue = h.Details.Sum(d => d.InitialValue)
                 })
                 .OrderBy(s => s.RecordedAt)
                 .ToListAsync();
@@ -120,6 +121,13 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
             return await _context.Assets
                 .Where(a => a.AccountID == accountId)
                 .SumAsync(a => a.CurrentValue);
+        }
+
+        public async Task<decimal> GetCurrentTotalInitialValueAsync(Guid accountId)
+        {
+            return await _context.Assets
+                .Where(a => a.AccountID == accountId)
+                .SumAsync(a => a.InitialValue);
         }
 
         public async Task<bool> RestoreFromHistoryAsync(Guid historyId)

@@ -17,25 +17,27 @@ namespace FinancialManagementApplication.Application.Services
         {
             var snapshots = (await _assetsRepository.GetSnapshotValuesAsync(accountId)).ToList();
             var currentTotal = await _assetsRepository.GetCurrentTotalValueAsync(accountId);
+            var currentInitialTotal = await _assetsRepository.GetCurrentTotalInitialValueAsync(accountId);
             var now = DateTime.UtcNow;
 
             return mode switch
             {
-                "yearly" => BuildYearly(snapshots, currentTotal, now),
-                "monthly" => BuildMonthly(snapshots, year ?? now.Year, currentTotal, now),
-                "last12months" => BuildLast12Months(snapshots, currentTotal, now),
+                "yearly" => BuildYearly(snapshots, currentTotal, currentInitialTotal, now),
+                "monthly" => BuildMonthly(snapshots, year ?? now.Year, currentTotal, currentInitialTotal, now),
+                "last12months" => BuildLast12Months(snapshots, currentTotal, currentInitialTotal, now),
                 _ => new CashFlowGrowthResponse { Mode = mode, Data = new List<CashFlowDataPoint>() }
             };
         }
 
-        private static CashFlowGrowthResponse BuildYearly(List<SnapshotSummary> snapshots, decimal currentTotal, DateTime now)
+        private static CashFlowGrowthResponse BuildYearly(List<SnapshotSummary> snapshots, decimal currentTotal, decimal currentInitialTotal, DateTime now)
         {
             var yearlyData = snapshots
                 .GroupBy(s => s.RecordedAt.Year)
                 .Select(g => new
                 {
                     Year = g.Key,
-                    Value = g.OrderByDescending(s => s.RecordedAt).First().TotalValue
+                    Value = g.OrderByDescending(s => s.RecordedAt).First().TotalValue,
+                    InitialValue = g.OrderByDescending(s => s.RecordedAt).First().TotalInitialValue
                 })
                 .OrderBy(y => y.Year)
                 .ToList();
@@ -47,7 +49,8 @@ namespace FinancialManagementApplication.Application.Services
                 {
                     Period = yearlyData[i].Year.ToString(),
                     Date = new DateTime(yearlyData[i].Year, 1, 1),
-                    Value = yearlyData[i].Value
+                    Value = yearlyData[i].Value,
+                    InitialValue = yearlyData[i].InitialValue
                 };
                 if (i > 0)
                 {
@@ -65,6 +68,7 @@ namespace FinancialManagementApplication.Application.Services
                 if (last.Date.Year == now.Year)
                 {
                     last.Value = currentTotal;
+                    last.InitialValue = currentInitialTotal;
                     if (data.Count > 1)
                     {
                         var prev = data[^2].Value;
@@ -76,6 +80,17 @@ namespace FinancialManagementApplication.Application.Services
                 }
             }
 
+            decimal lastKnownInitial = 0;
+            foreach (var dp in data)
+            {
+                if (dp.InitialValue > 0)
+                    lastKnownInitial = dp.InitialValue;
+                else if (lastKnownInitial > 0)
+                    dp.InitialValue = lastKnownInitial;
+                else if (currentInitialTotal > 0)
+                    dp.InitialValue = currentInitialTotal;
+            }
+
             return new CashFlowGrowthResponse
             {
                 Mode = "yearly",
@@ -83,7 +98,7 @@ namespace FinancialManagementApplication.Application.Services
             };
         }
 
-        private static CashFlowGrowthResponse BuildMonthly(List<SnapshotSummary> snapshots, int year, decimal currentTotal, DateTime now)
+        private static CashFlowGrowthResponse BuildMonthly(List<SnapshotSummary> snapshots, int year, decimal currentTotal, decimal currentInitialTotal, DateTime now)
         {
             var monthlyData = snapshots
                 .Where(s => s.RecordedAt.Year == year)
@@ -91,7 +106,8 @@ namespace FinancialManagementApplication.Application.Services
                 .Select(g => new
                 {
                     Month = g.Key,
-                    Value = g.OrderByDescending(s => s.RecordedAt).First().TotalValue
+                    Value = g.OrderByDescending(s => s.RecordedAt).First().TotalValue,
+                    InitialValue = g.OrderByDescending(s => s.RecordedAt).First().TotalInitialValue
                 })
                 .OrderBy(m => m.Month)
                 .ToList();
@@ -104,7 +120,8 @@ namespace FinancialManagementApplication.Application.Services
                 {
                     Period = dt.ToString("MMM"),
                     Date = dt,
-                    Value = monthlyData[i].Value
+                    Value = monthlyData[i].Value,
+                    InitialValue = monthlyData[i].InitialValue
                 };
                 if (i > 0)
                 {
@@ -122,6 +139,7 @@ namespace FinancialManagementApplication.Application.Services
                 if (last.Date.Year == now.Year && last.Date.Month == now.Month)
                 {
                     last.Value = currentTotal;
+                    last.InitialValue = currentInitialTotal;
                     if (data.Count > 1)
                     {
                         var prev = data[^2].Value;
@@ -133,6 +151,17 @@ namespace FinancialManagementApplication.Application.Services
                 }
             }
 
+            decimal lastKnownInitial = 0;
+            foreach (var dp in data)
+            {
+                if (dp.InitialValue > 0)
+                    lastKnownInitial = dp.InitialValue;
+                else if (lastKnownInitial > 0)
+                    dp.InitialValue = lastKnownInitial;
+                else if (currentInitialTotal > 0)
+                    dp.InitialValue = currentInitialTotal;
+            }
+
             return new CashFlowGrowthResponse
             {
                 Mode = "monthly",
@@ -141,7 +170,7 @@ namespace FinancialManagementApplication.Application.Services
             };
         }
 
-        private static CashFlowGrowthResponse BuildLast12Months(List<SnapshotSummary> snapshots, decimal currentTotal, DateTime now)
+        private static CashFlowGrowthResponse BuildLast12Months(List<SnapshotSummary> snapshots, decimal currentTotal, decimal currentInitialTotal, DateTime now)
         {
             var startDate = new DateTime(now.Year, now.Month, 1).AddMonths(-11);
 
@@ -157,25 +186,31 @@ namespace FinancialManagementApplication.Application.Services
                 {
                     g.Key.Year,
                     g.Key.Month,
-                    Value = g.OrderByDescending(s => s.RecordedAt).First().TotalValue
+                    Value = g.OrderByDescending(s => s.RecordedAt).First().TotalValue,
+                    InitialValue = g.OrderByDescending(s => s.RecordedAt).First().TotalInitialValue
                 })
-                .ToDictionary(m => (m.Year, m.Month), m => m.Value);
+                .ToDictionary(m => (m.Year, m.Month), m => (m.Value, m.InitialValue));
 
             var data = new List<CashFlowDataPoint>();
-            decimal? carryForward = null;
+            decimal? carryForwardValue = null;
+            decimal? carryForwardInitial = null;
 
             for (int i = 0; i < months.Count; i++)
             {
                 var (y, m) = months[i];
                 decimal val;
+                decimal initVal;
                 if (grouped.TryGetValue((y, m), out var v))
                 {
-                    val = v;
-                    carryForward = v;
+                    val = v.Value;
+                    initVal = v.InitialValue;
+                    carryForwardValue = v.Value;
+                    carryForwardInitial = v.InitialValue;
                 }
-                else if (carryForward.HasValue)
+                else if (carryForwardValue.HasValue)
                 {
-                    val = carryForward.Value;
+                    val = carryForwardValue.Value;
+                    initVal = carryForwardInitial ?? 0;
                 }
                 else
                 {
@@ -187,7 +222,8 @@ namespace FinancialManagementApplication.Application.Services
                 {
                     Period = dt.ToString("MMM yyyy"),
                     Date = dt,
-                    Value = val
+                    Value = val,
+                    InitialValue = initVal
                 };
                 if (i > 0 && data.Count > 0)
                 {
@@ -206,6 +242,7 @@ namespace FinancialManagementApplication.Application.Services
                 if (last.Date.Year == now.Year && last.Date.Month == now.Month)
                 {
                     last.Value = currentTotal;
+                    last.InitialValue = currentInitialTotal;
                     if (data.Count > 1)
                     {
                         var prev = data[^2].Value;
@@ -215,6 +252,17 @@ namespace FinancialManagementApplication.Application.Services
                             : null;
                     }
                 }
+            }
+
+            decimal lastKnownInitial = 0;
+            foreach (var dp in data)
+            {
+                if (dp.InitialValue > 0)
+                    lastKnownInitial = dp.InitialValue;
+                else if (lastKnownInitial > 0)
+                    dp.InitialValue = lastKnownInitial;
+                else if (currentInitialTotal > 0)
+                    dp.InitialValue = currentInitialTotal;
             }
 
             return new CashFlowGrowthResponse

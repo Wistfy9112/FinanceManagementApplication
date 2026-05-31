@@ -724,36 +724,36 @@ export const historyService = {
 // Generate demo cash flow growth data
 const generateDemoCashFlowGrowth = (mode: string, year?: number) => {
   const demoSnapshots = [
-    { date: '2022-03-15', value: 85000000 },
-    { date: '2022-07-20', value: 92000000 },
-    { date: '2022-12-31', value: 100000000 },
-    { date: '2023-02-10', value: 105000000 },
-    { date: '2023-06-05', value: 130000000 },
-    { date: '2023-09-18', value: 145000000 },
-    { date: '2023-12-31', value: 150000000 },
-    { date: '2024-01-10', value: 155000000 },
-    { date: '2024-04-22', value: 170000000 },
-    { date: '2024-08-15', value: 195000000 },
-    { date: '2024-12-31', value: 220000000 },
-    { date: '2025-01-12', value: 225000000 },
-    { date: '2025-03-25', value: 240000000 },
-    { date: '2025-05-10', value: 260000000 },
-    { date: '2025-07-30', value: 275000000 },
-    { date: '2025-10-15', value: 290000000 },
-    { date: '2025-12-31', value: 300000000 },
-    { date: '2026-02-01', value: 310000000 },
-    { date: '2026-04-10', value: 335000000 },
-    { date: '2026-05-26', value: 350000000 },
+    { date: '2022-03-15', value: 85000000, initialValue: 80000000 },
+    { date: '2022-07-20', value: 92000000, initialValue: 82000000 },
+    { date: '2022-12-31', value: 100000000, initialValue: 85000000 },
+    { date: '2023-02-10', value: 105000000, initialValue: 87000000 },
+    { date: '2023-06-05', value: 130000000, initialValue: 90000000 },
+    { date: '2023-09-18', value: 145000000, initialValue: 95000000 },
+    { date: '2023-12-31', value: 150000000, initialValue: 100000000 },
+    { date: '2024-01-10', value: 155000000, initialValue: 102000000 },
+    { date: '2024-04-22', value: 170000000, initialValue: 110000000 },
+    { date: '2024-08-15', value: 195000000, initialValue: 120000000 },
+    { date: '2024-12-31', value: 220000000, initialValue: 130000000 },
+    { date: '2025-01-12', value: 225000000, initialValue: 135000000 },
+    { date: '2025-03-25', value: 240000000, initialValue: 140000000 },
+    { date: '2025-05-10', value: 260000000, initialValue: 150000000 },
+    { date: '2025-07-30', value: 275000000, initialValue: 160000000 },
+    { date: '2025-10-15', value: 290000000, initialValue: 170000000 },
+    { date: '2025-12-31', value: 300000000, initialValue: 180000000 },
+    { date: '2026-02-01', value: 310000000, initialValue: 190000000 },
+    { date: '2026-04-10', value: 335000000, initialValue: 200000000 },
+    { date: '2026-05-26', value: 350000000, initialValue: 210000000 },
   ];
 
   const now = new Date();
   const currentYear = now.getFullYear();
 
   if (mode === 'yearly') {
-    const yearly: Record<number, number> = {};
+    const yearly: Record<number, { value: number; initialValue: number }> = {};
     for (const s of demoSnapshots) {
       const y = new Date(s.date).getFullYear();
-      yearly[y] = s.value;
+      yearly[y] = { value: s.value, initialValue: s.initialValue };
     }
     const years = Object.keys(yearly).map(Number).sort();
     const data: any[] = [];
@@ -762,11 +762,12 @@ const generateDemoCashFlowGrowth = (mode: string, year?: number) => {
       const point: any = {
         period: String(y),
         date: new Date(y, 0, 1).toISOString(),
-        value: yearly[y]
+        value: yearly[y].value,
+        initialValue: yearly[y].initialValue
       };
       if (i > 0) {
-        const prev = yearly[years[i - 1]];
-        point.changeFromPrevious = yearly[y] - prev;
+        const prev = yearly[years[i - 1]].value;
+        point.changeFromPrevious = yearly[y].value - prev;
         point.changePercentage = prev !== 0 ? ((point.changeFromPrevious / prev) * 100) : null;
       }
       data.push(point);
@@ -776,11 +777,11 @@ const generateDemoCashFlowGrowth = (mode: string, year?: number) => {
 
   if (mode === 'monthly') {
     const targetYear = year || currentYear;
-    const monthly: Record<number, number> = {};
+    const monthly: Record<number, { value: number; initialValue: number }> = {};
     for (const s of demoSnapshots) {
       const d = new Date(s.date);
       if (d.getFullYear() === targetYear) {
-        monthly[d.getMonth() + 1] = s.value;
+        monthly[d.getMonth() + 1] = { value: s.value, initialValue: s.initialValue };
       }
     }
     const months = Object.keys(monthly).map(Number).sort();
@@ -792,11 +793,12 @@ const generateDemoCashFlowGrowth = (mode: string, year?: number) => {
       const point: any = {
         period: monthNames[m - 1],
         date: dt.toISOString(),
-        value: monthly[m]
+        value: monthly[m].value,
+        initialValue: monthly[m].initialValue
       };
       if (i > 0) {
-        const prev = monthly[months[i - 1]];
-        point.changeFromPrevious = monthly[m] - prev;
+        const prev = monthly[months[i - 1]].value;
+        point.changeFromPrevious = monthly[m].value - prev;
         point.changePercentage = prev !== 0 ? ((point.changeFromPrevious / prev) * 100) : null;
       }
       data.push(point);
@@ -813,24 +815,29 @@ const generateDemoCashFlowGrowth = (mode: string, year?: number) => {
       months.push({ year: y, month: m, label: `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1]} ${y}` });
     }
 
-    const grouped: Record<string, number> = {};
+    const grouped: Record<string, { value: number; initialValue: number }> = {};
     for (const s of demoSnapshots) {
       const d = new Date(s.date);
       const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
-      grouped[key] = s.value;
+      grouped[key] = { value: s.value, initialValue: s.initialValue };
     }
 
     const data: any[] = [];
-    let carryForward: number | null = null;
+    let carryForwardValue: number | null = null;
+    let carryForwardInitial: number | null = null;
     for (let i = 0; i < months.length; i++) {
       const { year: y, month: m, label } = months[i];
       const key = `${y}-${m}`;
       let val: number;
+      let initVal: number;
       if (key in grouped) {
-        val = grouped[key];
-        carryForward = val;
-      } else if (carryForward !== null) {
-        val = carryForward;
+        val = grouped[key].value;
+        initVal = grouped[key].initialValue;
+        carryForwardValue = val;
+        carryForwardInitial = initVal;
+      } else if (carryForwardValue !== null) {
+        val = carryForwardValue;
+        initVal = carryForwardInitial ?? 0;
       } else {
         continue;
       }
@@ -838,7 +845,8 @@ const generateDemoCashFlowGrowth = (mode: string, year?: number) => {
       const point: any = {
         period: label,
         date: dt.toISOString(),
-        value: val
+        value: val,
+        initialValue: initVal
       };
       if (i > 0 && data.length > 0) {
         const prevVal = data[data.length - 1].value;

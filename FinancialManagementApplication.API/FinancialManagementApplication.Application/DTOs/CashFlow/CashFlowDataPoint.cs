@@ -5,6 +5,7 @@ namespace FinancialManagementApplication.Application.DTOs.CashFlow
         public string Period { get; set; }
         public DateTime Date { get; set; }
         public decimal Value { get; set; }
+        public decimal InitialValue { get; set; }
         public decimal? ChangeFromPrevious { get; set; }
         public decimal? ChangePercentage { get; set; }
     }

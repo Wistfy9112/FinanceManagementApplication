@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 import { useToast } from "./components/ui/Toast";
 import { 
   authService, 
@@ -28,13 +29,21 @@ const parseInputNumber = (str: string) => {
   return parseFloat(str.replace(/,/g, '')) || 0;
 };
 
-// Format currency in USD (or VND with $ symbol as in the spreadsheets)
 const formatCurrency = (value: number) => {
+  if (value == null || isNaN(value)) return '0';
   const formatted = new Intl.NumberFormat('en-US', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0
   }).format(Math.abs(value));
-  return `${value < 0 ? '-' : ''}$${formatted}`;
+  return `${value < 0 ? '-' : ''}${formatted}`;
+};
+
+const formatCompactValue = (v: number) => {
+  if (v == null || isNaN(v)) return '0';
+  if (v >= 1000000000) return `${(v / 1000000000).toFixed(1)}B`;
+  if (v >= 1000000) return `${(v / 1000000).toFixed(1)}M`;
+  if (v >= 1000) return `${(v / 1000).toFixed(0)}K`;
+  return `${Math.round(v)}`;
 };
 
 // Format percentages cleanly
@@ -626,20 +635,6 @@ export default function App() {
           </div>
         )}
 
-        {isDemo && (
-          <div className="alert-notice demo-banner">
-            <div className="alert-notice-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
-              </svg>
-            </div>
-            <div className="alert-notice-content">
-              <strong>Ứng dụng đang chạy ở Chế độ Demo (Offline Mock Mode)</strong>
-              Hệ thống tự động phát hiện backend đang ngoại tuyến. Mọi hoạt động thêm, sửa, xóa, và cắt giảm ngân sách được thực hiện an toàn trên bộ nhớ trình duyệt của bạn. Khởi chạy Backend .NET API để tự động chuyển sang chế độ lưu trữ cơ sở dữ liệu.
-            </div>
-          </div>
-        )}
-
         {activeTab === 'dashboard' && (
           <DashboardPage 
             totalCurrent={totalCurrent}
@@ -948,6 +943,7 @@ function DashboardPage({
   setActiveTab: any 
 }) {
   const [chartMode, setChartMode] = useState<'overview' | 'detail'>('overview');
+  const [showAmounts, setShowAmounts] = useState(true);
 
   // Dynamic values for Donut Allocation Chart
   const colors = ['#6366f1', '#10b981', '#f59e0b', '#d946ef', '#64748b'];
@@ -992,22 +988,31 @@ function DashboardPage({
 
       {/* Metrics Row */}
       <div className="grid-3">
-        <div className="card" onClick={() => setActiveTab('assets')} style={{ cursor: 'pointer' }}>
+        <div className="card">
           <div className="metric-header">
             <span className="metric-title">Tổng Giá Trị Tài Sản Gốc (Original Value)</span>
+            <button onClick={(e) => { e.stopPropagation(); setShowAmounts(!showAmounts); }}
+              title={showAmounts ? 'Ẩn số tiền' : 'Hiện số tiền'}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '2px', display: 'inline-flex', borderRadius: '4px', transition: 'all 0.2s', verticalAlign: 'middle', marginTop: '-2px', marginLeft: '10px', marginRight: '8px' }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--bg-tertiary)'; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'none'; }}>
+              {showAmounts ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
             <span className="metric-icon" style={{ color: 'var(--primary)' }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
               </svg>
             </span>
           </div>
-          <div className="metric-value">{formatCurrency(totalInitial)}</div>
+          <div className="metric-value">
+            {showAmounts ? formatCurrency(totalInitial) : '**********'}
+          </div>
           <div className="metric-change" style={{ color: 'var(--text-secondary)' }}>
             Tổng vốn gốc đã đầu tư
           </div>
         </div>
 
-        <div className="card" onClick={() => setActiveTab('assets')} style={{ cursor: 'pointer' }}>
+        <div className="card">
           <div className="metric-header">
             <span className="metric-title">Tổng Giá Trị Tài Sản (Net Worth)</span>
             <span className="metric-icon" style={{ color: 'var(--success)' }}>
@@ -1016,14 +1021,20 @@ function DashboardPage({
               </svg>
             </span>
           </div>
-          <div className="metric-value">{formatCurrency(totalCurrent)}</div>
-          <div className={`metric-change ${totalInterest >= 0 ? 'positive' : 'negative'}`}>
-            <span>{totalInterest >= 0 ? '▲' : '▼'}</span>
-            <span>{formatCurrency(totalInterest)} ({totalInterestRatio.toFixed(2)}%)</span>
-          </div>
+          {showAmounts ? (
+            <>
+              <div className="metric-value">{formatCurrency(totalCurrent)}</div>
+              <div className={`metric-change ${totalInterest >= 0 ? 'positive' : 'negative'}`}>
+                <span>{totalInterest >= 0 ? '▲' : '▼'}</span>
+                <span>{formatCurrency(totalInterest)} ({totalInterestRatio.toFixed(2)}%)</span>
+              </div>
+            </>
+          ) : (
+            <div className="metric-value">**********</div>
+          )}
         </div>
 
-        <div className="card" onClick={() => setActiveTab('assets')} style={{ cursor: 'pointer' }}>
+        <div className="card">
           <div className="metric-header">
             <span className="metric-title">Hiệu Suất Đầu Tư (Growth Rate)</span>
             <span className="metric-icon" style={{ color: 'var(--warning)' }}>
@@ -1095,7 +1106,7 @@ function DashboardPage({
                 />
               ))}
               <text x="60" y="60" className="donut-text">
-                {formatCurrency(totalCurrent).substring(0, 4)}...
+                {showAmounts ? formatCompactValue(totalCurrent) : '********'}
               </text>
               <text x="60" y="74" className="donut-label">
                 Tài sản ròng
@@ -1141,7 +1152,7 @@ function CashFlowGrowthChart({ userId }: { userId: string }) {
     setLoading(true);
     try {
       const result = await cashFlowService.getGrowthData(userId, mode, mode === 'monthly' ? selectedYear : undefined);
-      setChartData(result.data || []);
+      setChartData((result.data || []).map((d: any) => ({ ...d, initialValue: d.initialValue ?? 0 })));
 
       if (mode === 'yearly') {
         const years = (result.data || []).map((d: any) => parseInt(d.period));
@@ -1171,10 +1182,11 @@ function CashFlowGrowthChart({ userId }: { userId: string }) {
   };
 
   const formatValue = (v: number) => {
-    if (v >= 1000000000) return `$${(v / 1000000000).toFixed(1)}B`;
-    if (v >= 1000000) return `$${(v / 1000000).toFixed(1)}M`;
-    if (v >= 1000) return `$${(v / 1000).toFixed(0)}K`;
-    return `$${v}`;
+    if (v == null || isNaN(v)) return '0';
+    if (v >= 1000000000) return `${(v / 1000000000).toFixed(1)}B`;
+    if (v >= 1000000) return `${(v / 1000000).toFixed(1)}M`;
+    if (v >= 1000) return `${(v / 1000).toFixed(0)}K`;
+    return `${Math.round(v)}`;
   };
 
   const CustomTooltip = ({ active, payload, label }: any) => {
@@ -1192,6 +1204,10 @@ function CashFlowGrowthChart({ userId }: { userId: string }) {
           <div className="chart-tooltip-row">
             <span>Giá trị:</span>
             <span className="chart-tooltip-value">{formatCurrency(data.value)}</span>
+          </div>
+          <div className="chart-tooltip-row">
+            <span>Giá trị gốc:</span>
+            <span className="chart-tooltip-value" style={{ color: 'var(--warning)' }}>{data.initialValue != null ? formatCurrency(data.initialValue) : '--'}</span>
           </div>
           <div className="chart-tooltip-row">
             <span>Thay đổi:</span>
@@ -1289,6 +1305,17 @@ function CashFlowGrowthChart({ userId }: { userId: string }) {
               <RechartsTooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(99,102,241,0.3)', strokeDasharray: '3 3' }} />
               <Area 
                 type="monotone" 
+                dataKey="initialValue" 
+                stroke="#f59e0b" 
+                strokeWidth={1.5}
+                strokeDasharray="4 3"
+                fill="none"
+                dot={false}
+                activeDot={{ r: 4, fill: '#f59e0b', stroke: '#11131c', strokeWidth: 2 }}
+                animationDuration={800}
+              />
+              <Area 
+                type="monotone" 
                 dataKey="value" 
                 stroke="#6366f1" 
                 strokeWidth={2.5}
@@ -1299,6 +1326,16 @@ function CashFlowGrowthChart({ userId }: { userId: string }) {
               />
             </AreaChart>
           </ResponsiveContainer>
+          <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', marginTop: '8px', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ width: '16px', height: '3px', borderRadius: '2px', background: '#6366f1', display: 'inline-block' }} />
+              Giá trị hiện tại
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ width: '16px', height: '0', borderTop: '2px dashed #f59e0b', display: 'inline-block' }} />
+              Giá trị gốc
+            </span>
+          </div>
         </div>
       )}
     </div>

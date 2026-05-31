@@ -6,6 +6,7 @@ namespace FinancialManagementApplication.Application.Interface.Repositories
     {
         public DateTime RecordedAt { get; set; }
         public decimal TotalValue { get; set; }
+        public decimal TotalInitialValue { get; set; }
     }
 
     public interface IAssetsRepository
@@ -20,5 +21,6 @@ namespace FinancialManagementApplication.Application.Interface.Repositories
         Task<bool> RestoreFromHistoryAsync(Guid historyId);
         Task<IEnumerable<SnapshotSummary>> GetSnapshotValuesAsync(Guid accountId);
         Task<decimal> GetCurrentTotalValueAsync(Guid accountId);
+        Task<decimal> GetCurrentTotalInitialValueAsync(Guid accountId);
     }
 }
