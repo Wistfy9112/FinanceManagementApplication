@@ -61,6 +61,7 @@ export default function App() {
   const [portfolio, setPortfolio] = useState<any>(null);
   const [allocations, setAllocations] = useState<any[]>([]);
   const [historyRecords, setHistoryRecords] = useState<any[]>([]);
+  const [allocationHistoryRecords, setAllocationHistoryRecords] = useState<any[]>([]);
   
   // Budget cut states
   const [income, setIncome] = useState<number>(19139550);
@@ -86,6 +87,8 @@ export default function App() {
     mode: 'add',
     data: { Name: '', InitialValue: 0, CurrentValue: 0, Type: 'Saving' }
   });
+
+  const [setupSuccessModal, setSetupSuccessModal] = useState<boolean>(false);
 
   // Check connection and fetch initial data on mount
   useEffect(() => {
@@ -132,6 +135,8 @@ export default function App() {
       
       const history = await historyService.getAssetHistory(user.id);
       setHistoryRecords(history);
+      const allocHistory = await historyService.getAllocationHistoryByAccount(user.id);
+      setAllocationHistoryRecords(allocHistory);
     } catch (err: any) {
       setError(err.message || 'Không thể tải dữ liệu.');
     }
@@ -291,13 +296,42 @@ export default function App() {
     }
   };
 
-  const handleAllocateActual = async () => {
+  const handleSaveAllocationSnapshot = async () => {
     try {
-      await portfolioService.saveAllocations(allocations);
-      addToast({ title: 'Phân bổ đã được lưu thành công!', variant: 'success' });
+      setError(null);
+      if (!user) return;
+      await historyService.saveAllocationSetupSnapshot(user.id);
       await loadData();
+      addToast({ title: 'Đã lưu lịch sử phân bổ!', variant: 'success' });
     } catch (err: any) {
-      addToast({ title: 'Lỗi khi lưu phân bổ', description: err.message, variant: 'error' });
+      addToast({ title: 'Lỗi lưu phân bổ', description: err.message, variant: 'error' });
+    }
+  };
+
+  const handleRestoreAllocationHistory = async (historyId: string) => {
+    try {
+      setError(null);
+      if (!user) return;
+      const ok = await historyService.restoreAllocationSnapshot(historyId);
+      if (ok) {
+        const { portfolio: freshPortfolio, allocations: freshAllocations } = await portfolioService.getDetails(user.id);
+        setPortfolio(freshPortfolio);
+        setAllocations(freshAllocations);
+        const freshHistory = await historyService.getAllocationHistoryByAccount(user.id);
+        setAllocationHistoryRecords(freshHistory);
+        if (showSetup) {
+          setSetupAmount(freshPortfolio?.Amount || 0);
+          setSetupAllocations(freshAllocations.map(al => ({
+            ...al,
+            setupAmount: al.CurrentAmount
+          })));
+        }
+        addToast({ title: 'Đã khôi phục phân bổ!', variant: 'success' });
+      } else {
+        addToast({ title: 'Khôi phục thất bại', variant: 'error' });
+      }
+    } catch (err: any) {
+      addToast({ title: 'Lỗi khôi phục', description: err.message, variant: 'error' });
     }
   };
 
@@ -359,7 +393,8 @@ export default function App() {
       CurrentAmount: 0,
       TargetPercentage: 0,
       setupAmount: 0,
-      AssetId: null
+      AssetId: null,
+      AssetType: 'Expense'
     };
     setSetupAllocations([...setupAllocations, newAl]);
   };
@@ -368,8 +403,8 @@ export default function App() {
     const updated = setupAllocations.map(al => {
       if (al.Id === id) {
         const updatedAl = { ...al, [field]: value };
-        if (field === 'Name' || field === 'FinancialCategory') {
-          return updatedAl;
+        if (field === 'FinancialCategory') {
+          updatedAl.AssetType = value;
         }
         return updatedAl;
       }
@@ -424,14 +459,24 @@ export default function App() {
         Name: al.Name,
         CurrentAmount: al.CurrentAmount,
         TargetPercentage: al.TargetPercentage,
-        AssetId: al.AssetId || null
+        AssetId: al.AssetId || null,
+        AssetType: al.AssetType || al.FinancialCategory || 'Saving'
       }));
 
       await portfolioService.saveAllocations(savedAllocs);
+
+      const removedIds = allocations
+        .filter(al => !savedAllocs.some(sa => sa.Id === al.Id))
+        .map(al => al.Id);
+      for (const id of removedIds) {
+        await portfolioService.deleteAllocation(id);
+      }
+
       setAllocations(savedAllocs);
       setPortfolio((prev: any) => prev ? { ...prev, Amount: setupAmount } : prev);
-      setShowSetup(false);
-      addToast({ title: 'Thiết lập danh mục thành công!', variant: 'success' });
+      await historyService.saveAllocationSetupSnapshot(user.id);
+      await loadData();
+      setSetupSuccessModal(true);
     } catch (err: any) {
       setError(err.message || 'Lỗi khi lưu thiết lập.');
     }
@@ -624,7 +669,7 @@ export default function App() {
           <PortfolioPage 
             assets={assets}
             income={income}
-            onAllocateActual={handleAllocateActual}
+            onAllocateActual={handleSaveAllocationSnapshot}
             targetReduction={targetReduction}
             calculatedExpenses={calculatedExpenses}
             calculatedSavings={calculatedSavings}
@@ -650,6 +695,8 @@ export default function App() {
             onSetupDeleteAllocation={handleSetupDeleteAllocation}
             onSetupAllocationAmountChange={handleSetupAllocationAmountChange}
             onApplyToAsset={handleApplyToAsset}
+            allocationHistoryRecords={allocationHistoryRecords}
+            onRestoreAllocationHistory={handleRestoreAllocationHistory}
           />
         )}
       </main>
@@ -709,6 +756,36 @@ export default function App() {
                 <button type="submit" className="btn btn-primary">Lưu lại</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Setup Success Modal */}
+      {setupSuccessModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '420px' }}>
+            <div className="modal-header">
+              <h3 className="modal-title">Thiết lập danh mục thành công!</h3>
+            </div>
+            <div style={{ padding: '20px 24px', textAlign: 'center' }}>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6 }}>
+                Dữ liệu phân bổ danh mục đã được lưu vào hệ thống và sao lưu vào lịch sử thành công.
+              </p>
+            </div>
+            <div className="modal-actions" style={{ justifyContent: 'center', gap: '12px' }}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => setSetupSuccessModal(false)}
+              >
+                OK
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={() => { setSetupSuccessModal(false); setShowSetup(false); }}
+              >
+                Quay lại
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1494,7 +1571,9 @@ function PortfolioPage({
   onSetupEditAllocation,
   onSetupDeleteAllocation,
   onSetupAllocationAmountChange,
-  onApplyToAsset
+  onApplyToAsset,
+  allocationHistoryRecords,
+  onRestoreAllocationHistory
 }: {
   assets: any[];
   income: number;
@@ -1524,6 +1603,8 @@ function PortfolioPage({
   onSetupDeleteAllocation: (id: string) => void;
   onSetupAllocationAmountChange: (id: string, amount: number) => void;
   onApplyToAsset: (allocation: any) => void;
+  allocationHistoryRecords: any[];
+  onRestoreAllocationHistory: (historyId: string) => void;
 }) {
 
   // Visual warnings for total percentages
@@ -1683,6 +1764,29 @@ function PortfolioPage({
             </svg>
             Thêm danh mục
           </button>
+        </div>
+
+        {/* Lịch sử phân bổ */}
+        <div className="card" style={{ marginTop: '24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <div>
+              <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>Lịch sử phân bổ</h3>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Chọn một bản ghi để xem chi tiết và khôi phục</p>
+            </div>
+          </div>
+
+          {allocationHistoryRecords.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+              Chưa có dữ liệu lịch sử. Lưu thiết lập để tạo bản ghi.
+            </div>
+          ) : (
+            <AllocationHistorySection 
+              records={allocationHistoryRecords}
+              onRestore={onRestoreAllocationHistory}
+              formatDateTime={formatDateTime}
+              formatCurrency={formatCurrency}
+            />
+          )}
         </div>
       </div>
     );
@@ -2040,5 +2144,102 @@ function MoneyInput({ value, onChange, className = '', style, placeholder }: {
       onBlur={handleBlur}
       placeholder={placeholder}
     />
+  );
+}
+
+// 5. ALLOCATION HISTORY SECTION COMPONENT
+function AllocationHistorySection({ records, onRestore, formatDateTime, formatCurrency }: {
+  records: any[];
+  onRestore: (id: string) => void;
+  formatDateTime: (iso: string) => string;
+  formatCurrency: (val: number) => string;
+}) {
+  const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
+
+  return (
+    <div style={{ display: 'flex', gap: '16px' }}>
+      <div style={{ flex: '0 0 280px', maxHeight: '360px', overflowY: 'auto' }}>
+        {records.map((r: any) => (
+          <div key={r.Id} onClick={() => setSelectedHistoryId(selectedHistoryId === r.Id ? null : r.Id)}
+            style={{
+              padding: '10px 14px', borderRadius: '6px', cursor: 'pointer', marginBottom: '4px',
+              background: selectedHistoryId === r.Id ? 'rgba(99,102,241,0.1)' : 'transparent',
+              border: selectedHistoryId === r.Id ? '1px solid rgba(99,102,241,0.3)' : '1px solid transparent',
+              transition: 'all 0.15s'
+            }}
+          >
+            <div style={{ fontWeight: 500, fontSize: '0.85rem' }}>
+              {formatDateTime(r.RecordedAt)}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+              {r.Details?.length || 0} danh mục
+            </div>
+            <div style={{ fontSize: '0.7rem', color: 'var(--primary)', marginTop: '2px', fontWeight: 500 }}>
+              Gốc: {formatCurrency(r.CurrentAmount)}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ flex: 1 }}>
+        {selectedHistoryId ? (
+          (() => {
+            const record = records.find((r: any) => r.Id === selectedHistoryId);
+            if (!record) return null;
+            return (
+              <div style={{ overflowX: 'auto' }}>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '8px', padding: '6px 10px', background: 'rgba(99,102,241,0.06)', borderRadius: '6px' }}>
+                  Phân bổ gốc: <strong style={{ fontFamily: 'var(--font-display)' }}>{formatCurrency(record.CurrentAmount)}</strong>
+                </div>
+                <table className="custom-table" style={{ minWidth: '450px' }}>
+                  <thead>
+                    <tr>
+                      <th>Danh mục</th>
+                      <th style={{ textAlign: 'right' }}>Số tiền</th>
+                      <th style={{ textAlign: 'right' }}>Tỉ trọng</th>
+                      <th style={{ textAlign: 'center' }}>Loại</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(record.Details || []).map((d: any) => (
+                      <tr key={d.Id}>
+                        <td style={{ fontWeight: 600 }}>{d.Name || d.FinancialCategory}</td>
+                        <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)' }}>{formatCurrency(d.CurrentAmount)}</td>
+                        <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)' }}>{d.TargetPercentage.toFixed(4)}%</td>
+                        <td style={{ textAlign: 'center' }}>
+                          <span style={{
+                            fontSize: '0.75rem', padding: '2px 8px', borderRadius: '10px', fontWeight: 600,
+                            background: d.AssetType === 'Saving' ? 'rgba(99,102,241,0.15)' : d.AssetType === 'Investment' ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)',
+                            color: d.AssetType === 'Saving' ? 'var(--primary)' : d.AssetType === 'Investment' ? '#10b981' : '#f59e0b'
+                          }}>
+                            {d.AssetType === 'Saving' ? 'Tiết kiệm' : d.AssetType === 'Investment' ? 'Đầu tư' : 'Sinh hoạt'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div style={{ marginTop: '12px', textAlign: 'right' }}>
+                  <button onClick={() => onRestore(record.Id)} style={{
+                    background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)',
+                    color: 'var(--primary)', borderRadius: '6px', padding: '8px 20px', cursor: 'pointer',
+                    fontSize: '0.85rem', fontWeight: 600
+                  }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px', verticalAlign: 'middle' }}>
+                      <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                    </svg>
+                    Khôi phục
+                  </button>
+                </div>
+              </div>
+            );
+          })()
+        ) : (
+          <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+            Chọn một bản ghi từ danh sách bên trái để xem chi tiết
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

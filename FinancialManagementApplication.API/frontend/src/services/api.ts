@@ -87,7 +87,22 @@ const mapAllocationToFrontend = (al: any) => ({
   Name: al.name || al.Name,
   CurrentAmount: al.currentAmount !== undefined ? Number(al.currentAmount) : Number(al.CurrentAmount || 0),
   TargetPercentage: al.targetPercentage !== undefined ? Number(al.targetPercentage) : Number(al.TargetPercentage || 0),
-  AssetId: al.assetId !== undefined ? al.assetId : al.AssetId || null
+  AssetId: al.assetId !== undefined ? al.assetId : al.AssetId || null,
+  AssetType: al.assetType || al.AssetType || al.FinancialCategory || al.financialCategory || 'Saving'
+});
+
+const mapAllocationHistoryToFrontend = (r: any) => ({
+  Id: r.id || r.Id,
+  RecordedAt: r.recordedAt || r.RecordedAt,
+  CurrentAmount: r.currentAmount !== undefined ? Number(r.currentAmount) : Number(r.CurrentAmount || 0),
+  Details: (r.details || r.Details || []).map((d: any) => ({
+    Id: d.id || d.Id,
+    Name: d.name || d.Name,
+    FinancialCategory: d.financialCategory || d.FinancialCategory,
+    CurrentAmount: d.currentAmount !== undefined ? Number(d.currentAmount) : Number(d.CurrentAmount || 0),
+    TargetPercentage: d.targetPercentage !== undefined ? Number(d.targetPercentage) : Number(d.TargetPercentage || 0),
+    AssetType: d.assetType || d.AssetType || 'Saving'
+  }))
 });
 
 export const checkConnection = async (): Promise<boolean> => {
@@ -521,6 +536,7 @@ export const portfolioService = {
             currentAmount: al.CurrentAmount,
             targetPercentage: al.TargetPercentage,
             assetId: al.AssetId || null,
+            assetType: al.AssetType || al.FinancialCategory || 'Saving',
             updateAt: new Date().toISOString()
           };
 
@@ -539,6 +555,7 @@ export const portfolioService = {
             currentAmount: al.CurrentAmount,
             targetPercentage: al.TargetPercentage,
             assetId: al.AssetId || null,
+            assetType: al.AssetType || al.FinancialCategory || 'Saving',
             updateAt: new Date().toISOString()
           };
 
@@ -566,6 +583,24 @@ export const portfolioService = {
     } catch (e) {
       console.error('Lỗi lưu phân bổ:', e);
       throw new Error('Không thể đồng bộ phân bổ danh mục lên máy chủ backend.');
+    }
+  },
+
+  deleteAllocation: async (id: string): Promise<void> => {
+    await checkConnection();
+    if (isDemoMode) {
+      const list = getStorage('fm_allocations', DEFAULT_ALLOCATIONS);
+      const filtered = list.filter(a => a.Id !== id);
+      setStorage('fm_allocations', filtered);
+      return;
+    }
+    try {
+      await fetch(`${API_URL}/portfolioAllocation/${id}`, {
+        method: 'DELETE',
+        headers: { ...getAuthHeader() }
+      });
+    } catch (e) {
+      console.error('Lỗi xóa phân bổ:', e);
     }
   },
 
@@ -638,17 +673,50 @@ export const historyService = {
     return false;
   },
 
-  getAllocationHistory: async (allocationId: string): Promise<any[]> => {
+  getAllocationHistoryByAccount: async (accountId: string): Promise<any[]> => {
     await checkConnection();
     if (isDemoMode) return [];
     try {
-      const res = await fetch(`${API_URL}/history/allocation/${allocationId}`, {
+      const res = await fetch(`${API_URL}/history/allocation-history/${accountId}`, {
         headers: { ...getAuthHeader() }
       });
-      if (res.ok) return await res.json();
+      if (res.ok) {
+        const data = await res.json();
+        return (Array.isArray(data) ? data : []).map(mapAllocationHistoryToFrontend);
+      }
     } catch (e) {
       console.error('Error fetching allocation history:', e);
     }
     return [];
+  },
+
+  saveAllocationSetupSnapshot: async (accountId: string): Promise<any> => {
+    await checkConnection();
+    if (isDemoMode) return null;
+    try {
+      const res = await fetch(`${API_URL}/history/allocation/snapshot/${accountId}`, {
+        method: 'POST',
+        headers: { ...getAuthHeader() }
+      });
+      if (res.ok) return await res.json();
+    } catch (e) {
+      console.error('Error saving allocation snapshot:', e);
+    }
+    return null;
+  },
+
+  restoreAllocationSnapshot: async (historyId: string): Promise<boolean> => {
+    await checkConnection();
+    if (isDemoMode) return false;
+    try {
+      const res = await fetch(`${API_URL}/history/allocation/restore/${historyId}`, {
+        method: 'POST',
+        headers: { ...getAuthHeader() }
+      });
+      return res.ok;
+    } catch (e) {
+      console.error('Error restoring allocation history:', e);
+    }
+    return false;
   }
 };

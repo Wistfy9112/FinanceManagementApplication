@@ -3,21 +3,24 @@ using System;
 using FinancialManagementApplication.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace FinancialManagementApplication.Infrastructure.Migrations
+namespace FinancialManagementApplication.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260530154533_AddNameBackToPortfolioAllocation")]
+    partial class AddNameBackToPortfolioAllocation
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.2")
+                .HasAnnotation("ProductVersion", "8.0.27")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -221,60 +224,6 @@ namespace FinancialManagementApplication.Infrastructure.Migrations
                     b.ToTable("PortfolioAllocations");
                 });
 
-            modelBuilder.Entity("FinancialManagementApplication.Domain.Entities.PortfolioAllocationHistory", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("AccountId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("CurrentAmount")
-                        .HasColumnType("numeric");
-
-                    b.Property<DateTime>("RecordedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("PortfolioAllocationHistories");
-                });
-
-            modelBuilder.Entity("FinancialManagementApplication.Domain.Entities.PortfolioAllocationHistoryDetail", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("AssetType")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<decimal>("CurrentAmount")
-                        .HasColumnType("numeric");
-
-                    b.Property<string>("FinancialCategory")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("PortfolioAllocationHistoryId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("TargetPercentage")
-                        .HasColumnType("numeric");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("PortfolioAllocationHistoryId");
-
-                    b.ToTable("PortfolioAllocationHistoryDetails");
-                });
-
             modelBuilder.Entity("FinancialManagementApplication.Domain.Entities.AllocationHistory", b =>
                 {
                     b.HasOne("FinancialManagementApplication.Domain.Entities.PortfolioAllocation", "Allocation")
@@ -337,17 +286,6 @@ namespace FinancialManagementApplication.Infrastructure.Migrations
                     b.Navigation("Portfolio");
                 });
 
-            modelBuilder.Entity("FinancialManagementApplication.Domain.Entities.PortfolioAllocationHistoryDetail", b =>
-                {
-                    b.HasOne("FinancialManagementApplication.Domain.Entities.PortfolioAllocationHistory", "PortfolioAllocationHistory")
-                        .WithMany("Details")
-                        .HasForeignKey("PortfolioAllocationHistoryId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("PortfolioAllocationHistory");
-                });
-
             modelBuilder.Entity("FinanceManagementApplication.Domain.Entities.Account", b =>
                 {
                     b.Navigation("Assets");
@@ -369,11 +307,6 @@ namespace FinancialManagementApplication.Infrastructure.Migrations
             modelBuilder.Entity("FinancialManagementApplication.Domain.Entities.Portfolio", b =>
                 {
                     b.Navigation("PortfolioAllocations");
-                });
-
-            modelBuilder.Entity("FinancialManagementApplication.Domain.Entities.PortfolioAllocationHistory", b =>
-                {
-                    b.Navigation("Details");
                 });
 #pragma warning restore 612, 618
         }

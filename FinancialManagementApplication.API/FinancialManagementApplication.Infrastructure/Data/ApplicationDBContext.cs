@@ -21,6 +21,8 @@ public class ApplicationDbContext : DbContext
     public DbSet<AssetHistory> AssetHistories => Set<AssetHistory>();
     public DbSet<AllocationHistory> AllocationHistories => Set<AllocationHistory>();
     public DbSet<AssetHistoryDetail> AssetHistoryDetails => Set<AssetHistoryDetail>();
+    public DbSet<PortfolioAllocationHistory> PortfolioAllocationHistories => Set<PortfolioAllocationHistory>();
+    public DbSet<PortfolioAllocationHistoryDetail> PortfolioAllocationHistoryDetails => Set<PortfolioAllocationHistoryDetail>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -69,6 +71,12 @@ public class ApplicationDbContext : DbContext
             .HasOne(d => d.AssetHistory)
             .WithMany(ah => ah.Details)
             .HasForeignKey(d => d.AssetHistoryId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<PortfolioAllocationHistoryDetail>()
+            .HasOne(d => d.PortfolioAllocationHistory)
+            .WithMany(ah => ah.Details)
+            .HasForeignKey(d => d.PortfolioAllocationHistoryId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 }

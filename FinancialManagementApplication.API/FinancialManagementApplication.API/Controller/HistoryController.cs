@@ -33,19 +33,34 @@ namespace FinancialManagementApplication.API.Controller
             return Ok(history);
         }
 
-        [HttpGet("allocation/{allocationId:guid}")]
-        public async Task<ActionResult<IEnumerable<AllocationHistory>>> GetAllocationHistory(Guid allocationId)
-        {
-            var history = await _allocationRepository.GetHistoryAsync(allocationId);
-            return Ok(history);
-        }
-
         [HttpPost("asset/restore/{historyId:guid}")]
         public async Task<ActionResult> RestoreFromHistory(Guid historyId)
         {
             var success = await _assetsRepository.RestoreFromHistoryAsync(historyId);
             if (!success) return NotFound();
             return Ok(new { message = "Khôi phục thành công" });
+        }
+
+        [HttpGet("allocation-history/{accountId:guid}")]
+        public async Task<ActionResult<IEnumerable<PortfolioAllocationHistory>>> GetAllocationHistory(Guid accountId)
+        {
+            var history = await _allocationRepository.GetHistoryAsync(accountId);
+            return Ok(history);
+        }
+
+        [HttpPost("allocation/snapshot/{accountId:guid}")]
+        public async Task<ActionResult<PortfolioAllocationHistory>> SaveAllocationSnapshot(Guid accountId)
+        {
+            var history = await _allocationRepository.SaveSnapshotAsync(accountId);
+            return Ok(history);
+        }
+
+        [HttpPost("allocation/restore/{historyId:guid}")]
+        public async Task<ActionResult> RestoreAllocationFromHistory(Guid historyId)
+        {
+            var success = await _allocationRepository.RestoreFromHistoryAsync(historyId);
+            if (!success) return NotFound();
+            return Ok(new { message = "Khôi phục phân bổ thành công" });
         }
     }
 }

@@ -12,6 +12,8 @@ namespace FinancialManagementApplication.Application.Interface.Repositories
         Task <PortfolioAllocation> CreateAsync(PortfolioAllocation portfolioAllocation);
         Task <PortfolioAllocation> UpdateAsync(PortfolioAllocation portfolioAllocation);
         Task <bool> DeleteAsync(Guid id);
-        Task<IEnumerable<AllocationHistory>> GetHistoryAsync(Guid allocationId);
+        Task<PortfolioAllocationHistory> SaveSnapshotAsync(Guid accountId);
+        Task<IEnumerable<PortfolioAllocationHistory>> GetHistoryAsync(Guid accountId);
+        Task<bool> RestoreFromHistoryAsync(Guid historyId);
     }
 }
