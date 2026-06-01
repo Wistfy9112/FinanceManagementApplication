@@ -25,11 +25,11 @@ export const decodeJwt = (token: string) => {
     // Map standard Microsoft claim types and default JWT claims
     const id = parsed["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"] || parsed.sub || parsed.nameid || 'u1';
     const email = parsed["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"] || parsed.email || '';
-    const displayName = parsed["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name"] || parsed.name || parsed.unique_name || (email ? email.split('@')[0] : 'Khách');
+    const displayName = parsed["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name"] || parsed.name || parsed.unique_name || (email ? email.split('@')[0] : 'Guest');
     
     return { id, email, displayName };
   } catch (e) {
-    console.error('Lỗi giải mã JWT token:', e);
+    console.error('JWT token decode error:', e);
     return null;
   }
 };
@@ -224,14 +224,14 @@ export const authService = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })
     });
-    if (!res.ok) throw new Error('Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.');
+    if (!res.ok) throw new Error('Login failed. Please check your credentials.');
     const data = await res.json();
     
     const decoded = decodeJwt(data.token);
     const mockUser = { 
       id: decoded?.id || 'u1', 
       email: decoded?.email || email, 
-      displayName: decoded?.displayName || 'Thành Viên' 
+      displayName: decoded?.displayName || 'Member' 
     };
     
     localStorage.setItem('fm_token', data.token);
@@ -251,7 +251,7 @@ export const authService = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password, displayName })
     });
-    if (!res.ok) throw new Error('Đăng ký thất bại. Email có thể đã tồn tại.');
+    if (!res.ok) throw new Error('Registration failed. Email may already exist.');
     const data = await res.json();
     
     const decoded = decodeJwt(data.token);
@@ -279,7 +279,7 @@ export const authService = {
     setStorage('fm_target_reduction', 500000);
     setStorage('fm_exclusions', ['al12']);
 
-    const mockUser = { id: 'u1', email: 'demo@example.com', displayName: 'Huy Vô Dình' };
+    const mockUser = { id: 'u1', email: 'demo@example.com', displayName: 'Demo User' };
     localStorage.setItem('fm_token', 'mock-jwt-token-12345');
     localStorage.setItem('fm_user', JSON.stringify(mockUser));
     triggerStatusChange();
@@ -352,7 +352,7 @@ export const assetService = {
       console.error('Error creating asset:', e);
     }
     
-    throw new Error('Không thể tạo tài sản trên máy chủ.');
+    throw new Error('Cannot create asset on server.');
   },
 
   update: async (id: string, asset: { Id: string; Name: string; InitialValue: number; CurrentValue: number; Type: string }, _userId: string = getLoggedUserId()): Promise<void> => {
@@ -383,7 +383,7 @@ export const assetService = {
       console.error('Error updating asset:', e);
     }
     
-    throw new Error('Không thể cập nhật tài sản trên máy chủ.');
+    throw new Error('Cannot update asset on server.');
   },
 
   delete: async (id: string): Promise<void> => {
@@ -483,7 +483,7 @@ export const portfolioService = {
       console.error('Error creating portfolio:', e);
     }
 
-    throw new Error('Không thể tạo danh mục trên máy chủ.');
+    throw new Error('Cannot create portfolio on server.');
   },
 
   updateAmount: async (id: string, amount: number, name: string = 'Kế Hoạch Phân Bổ Tổng Thể', _userId: string = getLoggedUserId()): Promise<void> => {
@@ -508,7 +508,7 @@ export const portfolioService = {
       if (!res.ok) throw new Error('Update failed');
     } catch (e) {
       console.error('Error updating portfolio amount:', e);
-      throw new Error('Không thể cập nhật danh mục trên máy chủ.');
+      throw new Error('Cannot update portfolio on server.');
     }
   },
 
@@ -581,8 +581,8 @@ export const portfolioService = {
         }
       }
     } catch (e) {
-      console.error('Lỗi lưu phân bổ:', e);
-      throw new Error('Không thể đồng bộ phân bổ danh mục lên máy chủ backend.');
+      console.error('Allocation save error:', e);
+      throw new Error('Cannot sync portfolio allocations to backend server.');
     }
   },
 
@@ -600,7 +600,7 @@ export const portfolioService = {
         headers: { ...getAuthHeader() }
       });
     } catch (e) {
-      console.error('Lỗi xóa phân bổ:', e);
+      console.error('Allocation delete error:', e);
     }
   },
 

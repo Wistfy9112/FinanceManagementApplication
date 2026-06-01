@@ -10,8 +10,9 @@ import {
   checkConnection, 
   getLoggedUser
 } from './services/api';
+import { useLanguage } from './i18n';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
+  XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
   ResponsiveContainer, Area, AreaChart
 } from 'recharts';
 
@@ -69,6 +70,7 @@ export default function App() {
   const [user, setUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'assets' | 'portfolio'>('dashboard');
   const [isDemo, setIsDemo] = useState<boolean>(true);
+  const { t, locale, setLocale } = useLanguage();
   
   // App States
   const [assets, setAssets] = useState<any[]>([]);
@@ -152,7 +154,7 @@ export default function App() {
       const allocHistory = await historyService.getAllocationHistoryByAccount(user.id);
       setAllocationHistoryRecords(allocHistory);
     } catch (err: any) {
-      setError(err.message || 'Không thể tải dữ liệu.');
+      setError(err.message || t('Không thể tải dữ liệu.'));
     }
   };
 
@@ -233,7 +235,7 @@ export default function App() {
   };
 
   const handleDeleteAsset = async (id: string) => {
-    if (!window.confirm('Bạn có chắc chắn muốn xóa tài sản này?')) return;
+    if (!window.confirm(t('Bạn có chắc chắn muốn xóa tài sản này?'))) return;
     try {
       setError(null);
       await assetService.delete(id);
@@ -249,9 +251,9 @@ export default function App() {
       if (!user) return;
       await historyService.saveSnapshot(user.id);
       await loadData();
-      addToast({ title: 'Đã lưu thông tin tài sản!', variant: 'success' });
+      addToast({ title: t('Đã lưu thông tin tài sản!'), variant: 'success' });
     } catch (err: any) {
-      addToast({ title: 'Lỗi lưu tài sản', description: err.message, variant: 'error' });
+      addToast({ title: t('Lỗi lưu tài sản'), description: err.message, variant: 'error' });
     }
   };
 
@@ -262,12 +264,12 @@ export default function App() {
       const ok = await historyService.restoreSnapshot(historyId);
       if (ok) {
         await loadData();
-        addToast({ title: 'Đã khôi phục thông tin tài sản!', variant: 'success' });
+        addToast({ title: t('Đã khôi phục thông tin tài sản!'), variant: 'success' });
       } else {
-        addToast({ title: 'Khôi phục thất bại', variant: 'error' });
+        addToast({ title: t('Khôi phục thất bại'), variant: 'error' });
       }
     } catch (err: any) {
-      addToast({ title: 'Lỗi khôi phục', description: err.message, variant: 'error' });
+      addToast({ title: t('Lỗi khôi phục'), description: err.message, variant: 'error' });
     }
   };
 
@@ -304,9 +306,9 @@ export default function App() {
         Type: asset.Type
       });
       await loadData();
-      addToast({ title: 'Đã cập nhật giá trị tài sản!', variant: 'success' });
+      addToast({ title: t('Đã cập nhật giá trị tài sản!'), variant: 'success' });
     } catch (err: any) {
-      addToast({ title: 'Lỗi cập nhật tài sản', description: err.message, variant: 'error' });
+      addToast({ title: t('Lỗi cập nhật tài sản'), description: err.message, variant: 'error' });
     }
   };
 
@@ -316,9 +318,9 @@ export default function App() {
       if (!user) return;
       await historyService.saveAllocationSetupSnapshot(user.id);
       await loadData();
-      addToast({ title: 'Đã lưu lịch sử phân bổ!', variant: 'success' });
+      addToast({ title: t('Đã lưu lịch sử phân bổ!'), variant: 'success' });
     } catch (err: any) {
-      addToast({ title: 'Lỗi lưu phân bổ', description: err.message, variant: 'error' });
+      addToast({ title: t('Lỗi lưu phân bổ'), description: err.message, variant: 'error' });
     }
   };
 
@@ -340,12 +342,12 @@ export default function App() {
             setupAmount: al.CurrentAmount
           })));
         }
-        addToast({ title: 'Đã khôi phục phân bổ!', variant: 'success' });
+        addToast({ title: t('Đã khôi phục phân bổ!'), variant: 'success' });
       } else {
-        addToast({ title: 'Khôi phục thất bại', variant: 'error' });
+        addToast({ title: t('Khôi phục thất bại'), variant: 'error' });
       }
     } catch (err: any) {
-      addToast({ title: 'Lỗi khôi phục', description: err.message, variant: 'error' });
+      addToast({ title: t('Lỗi khôi phục'), description: err.message, variant: 'error' });
     }
   };
 
@@ -395,7 +397,7 @@ export default function App() {
     const totalAllocated = setupAllocations.reduce((sum, al) => sum + (al.setupAmount || 0), 0);
     const totalPercent = setupAllocations.reduce((sum, al) => sum + al.TargetPercentage, 0);
     if (totalAllocated > setupAmount || totalPercent > 100) {
-      setError('Không thể thêm danh mục mới vì đã đạt hoặc vượt quá phân bổ gốc / 100%.');
+      setError(t('Không thể thêm danh mục mới vì đã đạt hoặc vượt quá phân bổ gốc / 100%.'));
       return;
     }
     const newId = 'al-' + Math.random().toString(36).substr(2, 9);
@@ -428,7 +430,7 @@ export default function App() {
   };
 
   const handleSetupDeleteAllocation = (id: string) => {
-    if (!window.confirm('Bạn có chắc chắn muốn xóa danh mục này?')) return;
+    if (!window.confirm(t('Bạn có chắc chắn muốn xóa danh mục này?'))) return;
     const filtered = setupAllocations.filter(al => al.Id !== id);
     const updated = filtered.map(al => {
       const newPercent = setupAmount > 0 ? (al.setupAmount / setupAmount) * 100 : 0;
@@ -442,16 +444,16 @@ export default function App() {
       setError(null);
       if (!user) return;
       if (setupAllocations.length === 0) {
-        setError('Vui lòng thêm ít nhất một danh mục.');
+        setError(t('Vui lòng thêm ít nhất một danh mục.'));
         return;
       }
       if (setupAllocations.some(al => !al.Name.trim())) {
-        setError('Vui lòng nhập tên cho tất cả danh mục.');
+        setError(t('Vui lòng nhập tên cho tất cả danh mục.'));
         return;
       }
       const totalPct = setupAllocations.reduce((sum, al) => sum + al.TargetPercentage, 0);
       if (totalPct > 100) {
-        setError('Tổng tỉ trọng vượt quá 100%. Vui lòng điều chỉnh lại.');
+        setError(t('Tổng tỉ trọng vượt quá 100%. Vui lòng điều chỉnh lại.'));
         return;
       }
 
@@ -492,7 +494,7 @@ export default function App() {
       await loadData();
       setSetupSuccessModal(true);
     } catch (err: any) {
-      setError(err.message || 'Lỗi khi lưu thiết lập.');
+      setError(err.message || t('Lỗi khi lưu thiết lập.'));
     }
   };
 
@@ -546,7 +548,7 @@ export default function App() {
       <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0a0b10' }}>
         <div style={{ textAlign: 'center' }}>
           <div style={{ border: '3px solid rgba(99,102,241,0.1)', borderTop: '3px solid #6366f1', borderRadius: '50%', width: '40px', height: '40px', animation: 'spin 1s linear infinite', margin: '0 auto 16px auto' }} />
-          <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>Đang khởi tạo hệ thống quản lý tài chính...</p>
+          <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>{t('Đang khởi tạo hệ thống quản lý tài chính...')}</p>
           <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
         </div>
       </div>
@@ -582,32 +584,35 @@ export default function App() {
               className={`nav-link ${activeTab === 'dashboard' ? 'active' : ''}`}
               onClick={() => setActiveTab('dashboard')}
             >
-              Tổng quan
+              {t('Tổng quan')}
             </button>
             <button 
               className={`nav-link ${activeTab === 'assets' ? 'active' : ''}`}
               onClick={() => setActiveTab('assets')}
             >
-              Quản lý Tài sản
+              {t('Quản lý Tài sản')}
             </button>
             <button 
               className={`nav-link ${activeTab === 'portfolio' ? 'active' : ''}`}
               onClick={() => setActiveTab('portfolio')}
             >
-              Phân bổ Danh mục
+              {t('Phân bổ Danh mục')}
             </button>
           </div>
 
           <div className="nav-right">
+            <button className="lang-toggle" onClick={() => setLocale(locale === 'vi' ? 'en' : 'vi')} title={locale === 'vi' ? 'Switch to English' : 'Chuyển sang Tiếng Việt'}>
+              {locale === 'vi' ? 'EN' : 'VI'}
+            </button>
             {isDemo ? (
               <div className="status-badge demo">
                 <span style={{ width: '6px', height: '6px', background: '#f59e0b', borderRadius: '50%' }} />
-                CHẾ ĐỘ DEMO
+                {t('CHẾ ĐỘ DEMO')}
               </div>
             ) : (
               <div className="status-badge connected">
                 <span style={{ width: '6px', height: '6px', background: '#10b981', borderRadius: '50%' }} />
-                ĐÃ KẾT NỐI API
+                {t('ĐÃ KẾT NỐI API')}
               </div>
             )}
             
@@ -616,7 +621,7 @@ export default function App() {
                 {user.displayName ? user.displayName[0].toUpperCase() : 'U'}
               </div>
               <span style={{ fontWeight: 600 }}>{user.displayName}</span>
-              <button className="logout-btn" onClick={handleLogout} title="Đăng xuất">
+              <button className="logout-btn" onClick={handleLogout} title={t('Đăng xuất')}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
@@ -641,12 +646,9 @@ export default function App() {
             totalInitial={totalInitial}
             totalInterest={totalInterest}
             totalInterestRatio={totalInterestRatio}
-            portfolio={portfolio}
-            totalSavingCash={totalSavingCash}
             totalSavingAssets={totalSavingAssets}
             assets={assets}
             totalInvestmentAssets={totalInvestmentAssets}
-            setActiveTab={setActiveTab}
           />
         )}
 
@@ -707,54 +709,54 @@ export default function App() {
         <div className="modal-overlay">
           <div className="modal-content">
             <div className="modal-header">
-              <h3 className="modal-title">{assetModal.mode === 'add' ? 'Thêm Tài Sản Mới' : 'Cập Nhật Tài Sản'}</h3>
+              <h3 className="modal-title">{assetModal.mode === 'add' ? t('Thêm Tài Sản Mới') : t('Cập Nhật Tài Sản')}</h3>
               <button className="modal-close" onClick={() => setAssetModal({ ...assetModal, isOpen: false })}>✕</button>
             </div>
             <form onSubmit={handleSaveAsset}>
               <div className="form-group">
-                <label className="form-label">Tên tài sản</label>
+                <label className="form-label">{t('Tên tài sản')}</label>
                 <input 
                   type="text" 
                   className="form-control" 
                   required
                   value={assetModal.data.Name}
                   onChange={(e) => setAssetModal({ ...assetModal, data: { ...assetModal.data, Name: e.target.value } })}
-                  placeholder="Ví dụ: Saving, Emergency, ETF..."
+                  placeholder={t('Ví dụ: Saving, Emergency, ETF...')}
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">Vốn ban đầu (Funds)</label>
+                <label className="form-label">{t('Vốn ban đầu (Funds)')}</label>
                 <MoneyInput 
                   className="form-control" 
                   value={assetModal.data.InitialValue}
                   onChange={(val) => setAssetModal({ ...assetModal, data: { ...assetModal.data, InitialValue: val } })}
-                  placeholder="Nhập số tiền vốn ban đầu"
+                  placeholder={t('Nhập số tiền vốn ban đầu')}
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">Giá trị hiện tại (Current)</label>
+                <label className="form-label">{t('Giá trị hiện tại (Current)')}</label>
                 <MoneyInput 
                   className="form-control" 
                   value={assetModal.data.CurrentValue}
                   onChange={(val) => setAssetModal({ ...assetModal, data: { ...assetModal.data, CurrentValue: val } })}
-                  placeholder="Nhập giá trị tài sản hiện tại"
+                  placeholder={t('Nhập giá trị tài sản hiện tại')}
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">Phân loại</label>
+                <label className="form-label">{t('Phân loại')}</label>
                 <select
                   className="form-control"
                   value={assetModal.data.Type}
                   onChange={(e) => setAssetModal({ ...assetModal, data: { ...assetModal.data, Type: e.target.value } })}
                   style={{ padding: '8px 12px', height: '40px' }}
                 >
-                  <option value="Saving">Tiết kiệm</option>
-                  <option value="Investment">Đầu tư</option>
+                  <option value="Saving">{t('Tiết kiệm')}</option>
+                  <option value="Investment">{t('Đầu tư')}</option>
                 </select>
               </div>
               <div className="modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={() => setAssetModal({ ...assetModal, isOpen: false })}>Hủy</button>
-                <button type="submit" className="btn btn-primary">Lưu lại</button>
+                <button type="button" className="btn btn-secondary" onClick={() => setAssetModal({ ...assetModal, isOpen: false })}>{t('Hủy')}</button>
+                <button type="submit" className="btn btn-primary">{t('Lưu lại')}</button>
               </div>
             </form>
           </div>
@@ -766,11 +768,11 @@ export default function App() {
         <div className="modal-overlay">
           <div className="modal-content" style={{ maxWidth: '420px' }}>
             <div className="modal-header">
-              <h3 className="modal-title">Thiết lập danh mục thành công!</h3>
+              <h3 className="modal-title">{t('Thiết lập danh mục thành công!')}</h3>
             </div>
             <div style={{ padding: '20px 24px', textAlign: 'center' }}>
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6 }}>
-                Dữ liệu phân bổ danh mục đã được lưu vào hệ thống và sao lưu vào lịch sử thành công.
+                {t('Dữ liệu phân bổ danh mục đã được lưu vào hệ thống và sao lưu vào lịch sử thành công.')}
               </p>
             </div>
             <div className="modal-actions" style={{ justifyContent: 'center', gap: '12px' }}>
@@ -784,7 +786,7 @@ export default function App() {
                 className="btn btn-primary"
                 onClick={() => { setSetupSuccessModal(false); setShowSetup(false); }}
               >
-                Quay lại
+                {t('Quay lại')}
               </button>
             </div>
           </div>
@@ -802,6 +804,7 @@ function AuthPage({ onLogin, onRegister, onDemo, error, isDemo }: { onLogin: any
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const { t } = useLanguage();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -827,8 +830,8 @@ function AuthPage({ onLogin, onRegister, onDemo, error, isDemo }: { onLogin: any
             </svg>
             <span style={{ fontSize: '1.8rem' }}>FINANCE FLOW</span>
           </div>
-          <h2 className="auth-title">{isLogin ? 'Đăng Nhập Hệ Thống' : 'Đăng Ký Tài Khoản'}</h2>
-          <p className="auth-subtitle">Quản lý dòng tiền và tài sản cá nhân cao cấp</p>
+          <h2 className="auth-title">{isLogin ? t('Đăng Nhập Hệ Thống') : t('Đăng Ký Tài Khoản')}</h2>
+          <p className="auth-subtitle">{t('Quản lý dòng tiền và tài sản cá nhân cao cấp')}</p>
         </div>
 
         {error && (
@@ -840,67 +843,67 @@ function AuthPage({ onLogin, onRegister, onDemo, error, isDemo }: { onLogin: any
         <form onSubmit={handleSubmit}>
           {!isLogin && (
             <div className="form-group">
-              <label className="form-label">Tên hiển thị</label>
+              <label className="form-label">{t('Tên hiển thị')}</label>
               <input 
                 type="text" 
                 className="form-control" 
                 required 
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="Nhập tên hiển thị của bạn" 
+                placeholder={t('Nhập tên hiển thị của bạn')} 
             />
             </div>
           )}
           <div className="form-group">
-            <label className="form-label">Địa chỉ Email</label>
+            <label className="form-label">{t('Địa chỉ Email')}</label>
             <input 
               type="email" 
               className="form-control" 
               required 
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="nhap.email@cua.ban" 
+              placeholder={t('nhập.email@của.ban')} 
             />
           </div>
           <div className="form-group">
-            <label className="form-label">Mật khẩu</label>
+            <label className="form-label">{t('Mật khẩu')}</label>
             <input 
               type="password" 
               className="form-control" 
               required 
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Nhập mật khẩu" 
+              placeholder={t('Nhập mật khẩu')} 
             />
           </div>
 
           <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '10px' }}>
-            {isLogin ? 'Đăng Nhập' : 'Tạo Tài Khoản'}
+            {isLogin ? t('Đăng Nhập') : t('Tạo Tài Khoản')}
           </button>
         </form>
 
         {isLogin && (
           <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border-light)', textAlign: 'center' }}>
-            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '8px' }}>Trải nghiệm ứng dụng không cần tài khoản:</p>
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '8px' }}>{t('Trải nghiệm ứng dụng không cần tài khoản:')}</p>
             <button 
               type="button" 
               className="btn btn-secondary" 
               style={{ width: '100%', fontSize: '0.85rem', padding: '10px 12px', background: 'rgba(99,102,241,0.1)', color: '#a5b4fc', border: '1px solid rgba(99,102,241,0.2)', marginBottom: '12px' }}
               onClick={onDemo}
             >
-              📊 Trải nghiệm Chế độ Demo (Offline)
+              {t('Trải nghiệm Chế độ Demo (Offline)')}
             </button>
 
             {isDemo && (
               <>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '6px' }}>Tài khoản Demo có sẵn (Mock Offline):</p>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '6px' }}>{t('Tài khoản Demo có sẵn (Mock Offline):')}</p>
                 <button 
                   type="button" 
                   className="btn btn-secondary" 
                   style={{ width: '100%', fontSize: '0.8rem', padding: '6px 12px' }}
                   onClick={handleUseDemoAccount}
                 >
-                  Sử dụng tài khoản Demo nhanh
+                  {t('Sử dụng tài khoản Demo nhanh')}
                 </button>
               </>
             )}
@@ -908,9 +911,9 @@ function AuthPage({ onLogin, onRegister, onDemo, error, isDemo }: { onLogin: any
         )}
 
         <div className="auth-switch">
-          {isLogin ? 'Chưa có tài khoản?' : 'Đã có tài khoản?'}
+          {isLogin ? t('Chưa có tài khoản?') : t('Đã có tài khoản?')}
           <button className="auth-switch-btn" onClick={() => setIsLogin(!isLogin)}>
-            {isLogin ? 'Đăng ký ngay' : 'Đăng nhập'}
+            {isLogin ? t('Đăng ký ngay') : t('Đăng nhập')}
           </button>
         </div>
       </div>
@@ -923,25 +926,20 @@ function DashboardPage({
   totalCurrent, 
   totalInitial, 
   totalInterest, 
-  totalInterestRatio, 
-  portfolio, 
-  totalSavingCash, 
+  totalInterestRatio,
   totalSavingAssets,
   totalInvestmentAssets,
   assets,
-  setActiveTab 
 }: { 
   totalCurrent: number; 
   totalInitial: number; 
   totalInterest: number; 
-  totalInterestRatio: number; 
-  portfolio: any; 
-  totalSavingCash: number; 
+  totalInterestRatio: number;
   totalSavingAssets: number;
   totalInvestmentAssets: number;
   assets: any[];
-  setActiveTab: any 
 }) {
+  const { t } = useLanguage();
   const [chartMode, setChartMode] = useState<'overview' | 'detail'>('overview');
   const [showAmounts, setShowAmounts] = useState(true);
 
@@ -982,17 +980,17 @@ function DashboardPage({
   return (
     <div>
       <div className="tab-header">
-        <h2 className="section-title">Bảng Tổng Quan Tài Chính</h2>
-        <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Cập nhật lần cuối: 26/05/2026</span>
+        <h2 className="section-title">{t('Bảng Tổng Quan Tài Chính')}</h2>
+        <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{t('Cập nhật lần cuối: 26/05/2026')}</span>
       </div>
 
       {/* Metrics Row */}
       <div className="grid-3">
         <div className="card">
           <div className="metric-header">
-            <span className="metric-title">Tổng Giá Trị Tài Sản Gốc (Original Value)</span>
+            <span className="metric-title">{t('Tổng Giá Trị Tài Sản Gốc (Original Value)')}</span>
             <button onClick={(e) => { e.stopPropagation(); setShowAmounts(!showAmounts); }}
-              title={showAmounts ? 'Ẩn số tiền' : 'Hiện số tiền'}
+              title={showAmounts ? t('Ẩn số tiền') : t('Hiện số tiền')}
               style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '2px', display: 'inline-flex', borderRadius: '4px', transition: 'all 0.2s', verticalAlign: 'middle', marginTop: '-2px', marginLeft: '10px', marginRight: '8px' }}
               onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--bg-tertiary)'; }}
               onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'none'; }}>
@@ -1008,13 +1006,13 @@ function DashboardPage({
             {showAmounts ? formatCurrency(totalInitial) : '**********'}
           </div>
           <div className="metric-change" style={{ color: 'var(--text-secondary)' }}>
-            Tổng vốn gốc đã đầu tư
+            {t('Tổng vốn gốc đã đầu tư')}
           </div>
         </div>
 
         <div className="card">
           <div className="metric-header">
-            <span className="metric-title">Tổng Giá Trị Tài Sản (Net Worth)</span>
+            <span className="metric-title">{t('Tổng Giá Trị Tài Sản (Net Worth)')}</span>
             <span className="metric-icon" style={{ color: 'var(--success)' }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <path d="M23 6l-9.5 9.5-5-5L1 18M17 6h6v6" strokeLinecap="round" strokeLinejoin="round"/>
@@ -1036,7 +1034,7 @@ function DashboardPage({
 
         <div className="card">
           <div className="metric-header">
-            <span className="metric-title">Hiệu Suất Đầu Tư (Growth Rate)</span>
+            <span className="metric-title">{t('Hiệu Suất Đầu Tư (Growth Rate)')}</span>
             <span className="metric-icon" style={{ color: 'var(--warning)' }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <rect x="3" y="3" width="18" height="18" rx="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -1048,7 +1046,7 @@ function DashboardPage({
             {totalInterestRatio >= 0 ? '+' : ''}{totalInterestRatio.toFixed(2)}%
           </div>
           <div className="metric-change" style={{ color: 'var(--text-secondary)' }}>
-            Lãi thuần ròng từ vốn đầu tư
+            {t('Lãi thuần ròng từ vốn đầu tư')}
           </div>
         </div>
       </div>
@@ -1062,7 +1060,7 @@ function DashboardPage({
         <div className="card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-              <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>Phân Bổ Tài Sản</h3>
+              <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>{t('Phân Bổ Tài Sản')}</h3>
               <div style={{ display: 'flex', gap: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '6px', padding: '2px' }}>
                 <button
                   onClick={() => setChartMode('overview')}
@@ -1072,7 +1070,7 @@ function DashboardPage({
                     color: chartMode === 'overview' ? '#fff' : 'var(--text-secondary)',
                     fontWeight: chartMode === 'overview' ? 600 : 400
                   }}
-                >Tổng quan</button>
+                >{t('Tổng quan')}</button>
                 <button
                   onClick={() => setChartMode('detail')}
                   style={{
@@ -1081,11 +1079,11 @@ function DashboardPage({
                     color: chartMode === 'detail' ? '#fff' : 'var(--text-secondary)',
                     fontWeight: chartMode === 'detail' ? 600 : 400
                   }}
-                >Chi tiết</button>
+                >{t('Chi tiết')}</button>
               </div>
             </div>
             <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
-              {chartMode === 'overview' ? 'Tổng giá trị Tiết kiệm và Đầu tư' : 'Chi tiết từng tài sản trong danh mục'}
+              {chartMode === 'overview' ? t('Tổng giá trị Tiết kiệm và Đầu tư') : t('Chi tiết từng tài sản trong danh mục')}
             </p>
           </div>
 
@@ -1109,7 +1107,7 @@ function DashboardPage({
                 {showAmounts ? formatCompactValue(totalCurrent) : '********'}
               </text>
               <text x="60" y="74" className="donut-label">
-                Tài sản ròng
+                {t('Tài sản ròng')}
               </text>
             </svg>
           </div>
@@ -1127,21 +1125,14 @@ function DashboardPage({
         </div>
       </div>
 
-      {/* Quick Action Info Banner */}
-      <div className="card" style={{ background: 'rgba(99,102,241,0.03)', borderColor: 'rgba(99,102,241,0.1)' }}>
-        <h3 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '8px' }}>Thông tin Phân tích & Gợi ý</h3>
-        <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-          Hệ thống tài chính của bạn đang hoạt động ổn định. Tỷ lệ tăng trưởng đầu tư ròng đạt ngưỡng <strong style={{ color: 'var(--success)' }}>{(totalInterestRatio).toFixed(2)}%</strong>. 
-          Khối **Tích lũy & Đầu tư** hiện nắm giữ tổng cộng khoảng <strong style={{ color: 'var(--primary)' }}>{formatCurrency(totalSavingCash)}</strong>. 
-          Để điều chỉnh cơ cấu phân bổ, tối ưu thuế hoặc lên kế hoạch cắt giảm chi phí sinh hoạt, vui lòng chuyển qua tab **Phân bổ Danh mục** để sử dụng tính năng lập kế hoạch giảm tải ngân sách chi tiết.
-        </p>
-      </div>
+
     </div>
   );
 }
 
 // ======================== CASH FLOW GROWTH CHART COMPONENT ========================
 function CashFlowGrowthChart({ userId }: { userId: string }) {
+  const { t } = useLanguage();
   const [mode, setMode] = useState<'yearly' | 'monthly' | 'last12months'>('yearly');
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [chartData, setChartData] = useState<any[]>([]);
@@ -1189,7 +1180,7 @@ function CashFlowGrowthChart({ userId }: { userId: string }) {
     return `${Math.round(v)}`;
   };
 
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       const changeStr = data.changeFromPrevious !== undefined && data.changeFromPrevious !== null
@@ -1202,15 +1193,15 @@ function CashFlowGrowthChart({ userId }: { userId: string }) {
         <div className="chart-tooltip">
           <div className="chart-tooltip-header">{data.period}</div>
           <div className="chart-tooltip-row">
-            <span>Giá trị:</span>
+            <span>{t('Giá trị:')}</span>
             <span className="chart-tooltip-value">{formatCurrency(data.value)}</span>
           </div>
           <div className="chart-tooltip-row">
-            <span>Giá trị gốc:</span>
+            <span>{t('Giá trị gốc:')}</span>
             <span className="chart-tooltip-value" style={{ color: 'var(--warning)' }}>{data.initialValue != null ? formatCurrency(data.initialValue) : '--'}</span>
           </div>
           <div className="chart-tooltip-row">
-            <span>Thay đổi:</span>
+            <span>{t('Thay đổi:')}</span>
             <span className="chart-tooltip-value" style={{ color: data.changeFromPrevious >= 0 ? 'var(--success)' : 'var(--danger)' }}>
               {changeStr} ({changePctStr})
             </span>
@@ -1228,7 +1219,7 @@ function CashFlowGrowthChart({ userId }: { userId: string }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
         <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>Cash Flow Growth</h3>
         <div style={{ display: 'flex', gap: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '6px', padding: '2px', alignItems: 'center', flexWrap: 'wrap' }}>
-          {([['yearly', 'Theo năm'], ['monthly', 'Theo tháng'], ['last12months', '12 tháng']] as const).map(([key, label]) => (
+          {([['yearly', t('Theo năm')], ['monthly', t('Theo tháng')], ['last12months', t('12 tháng')]] as const).map(([key, label]) => (
             <button key={key} onClick={() => handleModeChange(key)}
               style={{
                 padding: '3px 10px', fontSize: '0.7rem', borderRadius: '4px', border: 'none', cursor: 'pointer',
@@ -1258,9 +1249,9 @@ function CashFlowGrowthChart({ userId }: { userId: string }) {
         </div>
       </div>
       <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
-        {mode === 'yearly' ? 'Tổng giá trị tài sản qua các năm' : 
-         mode === 'monthly' ? `Tổng giá trị tài sản từng tháng năm ${selectedYear}` : 
-         'Tổng giá trị tài sản 12 tháng gần nhất'}
+        {mode === 'yearly' ? t('Tổng giá trị tài sản qua các năm') : 
+         mode === 'monthly' ? `${t('Tổng giá trị tài sản từng tháng năm')} ${selectedYear}` : 
+         t('Tổng giá trị tài sản 12 tháng gần nhất')}
       </p>
       {loading ? (
         <div style={{ height: '280px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1268,7 +1259,7 @@ function CashFlowGrowthChart({ userId }: { userId: string }) {
         </div>
       ) : chartData.length === 0 ? (
         <div style={{ height: '280px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-          Chưa có dữ liệu lịch sử. Hãy lưu snapshot tài sản để bắt đầu theo dõi.
+          {t('Chưa có dữ liệu lịch sử. Hãy lưu snapshot tài sản để bắt đầu theo dõi.')}
         </div>
       ) : (
         <div className="chart-container">
@@ -1329,11 +1320,11 @@ function CashFlowGrowthChart({ userId }: { userId: string }) {
           <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', marginTop: '8px', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <span style={{ width: '16px', height: '3px', borderRadius: '2px', background: '#6366f1', display: 'inline-block' }} />
-              Giá trị hiện tại
+              {t('Giá trị hiện tại')}
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <span style={{ width: '16px', height: '0', borderTop: '2px dashed #f59e0b', display: 'inline-block' }} />
-              Giá trị gốc
+              {t('Giá trị gốc')}
             </span>
           </div>
         </div>
@@ -1368,6 +1359,7 @@ function AssetsPage({
   onSave: any;
   onRestore: any
 }) {
+  const { t } = useLanguage();
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
   const expenseAssets = assets.filter(a => a.Type === 'Expense');
   const savingAssets = assets.filter(a => a.Type === 'Saving');
@@ -1408,12 +1400,12 @@ function AssetsPage({
           </td>
           <td style={{ textAlign: 'center' }}>
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-              <button className="btn-icon edit" onClick={() => onEdit(asset)} title="Sửa tài sản">
+              <button className="btn-icon edit" onClick={() => onEdit(asset)} title={t('Sửa tài sản')}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
                 </svg>
               </button>
-              <button className="btn-icon delete" onClick={() => onDelete(asset.Id)} title="Xóa tài sản">
+              <button className="btn-icon delete" onClick={() => onDelete(asset.Id)} title={t('Xóa tài sản')}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
                 </svg>
@@ -1428,15 +1420,15 @@ function AssetsPage({
     <div>
       <div className="tab-header">
         <div>
-          <h2 className="section-title">Bảng Quản Lý Tài Sản Chi Tiết</h2>
-          <p className="section-desc">Theo dõi giá trị ban đầu, giá trị thực tế hiện tại và mức độ sinh trưởng của từng tài sản</p>
+          <h2 className="section-title">{t('Bảng Quản Lý Tài Sản Chi Tiết')}</h2>
+          <p className="section-desc">{t('Theo dõi giá trị ban đầu, giá trị thực tế hiện tại và mức độ sinh trưởng của từng tài sản')}</p>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
           <button className="btn btn-primary" onClick={onAdd}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
             </svg>
-            Thêm Tài Sản
+            {t('Thêm Tài Sản')}
           </button>
           <button className="btn" onClick={onSave} style={{
             background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)',
@@ -1446,7 +1438,7 @@ function AssetsPage({
               <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
               <polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
             </svg>
-            Lưu thông tin
+            {t('Lưu thông tin')}
           </button>
         </div>
       </div>
@@ -1455,21 +1447,21 @@ function AssetsPage({
         <table className="custom-table">
           <thead>
             <tr>
-              <th style={{ width: '40px', textAlign: 'center' }}>STT</th>
-              <th>Tên tài sản (Assets Name)</th>
-              <th style={{ textAlign: 'right' }}>Vốn ban đầu (Funds)</th>
-              <th style={{ textAlign: 'right' }}>Giá trị hiện tại (Current)</th>
-              <th style={{ textAlign: 'right' }}>Lợi nhuận (Interest)</th>
-              <th style={{ textAlign: 'right' }}>Tỷ suất (Interest ratio)</th>
-              <th style={{ textAlign: 'center' }}>Ngày cập nhật</th>
-              <th style={{ textAlign: 'center', width: '100px' }}>Hành động</th>
+              <th style={{ width: '40px', textAlign: 'center' }}>{t('STT')}</th>
+              <th>{t('Tên tài sản (Assets Name)')}</th>
+              <th style={{ textAlign: 'right' }}>{t('Vốn ban đầu (Funds)')}</th>
+              <th style={{ textAlign: 'right' }}>{t('Giá trị hiện tại (Current)')}</th>
+              <th style={{ textAlign: 'right' }}>{t('Lợi nhuận (Interest)')}</th>
+              <th style={{ textAlign: 'right' }}>{t('Tỷ suất (Interest ratio)')}</th>
+              <th style={{ textAlign: 'center' }}>{t('Ngày cập nhật')}</th>
+              <th style={{ textAlign: 'center', width: '100px' }}>{t('Hành động')}</th>
             </tr>
           </thead>
           <tbody>
             {assets.length === 0 ? (
               <tr>
                 <td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '30px' }}>
-                  Chưa có dữ liệu tài sản. Bấm nút "Thêm Tài Sản" để khởi tạo.
+                  {t('Chưa có dữ liệu tài sản. Bấm nút "Thêm Tài Sản" để khởi tạo.')}
                 </td>
               </tr>
             ) : (
@@ -1479,7 +1471,7 @@ function AssetsPage({
                   <>
                     <tr className="table-section-divider">
                       <td colSpan={8} style={{ fontWeight: 700, padding: '10px 16px', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '1px', color: '#f59e0b' }}>
-                        💳 Sinh hoạt
+                        {t('💳 Sinh hoạt')}
                       </td>
                     </tr>
                     {renderAssetRows(expenseAssets, 0)}
@@ -1491,7 +1483,7 @@ function AssetsPage({
                   <>
                     <tr className="table-section-divider">
                       <td colSpan={8} style={{ fontWeight: 700, padding: '10px 16px', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--primary)' }}>
-                        🏦 Tiết kiệm
+                        {t('🏦 Tiết kiệm')}
                       </td>
                     </tr>
                     {renderAssetRows(savingAssets, expenseAssets.length)}
@@ -1503,7 +1495,7 @@ function AssetsPage({
                   <>
                     <tr className="table-section-divider">
                       <td colSpan={8} style={{ fontWeight: 700, padding: '10px 16px', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '1px', color: '#10b981' }}>
-                        📈 Đầu tư
+                        {t('📈 Đầu tư')}
                       </td>
                     </tr>
                     {renderAssetRows(investmentAssets, expenseAssets.length + savingAssets.length)}
@@ -1513,7 +1505,7 @@ function AssetsPage({
                 {/* GRAND TOTAL */}
                 {assets.length > 0 && (
                   <tr className="total-row" style={{ borderTop: '2px solid var(--border-light)' }}>
-                    <td colSpan={2} style={{ paddingLeft: '16px', fontWeight: 800 }}>Tổng tài sản</td>
+                    <td colSpan={2} style={{ paddingLeft: '16px', fontWeight: 800 }}>{t('Tổng tài sản')}</td>
                     <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 700 }}>{formatCurrency(totalInitial)}</td>
                     <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 700 }}>{formatCurrency(totalCurrent)}</td>
                     <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 700, color: totalInterest > 0 ? 'var(--success)' : totalInterest < 0 ? 'var(--danger)' : 'var(--text-muted)' }}>
@@ -1536,14 +1528,14 @@ function AssetsPage({
       <div className="card" style={{ marginTop: '24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
           <div>
-            <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>Lịch sử lưu thông tin</h3>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Chọn một bản ghi để xem chi tiết danh mục tài sản tại thời điểm đó</p>
+            <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>{t('Lịch sử lưu thông tin')}</h3>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{t('Chọn một bản ghi để xem chi tiết danh mục tài sản tại thời điểm đó')}</p>
           </div>
         </div>
 
         {historyRecords.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-            Chưa có dữ liệu lịch sử. Nhấn "Lưu thông tin" để tạo bản ghi.
+            {t('Chưa có dữ liệu lịch sử. Nhấn "Lưu thông tin" để tạo bản ghi.')}
           </div>
         ) : (
           <div style={{ display: 'flex', gap: '16px' }}>
@@ -1561,7 +1553,7 @@ function AssetsPage({
                     {formatDateTime(r.RecordedAt)}
                   </div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                    {r.Details?.length || 0} tài sản · tổng {formatCurrency((r.Details || []).reduce((s: number, d: any) => s + d.CurrentValue, 0))}
+                    {r.Details?.length || 0} {t('tài sản · tổng')} {formatCurrency((r.Details || []).reduce((s: number, d: any) => s + d.CurrentValue, 0))}
                   </div>
                 </div>
               ))}
@@ -1577,10 +1569,10 @@ function AssetsPage({
                       <table className="custom-table" style={{ minWidth: '450px' }}>
                         <thead>
                           <tr>
-                            <th>Tên tài sản</th>
-                            <th style={{ textAlign: 'right' }}>Vốn ban đầu</th>
-                            <th style={{ textAlign: 'right' }}>Giá trị hiện tại</th>
-                            <th style={{ textAlign: 'center' }}>Loại</th>
+                            <th>{t('Tên tài sản')}</th>
+                            <th style={{ textAlign: 'right' }}>{t('Vốn ban đầu')}</th>
+                            <th style={{ textAlign: 'right' }}>{t('Giá trị hiện tại')}</th>
+                            <th style={{ textAlign: 'center' }}>{t('Loại')}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1597,7 +1589,7 @@ function AssetsPage({
                                   background: d.Type === 'Saving' ? 'rgba(99,102,241,0.15)' : 'rgba(16,185,129,0.15)',
                                   color: d.Type === 'Saving' ? 'var(--primary)' : '#10b981'
                                 }}>
-                                  {d.Type === 'Saving' ? 'Tiết kiệm' : d.Type === 'Investment' ? 'Đầu tư' : d.Type}
+                                  {d.Type === 'Saving' ? t('Tiết kiệm') : d.Type === 'Investment' ? t('Đầu tư') : d.Type}
                                 </span>
                               </td>
                             </tr>
@@ -1613,7 +1605,7 @@ function AssetsPage({
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px', verticalAlign: 'middle' }}>
                             <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
                           </svg>
-                          Khôi phục
+                          {t('Khôi phục')}
                         </button>
                       </div>
                     </div>
@@ -1621,7 +1613,7 @@ function AssetsPage({
                 })()
               ) : (
                 <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                  Chọn một bản ghi từ danh sách bên trái để xem chi tiết
+                  {t('Chọn một bản ghi từ danh sách bên trái để xem chi tiết')}
                 </div>
               )}
             </div>
@@ -1696,6 +1688,7 @@ function PortfolioPage({
   allocationHistoryRecords: any[];
   onRestoreAllocationHistory: (historyId: string) => void;
 }) {
+  const { t } = useLanguage();
 
   // Visual warnings for total percentages
   const isPercentageBalanced = Math.abs(totalAllocatedPercentage - 100) < 0.01;
@@ -1709,12 +1702,12 @@ function PortfolioPage({
       <div>
         <div className="tab-header">
           <div>
-            <h2 className="section-title">Thiết Lập Danh Mục</h2>
-            <p className="section-desc">Thêm, sửa, xóa danh mục và nhập số tiền phân bổ. Tỉ lệ phần trăm sẽ tự động tính toán.</p>
+            <h2 className="section-title">{t('Thiết Lập Danh Mục')}</h2>
+            <p className="section-desc">{t('Thêm, sửa, xóa danh mục và nhập số tiền phân bổ. Tỉ lệ phần trăm sẽ tự động tính toán.')}</p>
           </div>
           <div style={{ display: 'flex', gap: '12px' }}>
             <button className="btn btn-secondary" onClick={onCancelSetup}>
-              Hủy
+              {t('Hủy')}
             </button>
             <button className="btn btn-primary" onClick={onSaveSetup} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -1722,7 +1715,7 @@ function PortfolioPage({
                 <polyline points="17 21 17 13 7 13 7 21"/>
                 <polyline points="7 3 7 8 15 8"/>
               </svg>
-              Lưu Thiết Lập
+              {t('Lưu Thiết Lập')}
             </button>
           </div>
         </div>
@@ -1730,21 +1723,21 @@ function PortfolioPage({
         {/* Base Amount Input */}
         <div className="budget-cut-header">
           <div className="budget-input-item">
-            <label>Phân bổ gốc (Base Amount)</label>
+            <label>{t('Phân bổ gốc (Base Amount)')}</label>
             <MoneyInput 
               value={setupAmount} 
               onChange={(val) => onSetupAmountChange(val)} 
             />
           </div>
           <div className="budget-input-item">
-            <label>Tổng đã phân bổ</label>
+            <label>{t('Tổng đã phân bổ')}</label>
             <div style={{ padding: '8px 12px', background: 'rgba(99,102,241,0.05)', border: '1px solid rgba(99,102,241,0.15)', borderRadius: '6px', fontWeight: 700, fontFamily: 'var(--font-display)', fontSize: '1rem', color: Math.abs(setupTotalPercent - 100) < 0.01 ? 'var(--success)' : 'var(--warning)' }}>
               {setupTotalPercent.toFixed(4)}%
             </div>
           </div>
           <div style={{ flex: 1, minWidth: '220px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-            <div>• Nhập số tiền cho từng danh mục, hệ thống tự động tính tỉ lệ phần trăm.</div>
-            <div>• Tổng tỉ trọng nên đạt <strong>100%</strong> để cân bằng.</div>
+            <div>{t('• Nhập số tiền cho từng danh mục, hệ thống tự động tính tỉ lệ phần trăm.')}</div>
+            <div>{t('• Tổng tỉ trọng nên đạt 100% để cân bằng.')}</div>
           </div>
         </div>
 
@@ -1753,18 +1746,18 @@ function PortfolioPage({
           <table className="custom-table">
             <thead>
               <tr>
-                <th style={{ width: '160px' }}>Phân loại</th>
-                <th>Tên danh mục</th>
-                <th style={{ textAlign: 'right', width: '160px' }}>Số tiền (Cash)</th>
-                <th style={{ textAlign: 'right', width: '140px' }}>Tỉ trọng (%)</th>
-                <th style={{ textAlign: 'center', width: '100px' }}>Hành động</th>
+                <th style={{ width: '160px' }}>{t('Phân loại')}</th>
+                <th>{t('Tên danh mục')}</th>
+                <th style={{ textAlign: 'right', width: '160px' }}>{t('Số tiền (Cash)')}</th>
+                <th style={{ textAlign: 'right', width: '140px' }}>{t('Tỉ trọng (%)')}</th>
+              <th style={{ textAlign: 'center', width: '100px' }}>{t('Hành động')}</th>
               </tr>
             </thead>
             <tbody>
               {setupAllocations.length === 0 ? (
                 <tr>
                   <td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '30px' }}>
-                    Chưa có danh mục nào. Bấm "Thêm danh mục" để bắt đầu.
+                    {t('Chưa có danh mục nào. Bấm "Thêm danh mục" để bắt đầu.')}
                   </td>
                 </tr>
               ) : (
@@ -1777,9 +1770,9 @@ function PortfolioPage({
                         value={al.FinancialCategory}
                         onChange={(e) => onSetupEditAllocation(al.Id, 'FinancialCategory', e.target.value)}
                       >
-                        <option value="Expense">Sinh hoạt</option>
-                        <option value="Saving">Tiết kiệm</option>
-                        <option value="Investment">Đầu tư</option>
+                        <option value="Expense">{t('Sinh hoạt')}</option>
+                        <option value="Saving">{t('Tiết kiệm')}</option>
+                        <option value="Investment">{t('Đầu tư')}</option>
                       </select>
                     </td>
                     <td>
@@ -1789,7 +1782,7 @@ function PortfolioPage({
                         style={{ padding: '4px 8px', height: '32px', fontSize: '0.85rem', width: '100%' }}
                         value={al.Name}
                         onChange={(e) => onSetupEditAllocation(al.Id, 'Name', e.target.value)}
-                        placeholder="Tên danh mục..."
+                        placeholder={t('Tên danh mục...')}
                       />
                       <div style={{ marginTop: '4px' }}>
                         <select
@@ -1797,7 +1790,7 @@ function PortfolioPage({
                           value={al.AssetId || ''}
                           onChange={(e) => onSetupEditAllocation(al.Id, 'AssetId', e.target.value || null)}
                         >
-                          <option value="">-- Liên kết tài sản --</option>
+                          <option value="">{t('-- Liên kết tài sản --')}</option>
                           {assets.map(a => (
                             <option key={a.Id} value={a.Id} style={{ background: '#1a1b26', color: '#e2e8f0' }}>{a.Name}</option>
                           ))}
@@ -1819,7 +1812,7 @@ function PortfolioPage({
                       <button 
                         className="btn-icon delete" 
                         onClick={() => onSetupDeleteAllocation(al.Id)}
-                        title="Xóa danh mục"
+                        title={t('Xóa danh mục')}
                       >
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
@@ -1833,7 +1826,7 @@ function PortfolioPage({
               {setupAllocations.length > 0 && (
                 <tr className="total-row">
                   <td></td>
-                  <td style={{ paddingLeft: '16px' }}>Tổng cộng</td>
+                  <td style={{ paddingLeft: '16px' }}>{t('Tổng cộng')}</td>
                   <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)' }}>
                     {formatCurrency(setupTotalAmount)}
                   </td>
@@ -1852,7 +1845,7 @@ function PortfolioPage({
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
             </svg>
-            Thêm danh mục
+            {t('Thêm danh mục')}
           </button>
         </div>
 
@@ -1860,14 +1853,14 @@ function PortfolioPage({
         <div className="card" style={{ marginTop: '24px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
             <div>
-              <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>Lịch sử phân bổ</h3>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Chọn một bản ghi để xem chi tiết và khôi phục</p>
+              <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>{t('Lịch sử phân bổ')}</h3>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{t('Chọn một bản ghi để xem chi tiết và khôi phục')}</p>
             </div>
           </div>
 
           {allocationHistoryRecords.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-              Chưa có dữ liệu lịch sử. Lưu thiết lập để tạo bản ghi.
+              {t('Chưa có dữ liệu lịch sử. Lưu thiết lập để tạo bản ghi.')}
             </div>
           ) : (
             <AllocationHistorySection 
@@ -1886,15 +1879,15 @@ function PortfolioPage({
     <div>
       <div className="tab-header">
         <div>
-          <h2 className="section-title">Phân Bổ Tài Sản & Cắt Giảm Ngân Sách</h2>
-          <p className="section-desc">Phân bố thu nhập thành ba khối Sinh hoạt, Tiết kiệm & Đầu tư, tích hợp bộ lập kế hoạch cắt giảm tự động</p>
+          <h2 className="section-title">{t('Phân Bổ Tài Sản & Cắt Giảm Ngân Sách')}</h2>
+          <p className="section-desc">{t('Phân bố thu nhập thành ba khối Sinh hoạt, Tiết kiệm & Đầu tư, tích hợp bộ lập kế hoạch cắt giảm tự động')}</p>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
           <button className="btn btn-secondary" onClick={onStartSetup} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
             </svg>
-            Thiết lập mới
+            {t('Thiết lập mới')}
           </button>
           <button className="btn btn-primary" onClick={onAllocateActual} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -1902,7 +1895,7 @@ function PortfolioPage({
               <polyline points="17 21 17 13 7 13 7 21"/>
               <polyline points="7 3 7 8 15 8"/>
             </svg>
-            Lưu Phân Bổ Thực Tế
+            {t('Lưu Phân Bổ Thực Tế')}
           </button>
         </div>
       </div>
@@ -1910,22 +1903,22 @@ function PortfolioPage({
       {/* Top Config Inputs Banner */}
       <div className="budget-cut-header">
         <div className="budget-input-item">
-          <label>Thu nhập (Income)</label>
+          <label>{t('Thu nhập (Income)')}</label>
           <MoneyInput 
             value={income} 
             onChange={(val) => onUpdateIncome(val)} 
           />
         </div>
         <div className="budget-input-item">
-          <label>Số tiền cần giảm (Target)</label>
+          <label>{t('Số tiền cần giảm (Target)')}</label>
           <MoneyInput 
             value={targetReduction} 
             onChange={(val) => onUpdateTargetReduction(val)} 
           />
         </div>
         <div style={{ flex: 1, minWidth: '220px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-          <div style={{ marginBottom: '4px' }}>• Công thức giảm mỗi dòng: <code style={{ background: 'rgba(0,0,0,0.3)', padding: '2px 4px', borderRadius: '3px' }}>Target * Tỉ trọng (%)</code></div>
-          <div>• Bấm nút hình khiên bảo vệ <span style={{ color: 'var(--danger)' }}>🛡️</span> kế bên dòng để loại trừ dòng đó khỏi diện cắt giảm.</div>
+          <div style={{ marginBottom: '4px' }}>{t('• Công thức giảm mỗi dòng: ')}<code style={{ background: 'rgba(0,0,0,0.3)', padding: '2px 4px', borderRadius: '3px' }}>Target * {t('Tỉ trọng (%)')}</code></div>
+          <div>{t('• Bấm nút hình khiên bảo vệ kế bên dòng để loại trừ dòng đó khỏi diện cắt giảm.')}</div>
         </div>
       </div>
 
@@ -1944,14 +1937,14 @@ function PortfolioPage({
         <table className="custom-table" style={{ borderCollapse: 'separate', borderSpacing: '0' }}>
           <thead>
             <tr>
-              <th style={{ width: '100px', borderRight: '1px solid var(--border-light)' }}>Khối</th>
-              <th>Thông tin phân bổ (Allocations Info)</th>
-              <th style={{ textAlign: 'right', width: '160px' }}>Tỉ trọng (%)</th>
-              <th style={{ textAlign: 'right', width: '160px' }}>Số tiền (Cash)</th>
-              <th style={{ textAlign: 'right', width: '160px' }}>Số tiền giảm</th>
-              <th style={{ textAlign: 'right', width: '160px' }}>Số tiền thực tế</th>
-              <th style={{ textAlign: 'center', width: '90px' }}>Loại trừ</th>
-              <th style={{ textAlign: 'center', width: '100px' }}>Áp dụng</th>
+              <th style={{ width: '100px', borderRight: '1px solid var(--border-light)' }}>{t('Khối')}</th>
+              <th>{t('Thông tin phân bổ (Allocations Info)')}</th>
+              <th style={{ textAlign: 'right', width: '160px' }}>{t('Tỉ trọng (%)')}</th>
+              <th style={{ textAlign: 'right', width: '160px' }}>{t('Số tiền (Cash)')}</th>
+              <th style={{ textAlign: 'right', width: '160px' }}>{t('Số tiền giảm')}</th>
+              <th style={{ textAlign: 'right', width: '160px' }}>{t('Số tiền thực tế')}</th>
+              <th style={{ textAlign: 'center', width: '90px' }}>{t('Loại trừ')}</th>
+              <th style={{ textAlign: 'center', width: '100px' }}>{t('Áp dụng')}</th>
             </tr>
           </thead>
           <tbody>
@@ -1969,7 +1962,7 @@ function PortfolioPage({
                       borderRight: '1px solid var(--border-light)'
                     }}
                   >
-                    Sinh hoạt
+                    {t('Sinh hoạt')}
                   </td>
                 )}
                 <td style={{ fontWeight: 500, paddingLeft: '16px' }}>{al.Name}</td>
@@ -1993,9 +1986,9 @@ function PortfolioPage({
                   <button 
                     className={`exclude-btn ${al.isExcluded ? 'excluded' : ''}`}
                     onClick={() => onToggleExclusion(al.Id)}
-                    title={al.isExcluded ? 'Đã được loại trừ khỏi cắt giảm' : 'Bật khiên bảo vệ loại trừ khỏi cắt giảm'}
+                    title={al.isExcluded ? t('Đã được loại trừ khỏi cắt giảm') : t('Bật khiên bảo vệ loại trừ khỏi cắt giảm')}
                   >
-                    {al.isExcluded ? '🛡️ Khóa' : '🔓'}
+                    {al.isExcluded ? t('🛡️ Khóa') : '🔓'}
                   </button>
                 </td>
                 <td style={{ textAlign: 'center' }}>
@@ -2003,7 +1996,7 @@ function PortfolioPage({
                     className="btn-icon"
                     onClick={() => onApplyToAsset(al)}
                     disabled={!al.AssetId}
-                    title={al.AssetId ? 'Áp dụng số tiền sang tài sản' : 'Chưa liên kết tài sản'}
+                    title={al.AssetId ? t('Áp dụng số tiền sang tài sản') : t('Chưa liên kết tài sản')}
                     style={{ opacity: al.AssetId ? 1 : 0.3, cursor: al.AssetId ? 'pointer' : 'not-allowed', background: 'transparent', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '4px', padding: '4px 8px', color: '#10b981' }}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -2017,7 +2010,7 @@ function PortfolioPage({
             {/* divider: Còn lại (Saving Base) */}
             <tr className="table-section-divider">
               <td style={{ borderRight: '1px solid var(--border-light)' }}></td>
-              <td style={{ fontWeight: 700, paddingLeft: '16px' }}>Còn lại (Saving Base)</td>
+              <td style={{ fontWeight: 700, paddingLeft: '16px' }}>{t('Còn lại (Saving Base)')}</td>
               <td style={{ textAlign: 'right' }}></td>
               <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 700 }}>
                 {formatCurrency(totalSavingCash)}
@@ -2041,7 +2034,7 @@ function PortfolioPage({
                       borderRight: '1px solid var(--border-light)'
                     }}
                   >
-                    Tiết kiệm
+                    {t('Tiết kiệm')}
                   </td>
                 )}
                 <td style={{ fontWeight: 500, paddingLeft: '16px' }}>{al.Name}</td>
@@ -2065,9 +2058,9 @@ function PortfolioPage({
                   <button 
                     className={`exclude-btn ${al.isExcluded ? 'excluded' : ''}`}
                     onClick={() => onToggleExclusion(al.Id)}
-                    title={al.isExcluded ? 'Đã được loại trừ khỏi cắt giảm' : 'Bật khiên bảo vệ loại trừ khỏi cắt giảm'}
+                    title={al.isExcluded ? t('Đã được loại trừ khỏi cắt giảm') : t('Bật khiên bảo vệ loại trừ khỏi cắt giảm')}
                   >
-                    {al.isExcluded ? '🛡️ Khóa' : '🔓'}
+                    {al.isExcluded ? t('🛡️ Khóa') : '🔓'}
                   </button>
                 </td>
                 <td style={{ textAlign: 'center' }}>
@@ -2075,7 +2068,7 @@ function PortfolioPage({
                     className="btn-icon"
                     onClick={() => onApplyToAsset(al)}
                     disabled={!al.AssetId}
-                    title={al.AssetId ? 'Áp dụng số tiền sang tài sản' : 'Chưa liên kết tài sản'}
+                    title={al.AssetId ? t('Áp dụng số tiền sang tài sản') : t('Chưa liên kết tài sản')}
                     style={{ opacity: al.AssetId ? 1 : 0.3, cursor: al.AssetId ? 'pointer' : 'not-allowed', background: 'transparent', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '4px', padding: '4px 8px', color: '#10b981' }}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -2091,7 +2084,7 @@ function PortfolioPage({
               <>
             <tr className="table-section-divider">
               <td style={{ borderRight: '1px solid var(--border-light)' }}></td>
-              <td style={{ fontWeight: 700, paddingLeft: '16px' }}>Đầu tư (Investment Base)</td>
+              <td style={{ fontWeight: 700, paddingLeft: '16px' }}>{t('Đầu tư (Investment Base)')}</td>
               <td style={{ textAlign: 'right' }}></td>
               <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 700 }}>
                 {formatCurrency(totalInvestmentCash)}
@@ -2113,7 +2106,7 @@ function PortfolioPage({
                       borderRight: '1px solid var(--border-light)'
                     }}
                   >
-                    Đầu tư
+                    {t('Đầu tư')}
                   </td>
                 )}
                 <td style={{ fontWeight: 500, paddingLeft: '16px' }}>{al.Name}</td>
@@ -2137,9 +2130,9 @@ function PortfolioPage({
                   <button 
                     className={`exclude-btn ${al.isExcluded ? 'excluded' : ''}`}
                     onClick={() => onToggleExclusion(al.Id)}
-                    title={al.isExcluded ? 'Đã được loại trừ khỏi cắt giảm' : 'Bật khiên bảo vệ loại trừ khỏi cắt giảm'}
+                    title={al.isExcluded ? t('Đã được loại trừ khỏi cắt giảm') : t('Bật khiên bảo vệ loại trừ khỏi cắt giảm')}
                   >
-                    {al.isExcluded ? '🛡️ Khóa' : '🔓'}
+                    {al.isExcluded ? t('🛡️ Khóa') : '🔓'}
                   </button>
                 </td>
                 <td style={{ textAlign: 'center' }}>
@@ -2147,7 +2140,7 @@ function PortfolioPage({
                     className="btn-icon"
                     onClick={() => onApplyToAsset(al)}
                     disabled={!al.AssetId}
-                    title={al.AssetId ? 'Áp dụng số tiền sang tài sản' : 'Chưa liên kết tài sản'}
+                    title={al.AssetId ? t('Áp dụng số tiền sang tài sản') : t('Chưa liên kết tài sản')}
                     style={{ opacity: al.AssetId ? 1 : 0.3, cursor: al.AssetId ? 'pointer' : 'not-allowed', background: 'transparent', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '4px', padding: '4px 8px', color: '#10b981' }}
                   >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -2162,8 +2155,8 @@ function PortfolioPage({
 
             {/* Total Row */}
             <tr className="total-row">
-              <td style={{ borderRight: '1px solid var(--border-light)' }}>Tổng dòng</td>
-              <td style={{ paddingLeft: '16px' }}>Cân đối (Balanced)</td>
+              <td style={{ borderRight: '1px solid var(--border-light)' }}>{t('Tổng dòng')}</td>
+              <td style={{ paddingLeft: '16px' }}>{t('Cân đối (Balanced)')}</td>
               <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', color: isPercentageBalanced ? 'var(--success)' : '#f59e0b' }}>
                 {formatPercentage(totalAllocatedPercentage)}
               </td>
@@ -2244,6 +2237,7 @@ function AllocationHistorySection({ records, onRestore, formatDateTime, formatCu
   formatDateTime: (iso: string) => string;
   formatCurrency: (val: number) => string;
 }) {
+  const { t } = useLanguage();
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
 
   return (
@@ -2262,10 +2256,10 @@ function AllocationHistorySection({ records, onRestore, formatDateTime, formatCu
               {formatDateTime(r.RecordedAt)}
             </div>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-              {r.Details?.length || 0} danh mục
+              {r.Details?.length || 0} {t('danh mục')}
             </div>
             <div style={{ fontSize: '0.7rem', color: 'var(--primary)', marginTop: '2px', fontWeight: 500 }}>
-              Gốc: {formatCurrency(r.CurrentAmount)}
+              {t('Gốc: ')}{formatCurrency(r.CurrentAmount)}
             </div>
           </div>
         ))}
@@ -2279,15 +2273,15 @@ function AllocationHistorySection({ records, onRestore, formatDateTime, formatCu
             return (
               <div style={{ overflowX: 'auto' }}>
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '8px', padding: '6px 10px', background: 'rgba(99,102,241,0.06)', borderRadius: '6px' }}>
-                  Phân bổ gốc: <strong style={{ fontFamily: 'var(--font-display)' }}>{formatCurrency(record.CurrentAmount)}</strong>
+                  {t('Phân bổ gốc: ')}<strong style={{ fontFamily: 'var(--font-display)' }}>{formatCurrency(record.CurrentAmount)}</strong>
                 </div>
                 <table className="custom-table" style={{ minWidth: '450px' }}>
                   <thead>
                     <tr>
-                      <th>Danh mục</th>
-                      <th style={{ textAlign: 'right' }}>Số tiền</th>
-                      <th style={{ textAlign: 'right' }}>Tỉ trọng</th>
-                      <th style={{ textAlign: 'center' }}>Loại</th>
+                      <th>{t('Danh mục')}</th>
+                      <th style={{ textAlign: 'right' }}>{t('Số tiền')}</th>
+                      <th style={{ textAlign: 'right' }}>{t('Tỉ trọng')}</th>
+                      <th style={{ textAlign: 'center' }}>{t('Loại')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2302,7 +2296,7 @@ function AllocationHistorySection({ records, onRestore, formatDateTime, formatCu
                             background: d.AssetType === 'Saving' ? 'rgba(99,102,241,0.15)' : d.AssetType === 'Investment' ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)',
                             color: d.AssetType === 'Saving' ? 'var(--primary)' : d.AssetType === 'Investment' ? '#10b981' : '#f59e0b'
                           }}>
-                            {d.AssetType === 'Saving' ? 'Tiết kiệm' : d.AssetType === 'Investment' ? 'Đầu tư' : 'Sinh hoạt'}
+                            {d.AssetType === 'Saving' ? t('Tiết kiệm') : d.AssetType === 'Investment' ? t('Đầu tư') : t('Sinh hoạt')}
                           </span>
                         </td>
                       </tr>
@@ -2318,7 +2312,7 @@ function AllocationHistorySection({ records, onRestore, formatDateTime, formatCu
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px', verticalAlign: 'middle' }}>
                       <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
                     </svg>
-                    Khôi phục
+                    {t('Khôi phục')}
                   </button>
                 </div>
               </div>
@@ -2326,7 +2320,7 @@ function AllocationHistorySection({ records, onRestore, formatDateTime, formatCu
           })()
         ) : (
           <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-            Chọn một bản ghi từ danh sách bên trái để xem chi tiết
+            {t('Chọn một bản ghi từ danh sách bên trái để xem chi tiết')}
           </div>
         )}
       </div>
