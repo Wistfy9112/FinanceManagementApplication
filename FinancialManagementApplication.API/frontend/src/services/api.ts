@@ -777,29 +777,48 @@ const generateDemoCashFlowGrowth = (mode: string, year?: number) => {
 
   if (mode === 'monthly') {
     const targetYear = year || currentYear;
-    const monthly: Record<number, { value: number; initialValue: number }> = {};
+    const grouped: Record<number, { value: number; initialValue: number }> = {};
     for (const s of demoSnapshots) {
       const d = new Date(s.date);
       if (d.getFullYear() === targetYear) {
-        monthly[d.getMonth() + 1] = { value: s.value, initialValue: s.initialValue };
+        grouped[d.getMonth() + 1] = { value: s.value, initialValue: s.initialValue };
       }
     }
-    const months = Object.keys(monthly).map(Number).sort();
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const firstKey = Object.keys(grouped).map(Number).sort();
+    const firstMonthWithData = firstKey.length > 0 ? firstKey[0] : 1;
+    const lastMonth = currentYear === targetYear ? now.getMonth() + 1 : 12;
     const data: any[] = [];
-    for (let i = 0; i < months.length; i++) {
-      const m = months[i];
+    let carryValue: number | null = null;
+    let carryInitial: number | null = null;
+
+    for (let m = 1; m <= lastMonth; m++) {
+      let val: number;
+      let initVal: number;
+
+      if (m in grouped) {
+        val = grouped[m].value;
+        initVal = grouped[m].initialValue;
+        carryValue = val;
+        carryInitial = initVal;
+      } else if (carryValue !== null && m >= firstMonthWithData) {
+        val = carryValue;
+        initVal = carryInitial ?? 0;
+      } else {
+        continue;
+      }
+
       const dt = new Date(targetYear, m - 1, 1);
       const point: any = {
         period: monthNames[m - 1],
         date: dt.toISOString(),
-        value: monthly[m].value,
-        initialValue: monthly[m].initialValue
+        value: val,
+        initialValue: initVal
       };
-      if (i > 0) {
-        const prev = monthly[months[i - 1]].value;
-        point.changeFromPrevious = monthly[m].value - prev;
-        point.changePercentage = prev !== 0 ? ((point.changeFromPrevious / prev) * 100) : null;
+      if (data.length > 0) {
+        const prevVal = data[data.length - 1].value;
+        point.changeFromPrevious = val - prevVal;
+        point.changePercentage = prevVal !== 0 ? ((point.changeFromPrevious / prevVal) * 100) : null;
       }
       data.push(point);
     }
