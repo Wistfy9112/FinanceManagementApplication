@@ -777,29 +777,48 @@ const generateDemoCashFlowGrowth = (mode: string, year?: number) => {
 
   if (mode === 'monthly') {
     const targetYear = year || currentYear;
-    const monthly: Record<number, { value: number; initialValue: number }> = {};
+    const grouped: Record<number, { value: number; initialValue: number }> = {};
     for (const s of demoSnapshots) {
       const d = new Date(s.date);
       if (d.getFullYear() === targetYear) {
-        monthly[d.getMonth() + 1] = { value: s.value, initialValue: s.initialValue };
+        grouped[d.getMonth() + 1] = { value: s.value, initialValue: s.initialValue };
       }
     }
-    const months = Object.keys(monthly).map(Number).sort();
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const firstKey = Object.keys(grouped).map(Number).sort();
+    const firstMonthWithData = firstKey.length > 0 ? firstKey[0] : 1;
+    const lastMonth = currentYear === targetYear ? now.getMonth() + 1 : 12;
     const data: any[] = [];
-    for (let i = 0; i < months.length; i++) {
-      const m = months[i];
+    let carryValue: number | null = null;
+    let carryInitial: number | null = null;
+
+    for (let m = 1; m <= lastMonth; m++) {
+      let val: number;
+      let initVal: number;
+
+      if (m in grouped) {
+        val = grouped[m].value;
+        initVal = grouped[m].initialValue;
+        carryValue = val;
+        carryInitial = initVal;
+      } else if (carryValue !== null && m >= firstMonthWithData) {
+        val = carryValue;
+        initVal = carryInitial ?? 0;
+      } else {
+        continue;
+      }
+
       const dt = new Date(targetYear, m - 1, 1);
       const point: any = {
         period: monthNames[m - 1],
         date: dt.toISOString(),
-        value: monthly[m].value,
-        initialValue: monthly[m].initialValue
+        value: val,
+        initialValue: initVal
       };
-      if (i > 0) {
-        const prev = monthly[months[i - 1]].value;
-        point.changeFromPrevious = monthly[m].value - prev;
-        point.changePercentage = prev !== 0 ? ((point.changeFromPrevious / prev) * 100) : null;
+      if (data.length > 0) {
+        const prevVal = data[data.length - 1].value;
+        point.changeFromPrevious = val - prevVal;
+        point.changePercentage = prevVal !== 0 ? ((point.changeFromPrevious / prevVal) * 100) : null;
       }
       data.push(point);
     }
@@ -859,6 +878,192 @@ const generateDemoCashFlowGrowth = (mode: string, year?: number) => {
   }
 
   return { mode, data: [] };
+};
+
+// Goal mapper
+const mapGoalToFrontend = (g: any) => ({
+  Id: g.id || g.Id,
+  AccountId: g.accountId || g.accountID || g.AccountId,
+  Name: g.name || g.Name,
+  TargetAmount: g.targetAmount !== undefined ? Number(g.targetAmount) : Number(g.TargetAmount || 0),
+  StartDate: g.startDate || g.StartDate || null,
+  DueDate: g.dueDate || g.DueDate,
+  Status: g.status || g.Status || 'NotStarted',
+  CreatedAt: g.createdAt || g.CreatedAt,
+  UpdatedAt: g.updatedAt || g.UpdatedAt
+});
+
+const DEFAULT_GOALS: any[] = [
+  { Id: 'g1', AccountId: 'u1', Name: 'Mua xe', TargetAmount: 500000000, StartDate: '2026-01-01T00:00:00Z', DueDate: '2026-12-31T00:00:00Z', Status: 'Processing', CreatedAt: '2026-01-01T00:00:00Z', UpdatedAt: '2026-01-01T00:00:00Z' },
+  { Id: 'g2', AccountId: 'u1', Name: 'Du lịch Nhật Bản', TargetAmount: 100000000, StartDate: null, DueDate: '2026-09-30T00:00:00Z', Status: 'NotStarted', CreatedAt: '2026-03-01T00:00:00Z', UpdatedAt: '2026-03-01T00:00:00Z' },
+  { Id: 'g3', AccountId: 'u1', Name: 'Quỹ khẩn cấp', TargetAmount: 200000000, StartDate: '2025-01-01T00:00:00Z', DueDate: '2025-06-30T00:00:00Z', Status: 'Successed', CreatedAt: '2025-01-01T00:00:00Z', UpdatedAt: '2025-06-30T00:00:00Z' },
+];
+
+// Goal Service
+export const goalService = {
+  getAll: async (userId: string = getLoggedUserId()): Promise<any[]> => {
+    await checkConnection();
+    if (isDemoMode) {
+      return getStorage('fm_goals', DEFAULT_GOALS).map(mapGoalToFrontend);
+    }
+    try {
+      const res = await fetch(`${API_URL}/goals/user/${userId}`, {
+        headers: { ...getAuthHeader() }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data.map(mapGoalToFrontend);
+      }
+    } catch (e) {
+      console.error('Error fetching goals:', e);
+    }
+    return [];
+  },
+
+  create: async (goal: { Name: string; TargetAmount: number; StartDate?: string; DueDate: string }, userId: string = getLoggedUserId()): Promise<any> => {
+    await checkConnection();
+    const mockId = 'g-' + Math.random().toString(36).substr(2, 9);
+    const newGoalFrontend = {
+      Id: mockId,
+      AccountId: userId,
+      Name: goal.Name,
+      TargetAmount: goal.TargetAmount,
+      StartDate: goal.StartDate || null,
+      DueDate: goal.DueDate,
+      Status: 'NotStarted',
+      CreatedAt: new Date().toISOString(),
+      UpdatedAt: new Date().toISOString()
+    };
+
+    if (isDemoMode) {
+      const list = getStorage('fm_goals', DEFAULT_GOALS);
+      list.push(newGoalFrontend);
+      setStorage('fm_goals', list);
+      return newGoalFrontend;
+    }
+
+    try {
+      const res = await fetch(`${API_URL}/goals`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+        body: JSON.stringify({
+          accountId: userId,
+          name: goal.Name,
+          targetAmount: goal.TargetAmount,
+          startDate: goal.StartDate || null,
+          dueDate: goal.DueDate
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return mapGoalToFrontend(data);
+      }
+    } catch (e) {
+      console.error('Error creating goal:', e);
+    }
+
+    throw new Error('Cannot create goal on server.');
+  },
+
+  update: async (id: string, goal: { Name: string; TargetAmount: number; StartDate?: string; DueDate: string }, _userId: string = getLoggedUserId()): Promise<void> => {
+    await checkConnection();
+    if (isDemoMode) {
+      const list = getStorage('fm_goals', DEFAULT_GOALS);
+      const idx = list.findIndex(g => g.Id === id);
+      if (idx !== -1) {
+        list[idx] = { ...list[idx], Name: goal.Name, TargetAmount: goal.TargetAmount, StartDate: goal.StartDate || null, DueDate: goal.DueDate, UpdatedAt: new Date().toISOString() };
+        setStorage('fm_goals', list);
+      }
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_URL}/goals/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+        body: JSON.stringify({
+          name: goal.Name,
+          targetAmount: goal.TargetAmount,
+          startDate: goal.StartDate || null,
+          dueDate: goal.DueDate
+        })
+      });
+      if (res.ok) return;
+    } catch (e) {
+      console.error('Error updating goal:', e);
+    }
+
+    throw new Error('Cannot update goal on server.');
+  },
+
+  delete: async (id: string): Promise<void> => {
+    await checkConnection();
+    if (isDemoMode) {
+      const list = getStorage('fm_goals', DEFAULT_GOALS);
+      const filtered = list.filter(g => g.Id !== id);
+      setStorage('fm_goals', filtered);
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_URL}/goals/${id}`, {
+        method: 'DELETE',
+        headers: { ...getAuthHeader() }
+      });
+      if (res.ok) return;
+    } catch (e) {
+      console.error('Error deleting goal:', e);
+    }
+  },
+
+  start: async (id: string): Promise<void> => {
+    await checkConnection();
+    if (isDemoMode) {
+      const list = getStorage('fm_goals', DEFAULT_GOALS);
+      const idx = list.findIndex(g => g.Id === id);
+      if (idx !== -1) {
+        list[idx].Status = 'Processing';
+        list[idx].StartDate = new Date().toISOString();
+        list[idx].UpdatedAt = new Date().toISOString();
+        setStorage('fm_goals', list);
+      }
+      return;
+    }
+
+    try {
+      await fetch(`${API_URL}/goals/${id}/start`, {
+        method: 'POST',
+        headers: { ...getAuthHeader() }
+      });
+    } catch (e) {
+      console.error('Error starting goal:', e);
+      throw new Error('Cannot start goal.');
+    }
+  },
+
+  cancel: async (id: string): Promise<void> => {
+    await checkConnection();
+    if (isDemoMode) {
+      const list = getStorage('fm_goals', DEFAULT_GOALS);
+      const idx = list.findIndex(g => g.Id === id);
+      if (idx !== -1) {
+        list[idx].Status = 'Cancelled';
+        list[idx].UpdatedAt = new Date().toISOString();
+        setStorage('fm_goals', list);
+      }
+      return;
+    }
+
+    try {
+      await fetch(`${API_URL}/goals/${id}/cancel`, {
+        method: 'POST',
+        headers: { ...getAuthHeader() }
+      });
+    } catch (e) {
+      console.error('Error cancelling goal:', e);
+      throw new Error('Cannot cancel goal.');
+    }
+  }
 };
 
 // Cash Flow Growth Service

@@ -17,5 +17,6 @@ namespace FinanceManagementApplication.Domain.Entities
         // Navigation properties
         public virtual ICollection<Assets> Assets { get; set; } = new List<Assets>();
         public virtual ICollection<Portfolio> Portfolios { get; set; } = new List<Portfolio>();
+        public virtual ICollection<Goal> Goals { get; set; } = new List<Goal>();
     }
 }

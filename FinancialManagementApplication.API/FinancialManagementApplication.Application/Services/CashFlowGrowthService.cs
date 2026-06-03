@@ -100,7 +100,7 @@ namespace FinancialManagementApplication.Application.Services
 
         private static CashFlowGrowthResponse BuildMonthly(List<SnapshotSummary> snapshots, int year, decimal currentTotal, decimal currentInitialTotal, DateTime now)
         {
-            var monthlyData = snapshots
+            var grouped = snapshots
                 .Where(s => s.RecordedAt.Year == year)
                 .GroupBy(s => s.RecordedAt.Month)
                 .Select(g => new
@@ -109,57 +109,63 @@ namespace FinancialManagementApplication.Application.Services
                     Value = g.OrderByDescending(s => s.RecordedAt).First().TotalValue,
                     InitialValue = g.OrderByDescending(s => s.RecordedAt).First().TotalInitialValue
                 })
-                .OrderBy(m => m.Month)
-                .ToList();
+                .ToDictionary(m => m.Month, m => (m.Value, m.InitialValue));
+
+            var lastMonth = now.Year == year ? now.Month : 12;
+            int firstMonthWithData = grouped.Count > 0 ? grouped.Keys.Min() : 1;
 
             var data = new List<CashFlowDataPoint>();
-            for (int i = 0; i < monthlyData.Count; i++)
+            decimal? carryValue = null;
+            decimal? carryInitial = null;
+
+            for (int m = 1; m <= lastMonth; m++)
             {
-                var dt = new DateTime(year, monthlyData[i].Month, 1);
+                decimal val;
+                decimal initVal;
+
+                if (grouped.TryGetValue(m, out var v))
+                {
+                    val = v.Value;
+                    initVal = v.InitialValue;
+                    carryValue = val;
+                    carryInitial = initVal;
+                }
+                else if (carryValue.HasValue && m >= firstMonthWithData)
+                {
+                    val = carryValue.Value;
+                    initVal = carryInitial ?? 0;
+                }
+                else
+                {
+                    continue;
+                }
+
+                var dt = new DateTime(year, m, 1);
+                var isCurrentMonth = now.Year == year && m == now.Month;
+                if (isCurrentMonth)
+                {
+                    val = currentTotal;
+                    initVal = currentInitialTotal;
+                }
+
                 var dp = new CashFlowDataPoint
                 {
                     Period = dt.ToString("MMM"),
                     Date = dt,
-                    Value = monthlyData[i].Value,
-                    InitialValue = monthlyData[i].InitialValue
+                    Value = val,
+                    InitialValue = initVal
                 };
-                if (i > 0)
+
+                if (data.Count > 0)
                 {
-                    dp.ChangeFromPrevious = monthlyData[i].Value - monthlyData[i - 1].Value;
-                    dp.ChangePercentage = monthlyData[i - 1].Value != 0
-                        ? (dp.ChangeFromPrevious / monthlyData[i - 1].Value) * 100
+                    var prevVal = data.Last().Value;
+                    dp.ChangeFromPrevious = val - prevVal;
+                    dp.ChangePercentage = prevVal != 0
+                        ? (dp.ChangeFromPrevious / prevVal) * 100
                         : null;
                 }
+
                 data.Add(dp);
-            }
-
-            if (data.Count > 0)
-            {
-                var last = data[^1];
-                if (last.Date.Year == now.Year && last.Date.Month == now.Month)
-                {
-                    last.Value = currentTotal;
-                    last.InitialValue = currentInitialTotal;
-                    if (data.Count > 1)
-                    {
-                        var prev = data[^2].Value;
-                        last.ChangeFromPrevious = currentTotal - prev;
-                        last.ChangePercentage = prev != 0
-                            ? (last.ChangeFromPrevious / prev) * 100
-                            : null;
-                    }
-                }
-            }
-
-            decimal lastKnownInitial = 0;
-            foreach (var dp in data)
-            {
-                if (dp.InitialValue > 0)
-                    lastKnownInitial = dp.InitialValue;
-                else if (lastKnownInitial > 0)
-                    dp.InitialValue = lastKnownInitial;
-                else if (currentInitialTotal > 0)
-                    dp.InitialValue = currentInitialTotal;
             }
 
             return new CashFlowGrowthResponse

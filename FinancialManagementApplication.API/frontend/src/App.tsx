@@ -7,6 +7,7 @@ import {
   portfolioService, 
   historyService,
   cashFlowService,
+  goalService,
   checkConnection, 
   getLoggedUser
 } from './services/api';
@@ -68,7 +69,7 @@ const formatDateTime = (iso: string) => {
 
 export default function App() {
   const [user, setUser] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'assets' | 'portfolio'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'assets' | 'portfolio' | 'goals'>('dashboard');
   const [isDemo, setIsDemo] = useState<boolean>(true);
   const { t, locale, setLocale } = useLanguage();
   
@@ -78,6 +79,7 @@ export default function App() {
   const [allocations, setAllocations] = useState<any[]>([]);
   const [historyRecords, setHistoryRecords] = useState<any[]>([]);
   const [allocationHistoryRecords, setAllocationHistoryRecords] = useState<any[]>([]);
+  const [goals, setGoals] = useState<any[]>([]);
   
   // Budget cut states
   const [income, setIncome] = useState<number>(19139550);
@@ -153,6 +155,8 @@ export default function App() {
       setHistoryRecords(history);
       const allocHistory = await historyService.getAllocationHistoryByAccount(user.id);
       setAllocationHistoryRecords(allocHistory);
+      const goalList = await goalService.getAll(user.id);
+      setGoals(goalList);
     } catch (err: any) {
       setError(err.message || t('Không thể tải dữ liệu.'));
     }
@@ -598,6 +602,12 @@ export default function App() {
             >
               {t('Phân bổ Danh mục')}
             </button>
+            <button 
+              className={`nav-link ${activeTab === 'goals' ? 'active' : ''}`}
+              onClick={() => setActiveTab('goals')}
+            >
+              {t('Mục tiêu')}
+            </button>
           </div>
 
           <div className="nav-right">
@@ -649,6 +659,7 @@ export default function App() {
             totalSavingAssets={totalSavingAssets}
             assets={assets}
             totalInvestmentAssets={totalInvestmentAssets}
+            goals={goals}
           />
         )}
 
@@ -700,6 +711,15 @@ export default function App() {
             onApplyToAsset={handleApplyToAsset}
             allocationHistoryRecords={allocationHistoryRecords}
             onRestoreAllocationHistory={handleRestoreAllocationHistory}
+          />
+        )}
+
+        {activeTab === 'goals' && (
+          <GoalsPage
+            goals={goals}
+            userId={user?.id}
+            totalCurrent={totalCurrent}
+            onRefresh={loadData}
           />
         )}
       </main>
@@ -930,6 +950,7 @@ function DashboardPage({
   totalSavingAssets,
   totalInvestmentAssets,
   assets,
+  goals,
 }: { 
   totalCurrent: number; 
   totalInitial: number; 
@@ -938,6 +959,7 @@ function DashboardPage({
   totalSavingAssets: number;
   totalInvestmentAssets: number;
   assets: any[];
+  goals: any[];
 }) {
   const { t } = useLanguage();
   const [chartMode, setChartMode] = useState<'overview' | 'detail'>('overview');
@@ -1034,20 +1056,49 @@ function DashboardPage({
 
         <div className="card">
           <div className="metric-header">
-            <span className="metric-title">{t('Hiệu Suất Đầu Tư (Growth Rate)')}</span>
+            <span className="metric-title">{t('Tiến độ mục tiêu')}</span>
             <span className="metric-icon" style={{ color: 'var(--warning)' }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <rect x="3" y="3" width="18" height="18" rx="2" strokeLinecap="round" strokeLinejoin="round"/>
-                <line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/>
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
               </svg>
             </span>
           </div>
-          <div className="metric-value" style={{ color: totalInterest >= 0 ? 'var(--success)' : 'var(--danger)' }}>
-            {totalInterestRatio >= 0 ? '+' : ''}{totalInterestRatio.toFixed(2)}%
-          </div>
-          <div className="metric-change" style={{ color: 'var(--text-secondary)' }}>
-            {t('Lãi thuần ròng từ vốn đầu tư')}
-          </div>
+          {(() => {
+            const active = goals.find(g => g.Status === 'Processing');
+            const upcoming = goals.find(g => g.Status === 'NotStarted');
+            const goal = active || upcoming;
+            if (!goal) {
+              return (
+                <>
+                  <div className="metric-value" style={{ fontSize: '1.2rem', color: 'var(--text-muted)' }}>{t('Chưa có mục tiêu')}</div>
+                  <div className="metric-change" style={{ color: 'var(--text-secondary)' }}>{t('Thêm mục tiêu để bắt đầu')}</div>
+                </>
+              );
+            }
+            const pct = goal.TargetAmount > 0 ? Math.min(100, Math.round((totalCurrent / goal.TargetAmount) * 100)) : 0;
+            const due = new Date(goal.DueDate);
+            const now = new Date();
+            const diff = due.getTime() - now.getTime();
+            const daysLeft = diff > 0 ? Math.ceil(diff / (1000 * 60 * 60 * 24)) : 0;
+            return (
+              <>
+                <div className="metric-value" style={{ fontSize: '1.5rem' }}>{goal.Name}</div>
+                <div style={{ margin: '8px 0', height: '8px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px', overflow: 'hidden' }}>
+                  <div style={{
+                    width: `${pct}%`, height: '100%', borderRadius: '4px', transition: 'width 0.5s ease',
+                    background: pct >= 100 ? '#10b981' : pct >= 50 ? '#6366f1' : '#f59e0b'
+                  }} />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
+                  <span style={{ color: 'var(--success)', fontWeight: 600 }}>{formatCurrency(totalCurrent)} / {formatCurrency(goal.TargetAmount)}</span>
+                  <span style={{ color: 'var(--text-muted)' }}>{pct}%</span>
+                </div>
+                <div className="metric-change" style={{ color: 'var(--text-secondary)', marginTop: '4px' }}>
+                  {daysLeft > 0 ? `${daysLeft} ${t('ngày còn lại')}` : t('Đã hết hạn')}
+                </div>
+              </>
+            );
+          })()}
         </div>
       </div>
 
@@ -2176,6 +2227,301 @@ function PortfolioPage({
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+// 5. GOALS PAGE COMPONENT
+function GoalsPage({ goals, userId, totalCurrent, onRefresh }: {
+  goals: any[];
+  userId: string;
+  totalCurrent: number;
+  onRefresh: () => Promise<void>;
+}) {
+  const { t } = useLanguage();
+  const [showModal, setShowModal] = useState(false);
+  const [editGoal, setEditGoal] = useState<any>(null);
+  const [formName, setFormName] = useState('');
+  const [formAmount, setFormAmount] = useState(0);
+  const [formStartDate, setFormStartDate] = useState('');
+  const [formDueDate, setFormDueDate] = useState('');
+
+  const openCreate = () => {
+    setEditGoal(null);
+    setFormName('');
+    setFormAmount(0);
+    setFormStartDate('');
+    setFormDueDate('');
+    setShowModal(true);
+  };
+
+  const openEdit = (goal: any) => {
+    setEditGoal(goal);
+    setFormName(goal.Name);
+    setFormAmount(goal.TargetAmount);
+    setFormStartDate(goal.StartDate ? goal.StartDate.split('T')[0] : '');
+    setFormDueDate(goal.DueDate ? goal.DueDate.split('T')[0] : '');
+    setShowModal(true);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const payload = {
+        Name: formName,
+        TargetAmount: formAmount,
+        StartDate: formStartDate ? new Date(formStartDate).toISOString() : undefined,
+        DueDate: new Date(formDueDate).toISOString()
+      };
+      if (editGoal) {
+        await goalService.update(editGoal.Id, payload, userId);
+      } else {
+        await goalService.create(payload, userId);
+      }
+      setShowModal(false);
+      await onRefresh();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm(t('Bạn có chắc chắn muốn xóa mục tiêu này?'))) return;
+    try {
+      await goalService.delete(id);
+      await onRefresh();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleStart = async (id: string) => {
+    try {
+      await goalService.start(id);
+      await onRefresh();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleCancel = async (id: string) => {
+    if (!window.confirm(t('Bạn có chắc chắn muốn hủy mục tiêu này?'))) return;
+    try {
+      await goalService.cancel(id);
+      await onRefresh();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    const styles: Record<string, { bg: string; color: string; label: string }> = {
+      NotStarted: { bg: 'rgba(100,116,139,0.15)', color: '#94a3b8', label: t('Chưa bắt đầu') },
+      Processing: { bg: 'rgba(99,102,241,0.15)', color: '#6366f1', label: t('Đang thực hiện') },
+      Successed: { bg: 'rgba(16,185,129,0.15)', color: '#10b981', label: t('Thành công') },
+      Failed: { bg: 'rgba(244,63,94,0.15)', color: '#f43f5e', label: t('Thất bại') },
+      Cancelled: { bg: 'rgba(100,116,139,0.15)', color: '#64748b', label: t('Đã hủy') },
+    };
+    const s = styles[status] || styles.NotStarted;
+    return (
+      <span style={{ fontSize: '0.75rem', padding: '3px 10px', borderRadius: '10px', fontWeight: 600, background: s.bg, color: s.color }}>
+        {s.label}
+      </span>
+    );
+  };
+
+  const getProgressPercent = (goal: any) => {
+    if (goal.TargetAmount <= 0) return 0;
+    return Math.min(100, Math.round((totalCurrent / goal.TargetAmount) * 100));
+  };
+
+  const getTimeRemaining = (dueDate: string) => {
+    const now = new Date();
+    const due = new Date(dueDate);
+    const diff = due.getTime() - now.getTime();
+    if (diff <= 0) return t('Đã hết hạn');
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    if (days >= 365) return `${Math.floor(days / 365)} năm ${Math.floor((days % 365) / 30)} tháng`;
+    if (days >= 30) return `${Math.floor(days / 30)} tháng ${days % 30} ngày`;
+    return `${days} ngày`;
+  };
+
+  // Sort goals: processing first, then by due date
+  const sortedGoals = [...goals].sort((a, b) => {
+    const statusOrder: Record<string, number> = { Processing: 0, NotStarted: 1, Successed: 2, Failed: 3, Cancelled: 4 };
+    const aOrder = statusOrder[a.Status] ?? 99;
+    const bOrder = statusOrder[b.Status] ?? 99;
+    if (aOrder !== bOrder) return aOrder - bOrder;
+    return new Date(a.DueDate).getTime() - new Date(b.DueDate).getTime();
+  });
+
+  return (
+    <div>
+      <div className="tab-header">
+        <div>
+          <h2 className="section-title">{t('Thiết lập mục tiêu')}</h2>
+          <p className="section-desc">{t('Quản lý mục tiêu tài chính')}</p>
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button className="btn btn-primary" onClick={openCreate} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            {t('Thêm mục tiêu')}
+          </button>
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid-3" style={{ marginBottom: '20px' }}>
+        <div className="card">
+          <div className="metric-header">
+            <span className="metric-title">{t('Tổng số mục tiêu')}</span>
+          </div>
+          <div className="metric-value" style={{ fontSize: '1.8rem' }}>{goals.length}</div>
+        </div>
+        <div className="card">
+          <div className="metric-header">
+            <span className="metric-title">{t('Số tiền hiện có')}</span>
+          </div>
+          <div className="metric-value" style={{ fontSize: '1.8rem', color: 'var(--success)' }}>{formatCurrency(totalCurrent)}</div>
+        </div>
+        <div className="card">
+          <div className="metric-header">
+            <span className="metric-title">{t('Mục tiêu gần nhất')}</span>
+          </div>
+          <div className="metric-value" style={{ fontSize: '1.5rem' }}>
+            {sortedGoals.find(g => g.Status === 'Processing')?.Name || sortedGoals.find(g => g.Status === 'NotStarted')?.Name || '--'}
+          </div>
+        </div>
+      </div>
+
+      {/* Goals List */}
+      <div className="table-container">
+        <table className="custom-table">
+          <thead>
+            <tr>
+              <th>{t('Tên mục tiêu')}</th>
+              <th style={{ textAlign: 'right' }}>{t('Số tiền mục tiêu')}</th>
+              <th style={{ textAlign: 'right' }}>{t('Ngày bắt đầu')}</th>
+              <th style={{ textAlign: 'right' }}>{t('Ngày đến hạn')}</th>
+              <th style={{ textAlign: 'right' }}>{t('Thời gian còn lại')}</th>
+              <th style={{ textAlign: 'right' }}>{t('Tiến độ')}</th>
+              <th style={{ textAlign: 'center' }}>{t('Trạng thái')}</th>
+              <th style={{ textAlign: 'center', width: '160px' }}>{t('Hành động')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sortedGoals.length === 0 ? (
+              <tr>
+                <td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '30px' }}>
+                  {t('Chưa có mục tiêu nào. Hãy tạo mục tiêu mới!')}
+                </td>
+              </tr>
+            ) : (
+              sortedGoals.map((goal) => {
+                const progress = getProgressPercent(goal);
+                return (
+                  <tr key={goal.Id}>
+                    <td style={{ fontWeight: 600 }}>{goal.Name}</td>
+                    <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)' }}>{formatCurrency(goal.TargetAmount)}</td>
+                    <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)' }}>
+                      {goal.StartDate ? new Date(goal.StartDate).toLocaleDateString('en-GB') : '--'}
+                    </td>
+                    <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)' }}>
+                      {goal.DueDate ? new Date(goal.DueDate).toLocaleDateString('en-GB') : '--'}
+                    </td>
+                    <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', color: goal.Status === 'Failed' || goal.Status === 'Cancelled' ? 'var(--danger)' : 'var(--text-secondary)' }}>
+                      {goal.Status === 'Cancelled' ? '--' : getTimeRemaining(goal.DueDate)}
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-end' }}>
+                        <div style={{ flex: 1, maxWidth: '120px', height: '6px', background: 'rgba(255,255,255,0.06)', borderRadius: '3px', overflow: 'hidden' }}>
+                          <div style={{
+                            width: `${progress}%`, height: '100%', borderRadius: '3px', transition: 'width 0.5s ease',
+                            background: goal.Status === 'Successed' ? '#10b981' : goal.Status === 'Failed' ? '#f43f5e' : progress >= 100 ? '#10b981' : '#6366f1'
+                          }} />
+                        </div>
+                        <span style={{ fontFamily: 'var(--font-display)', fontSize: '0.85rem', fontWeight: 600, minWidth: '45px' }}>{progress}%</span>
+                      </div>
+                    </td>
+                    <td style={{ textAlign: 'center' }}>{getStatusBadge(goal.Status)}</td>
+                    <td style={{ textAlign: 'center' }}>
+                      <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                        {goal.Status === 'NotStarted' && (
+                          <button className="btn-icon" onClick={() => handleStart(goal.Id)} title={t('Bắt đầu')}
+                            style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '4px', padding: '4px 8px', color: '#10b981', fontSize: '0.7rem', fontWeight: 600 }}>
+                            {t('Bắt đầu')}
+                          </button>
+                        )}
+                        {goal.Status === 'Processing' && (
+                          <button className="btn-icon" onClick={() => handleCancel(goal.Id)} title={t('Hủy mục tiêu')}
+                            style={{ background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.3)', borderRadius: '4px', padding: '4px 8px', color: '#f43f5e', fontSize: '0.7rem', fontWeight: 600 }}>
+                            {t('Hủy')}
+                          </button>
+                        )}
+                        <button className="btn-icon edit" onClick={() => openEdit(goal)} title={t('Sửa')}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+                          </svg>
+                        </button>
+                        <button className="btn-icon delete" onClick={() => handleDelete(goal.Id)} title={t('Xóa')}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                          </svg>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Goal Modal */}
+      {showModal && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h3 className="modal-title">{editGoal ? t('Cập nhật mục tiêu') : t('Tạo mục tiêu mới')}</h3>
+              <button className="modal-close" onClick={() => setShowModal(false)}>✕</button>
+            </div>
+            <form onSubmit={handleSave}>
+              <div className="form-group">
+                <label className="form-label">{t('Tên mục tiêu')}</label>
+                <input type="text" className="form-control" required
+                  value={formName}
+                  onChange={(e) => setFormName(e.target.value)}
+                  placeholder={t('Nhập tên mục tiêu')} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">{t('Số tiền mục tiêu')}</label>
+                <MoneyInput className="form-control" value={formAmount}
+                  onChange={(val) => setFormAmount(val)}
+                  placeholder={t('Nhập số tiền mục tiêu')} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">{t('Ngày bắt đầu')}</label>
+                <input type="date" className="form-control"
+                  value={formStartDate}
+                  onChange={(e) => setFormStartDate(e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">{t('Ngày đến hạn')}</label>
+                <input type="date" className="form-control" required
+                  value={formDueDate}
+                  onChange={(e) => setFormDueDate(e.target.value)} />
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>{t('Hủy')}</button>
+                <button type="submit" className="btn btn-primary">{t('Lưu lại')}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

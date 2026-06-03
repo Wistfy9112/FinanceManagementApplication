@@ -30,6 +30,7 @@ builder.Services.AddScoped<IAssetsRepository, AssetsRepository>();
 builder.Services.AddScoped<IPortfolioRepository, PortfolioRepository>();
 builder.Services.AddScoped<IPortfolioAllocationRepository, PortfolioAllocationRepository>();
 builder.Services.AddScoped<ICashFlowGrowthService, CashFlowGrowthService>();
+builder.Services.AddScoped<IGoalRepository, GoalRepository>();
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(
         builder.Configuration.GetConnectionString("DefaultConnection")
