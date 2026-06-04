@@ -36,11 +36,21 @@ builder.Services.AddScoped<IPortfolioAllocationRepository, PortfolioAllocationRe
 builder.Services.AddScoped<ICashFlowGrowthService, CashFlowGrowthService>();
 builder.Services.AddScoped<IGoalRepository, GoalRepository>();
 builder.Services.AddScoped<IDebtRepository, DebtRepository>();
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseNpgsql(
-        builder.Configuration.GetConnectionString("DefaultConnection")
-    )
-);
+var useInMemory = builder.Configuration.GetValue<bool>("UseInMemoryDatabase");
+if (useInMemory)
+{
+    builder.Services.AddDbContext<ApplicationDbContext>(options =>
+        options.UseInMemoryDatabase("FinancialManagementTestDb")
+            .ConfigureWarnings(warnings => warnings.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning)));
+}
+else
+{
+    builder.Services.AddDbContext<ApplicationDbContext>(options =>
+        options.UseNpgsql(
+            builder.Configuration.GetConnectionString("DefaultConnection")
+        )
+    );
+}
 
 builder.Services.AddCors(options =>
 {
@@ -75,3 +85,5 @@ app.MapControllers();
 app.MapGet("/api/health", () => Results.Ok(new { status = "healthy" }));
 
 app.Run();
+
+public partial class Program { }

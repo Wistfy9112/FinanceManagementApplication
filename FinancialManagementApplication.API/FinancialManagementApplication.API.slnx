@@ -3,4 +3,5 @@
   <Project Path="FinancialManagementApplication.Application/FinancialManagementApplication.Application.csproj" />
   <Project Path="FinancialManagementApplication.Domain/FinancialManagementApplication.Domain.csproj" />
   <Project Path="FinancialManagementApplication.Infrastructure/FinancialManagementApplication.Infrastructure.csproj" />
+  <Project Path="FinancialManagementApplication.Tests/FinancialManagementApplication.Tests.csproj" />
 </Solution>

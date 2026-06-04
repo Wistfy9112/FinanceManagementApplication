@@ -25,7 +25,11 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
 
         public async Task<bool> DeleteAsync(Guid id)
         {
-            return await _context.PortfolioAllocations.Where(x => x.Id == id).ExecuteDeleteAsync() > 0;
+            var allocation = await _context.PortfolioAllocations.FindAsync(id);
+            if (allocation == null) return false;
+            _context.PortfolioAllocations.Remove(allocation);
+            await _context.SaveChangesAsync();
+            return true;
         }
 
         public async Task<IEnumerable<PortfolioAllocation>> GetAllByPortfolioIdAsync(Guid portfolioId)
