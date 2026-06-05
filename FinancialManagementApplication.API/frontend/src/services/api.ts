@@ -229,9 +229,10 @@ export const authService = {
     
     const decoded = decodeJwt(data.token);
     const mockUser = { 
-      id: decoded?.id || 'u1', 
-      email: decoded?.email || email, 
-      displayName: decoded?.displayName || 'Member' 
+      id: decoded?.id || data.accountId || 'u1', 
+      email: data.email || decoded?.email || email, 
+      displayName: data.displayName || decoded?.displayName || 'Member',
+      createdAt: data.createAt
     };
     
     localStorage.setItem('fm_token', data.token);
@@ -256,9 +257,10 @@ export const authService = {
     
     const decoded = decodeJwt(data.token);
     const mockUser = { 
-      id: decoded?.id || 'u1', 
-      email: decoded?.email || email, 
-      displayName: decoded?.displayName || displayName 
+      id: decoded?.id || data.accountId || 'u1', 
+      email: data.email || decoded?.email || email, 
+      displayName: data.displayName || decoded?.displayName || displayName,
+      createdAt: data.createAt
     };
     
     localStorage.setItem('fm_token', data.token);
@@ -279,7 +281,7 @@ export const authService = {
     setStorage('fm_target_reduction', 500000);
     setStorage('fm_exclusions', ['al12']);
 
-    const mockUser = { id: 'u1', email: 'demo@example.com', displayName: 'Demo User' };
+    const mockUser = { id: 'u1', email: 'demo@example.com', displayName: 'Demo User', createdAt: new Date().toISOString() };
     localStorage.setItem('fm_token', 'mock-jwt-token-12345');
     localStorage.setItem('fm_user', JSON.stringify(mockUser));
     triggerStatusChange();
@@ -289,6 +291,52 @@ export const authService = {
   logout: () => {
     localStorage.removeItem('fm_token');
     localStorage.removeItem('fm_user');
+  },
+
+  getProfile: async (accountId: string): Promise<any> => {
+    await checkConnection();
+    if (isDemoMode) {
+      const raw = getLoggedUser();
+      return { accountId: raw?.id || accountId, email: raw?.email || 'demo@example.com', displayName: raw?.displayName || 'Demo User', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    }
+    const res = await fetch(`${API_URL}/auth/profile/${accountId}`, { headers: getAuthHeader() });
+    if (!res.ok) throw new Error('Failed to get profile');
+    return res.json();
+  },
+
+  updateProfile: async (accountId: string, displayName: string): Promise<any> => {
+    await checkConnection();
+    if (isDemoMode) {
+      const raw = getLoggedUser();
+      const updated = { ...raw, displayName };
+      localStorage.setItem('fm_user', JSON.stringify(updated));
+      triggerStatusChange();
+      return { accountId, email: raw?.email || '', displayName, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    }
+    const res = await fetch(`${API_URL}/auth/profile/${accountId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify({ displayName })
+    });
+    if (!res.ok) throw new Error('Failed to update profile');
+    return res.json();
+  },
+
+  changePassword: async (accountId: string, currentPassword: string, newPassword: string): Promise<void> => {
+    await checkConnection();
+    if (isDemoMode) {
+      if (currentPassword !== 'demo123') throw new Error('Current password is incorrect');
+      return;
+    }
+    const res = await fetch(`${API_URL}/auth/change-password/${accountId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify({ currentPassword, newPassword })
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.message || 'Failed to change password');
+    }
   }
 };
 
@@ -1278,7 +1326,7 @@ export const debtService = {
       if (idx === -1) throw new Error('Debt not found.');
       if (list[idx].IsClosed) throw new Error('Cannot add payment to a closed debt.');
 
-      const newPayment = {
+      const newPayment: Record<string, any> = {
         Id: mockId,
         DebtId: debtId,
         PaymentDate: payment.PaymentDate,

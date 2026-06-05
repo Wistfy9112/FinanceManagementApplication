@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { useToast } from "./components/ui/Toast";
 import { 
@@ -70,7 +70,7 @@ const formatDateTime = (iso: string) => {
 
 export default function App() {
   const [user, setUser] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'assets' | 'portfolio' | 'goals' | 'debts'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'assets' | 'portfolio' | 'goals' | 'debts' | 'profile'>('dashboard');
   const [isDemo, setIsDemo] = useState<boolean>(true);
   const { t, locale, setLocale } = useLanguage();
   
@@ -109,6 +109,19 @@ export default function App() {
   });
 
   const [setupSuccessModal, setSetupSuccessModal] = useState<boolean>(false);
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const profileDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close profile dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (profileDropdownRef.current && !profileDropdownRef.current.contains(e.target as Node)) {
+        setProfileDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Check connection and fetch initial data on mount
   useEffect(() => {
@@ -619,6 +632,12 @@ export default function App() {
             >
               {t('Quản lý nợ')}
             </button>
+            <button 
+              className={`nav-link ${activeTab === 'profile' ? 'active' : ''}`}
+              onClick={() => setActiveTab('profile')}
+            >
+              {t('Thông tin cá nhân')}
+            </button>
           </div>
 
           <div className="nav-right">
@@ -637,16 +656,32 @@ export default function App() {
               </div>
             )}
             
-            <div className="user-profile">
-              <div className="user-avatar">
-                {user.displayName ? user.displayName[0].toUpperCase() : 'U'}
-              </div>
-              <span style={{ fontWeight: 600 }}>{user.displayName}</span>
-              <button className="logout-btn" onClick={handleLogout} title={t('Đăng xuất')}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" strokeLinecap="round" strokeLinejoin="round"/>
+            <div className="user-profile" ref={profileDropdownRef} style={{ position: 'relative', cursor: 'pointer' }}>
+              <div onClick={() => setProfileDropdownOpen(p => !p)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div className="user-avatar">
+                  {user.displayName ? user.displayName[0].toUpperCase() : 'U'}
+                </div>
+                <span style={{ fontWeight: 600 }}>{user.displayName}</span>
+                <svg className={`profile-dropdown-arrow ${profileDropdownOpen ? 'open' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
-              </button>
+              </div>
+              {profileDropdownOpen && (
+                <div className="profile-dropdown-menu">
+                  <div className="profile-dropdown-header">
+                    <div className="profile-dropdown-name">{user.displayName}</div>
+                    <div className="profile-dropdown-email">{user.email}</div>
+                  </div>
+                  <button className="profile-dropdown-item" onClick={() => { setProfileDropdownOpen(false); setActiveTab('profile'); }}>
+                    <svg className="profile-dropdown-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    {t('Thông tin cá nhân')}
+                  </button>
+                  <button className="profile-dropdown-item danger" onClick={handleLogout}>
+                    <svg className="profile-dropdown-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    {t('Đăng xuất')}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -740,6 +775,10 @@ export default function App() {
             userId={user?.id}
             onRefresh={() => { loadData(); }}
           />
+        )}
+
+        {activeTab === 'profile' && (
+          <ProfilePage user={user} onUserUpdate={(u) => setUser({ ...user, ...u })} />
         )}
       </main>
 
@@ -2597,7 +2636,7 @@ function MoneyInput({ value, onChange, className = '', style, placeholder }: {
 
 // 5. ALLOCATION HISTORY SECTION COMPONENT
 function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; onRefresh: () => void }) {
-  const { t, locale } = useLanguage();
+  const { t } = useLanguage();
   const [formName, setFormName] = useState('');
   const [formTotalDebt, setFormTotalDebt] = useState('');
   const [formBorrowDate, setFormBorrowDate] = useState('');
@@ -2665,7 +2704,7 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
   const handleDelete = async (id: string) => {
     if (!window.confirm(t('Xác nhận xóa sổ nợ này?'))) return;
     try {
-      await debtService.delete(id, userId);
+      await debtService.delete(id);
       onRefresh();
     } catch (err: any) {
       alert(err.message || t('Có lỗi xảy ra'));
@@ -2675,7 +2714,7 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
   const handleClose = async (id: string) => {
     if (!window.confirm(t('Xác nhận đóng sổ nợ này?'))) return;
     try {
-      await debtService.close(id, userId);
+      await debtService.close(id);
       onRefresh();
     } catch (err: any) {
       alert(err.message || t('Có lỗi xảy ra'));
@@ -2701,9 +2740,10 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
     }
     try {
       await debtService.addPayment(payingDebt.Id, {
+        PaymentDate: new Date().toISOString().split('T')[0],
         Amount: amount,
         Note: paymentNote || undefined
-      }, userId);
+      });
       setShowPaymentModal(false);
       setPayingDebt(null);
       onRefresh();
@@ -3059,6 +3099,181 @@ function AllocationHistorySection({ records, onRestore, formatDateTime, formatCu
             {t('Chọn một bản ghi từ danh sách bên trái để xem chi tiết')}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// 6. PROFILE PAGE COMPONENT
+function ProfilePage({ user, onUserUpdate }: { user: any; onUserUpdate: (u: any) => void }) {
+  const { t } = useLanguage();
+  const { addToast } = useToast();
+
+  const [displayName, setDisplayName] = useState(user?.displayName || '');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [showPwd, setShowPwd] = useState({ current: false, new: false, confirm: false });
+
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!displayName.trim()) return;
+    setProfileLoading(true);
+    try {
+      const api = await import('./services/api');
+      const result = await api.authService.updateProfile(user?.id, displayName.trim());
+      onUserUpdate(result);
+      addToast({ title: t('Cập nhật hồ sơ thành công!'), variant: 'success' });
+    } catch (err: any) {
+      addToast({ title: t('Lỗi cập nhật hồ sơ'), description: err.message, variant: 'error' });
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) {
+      addToast({ title: t('Mật khẩu không khớp'), variant: 'error' });
+      return;
+    }
+    if (!currentPassword || !newPassword) return;
+    setPasswordLoading(true);
+    try {
+      const api = await import('./services/api');
+      await api.authService.changePassword(user?.id, currentPassword, newPassword);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      addToast({ title: t('Đổi mật khẩu thành công!'), variant: 'success' });
+    } catch (err: any) {
+      addToast({ title: t('Lỗi đổi mật khẩu'), description: err.message, variant: 'error' });
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+      <div style={{ marginBottom: '24px' }}>
+        <h2 style={{ fontSize: '1.4rem', fontWeight: 700, margin: '0 0 4px' }}>{t('Hồ sơ người dùng')}</h2>
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>
+          {t('Quản lý thông tin cá nhân và bảo mật')}
+        </p>
+      </div>
+
+      {/* Account Info */}
+      <div className="card" style={{ marginBottom: '20px' }}>
+        <div className="card-header">
+          <h3 className="card-title">{t('Thông tin tài khoản')}</h3>
+        </div>
+        <div className="card-body">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div>
+              <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Email</label>
+              <div style={{ fontSize: '0.95rem', fontWeight: 500, padding: '8px 0' }}>{user?.email || '-'}</div>
+            </div>
+            <div>
+              <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{t('Ngày tạo')}</label>
+              <div style={{ fontSize: '0.95rem', fontWeight: 500, padding: '8px 0' }}>{user?.createdAt || '-'}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Update Display Name */}
+      <div className="card" style={{ marginBottom: '20px' }}>
+        <div className="card-header">
+          <h3 className="card-title">{t('Tên hiển thị')}</h3>
+        </div>
+        <div className="card-body">
+          <form onSubmit={handleUpdateProfile}>
+            <div className="form-group">
+              <label className="form-label">{t('Tên hiển thị')}</label>
+              <input
+                type="text"
+                className="form-control"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder={t('Nhập tên hiển thị mới')}
+                required
+              />
+            </div>
+            <button type="submit" className="btn btn-primary" disabled={profileLoading}>
+              {profileLoading ? '...' : t('Cập nhật')}
+            </button>
+          </form>
+        </div>
+      </div>
+
+      {/* Change Password */}
+      <div className="card">
+        <div className="card-header">
+          <h3 className="card-title">{t('Đổi mật khẩu')}</h3>
+        </div>
+        <div className="card-body">
+          <form onSubmit={handleChangePassword}>
+            <div className="form-group">
+              <label className="form-label">{t('Mật khẩu hiện tại')}</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showPwd.current ? 'text' : 'password'}
+                  className="form-control"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder={t('Nhập mật khẩu hiện tại')}
+                  required
+                  style={{ paddingRight: '40px' }}
+                />
+                <button type="button" onClick={() => setShowPwd(p => ({ ...p, current: !p.current }))}
+                  style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                  {showPwd.current ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">{t('Mật khẩu mới')}</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showPwd.new ? 'text' : 'password'}
+                  className="form-control"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder={t('Nhập mật khẩu mới')}
+                  required
+                  style={{ paddingRight: '40px' }}
+                />
+                <button type="button" onClick={() => setShowPwd(p => ({ ...p, new: !p.new }))}
+                  style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                  {showPwd.new ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">{t('Xác nhận mật khẩu mới')}</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showPwd.confirm ? 'text' : 'password'}
+                  className="form-control"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder={t('Nhập lại mật khẩu mới')}
+                  required
+                  style={{ paddingRight: '40px' }}
+                />
+                <button type="button" onClick={() => setShowPwd(p => ({ ...p, confirm: !p.confirm }))}
+                  style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                  {showPwd.confirm ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
+            <button type="submit" className="btn btn-primary" disabled={passwordLoading}>
+              {passwordLoading ? '...' : t('Đổi mật khẩu')}
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   );

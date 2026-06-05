@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, act } from '@testing-library/react'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { ToastProvider, useToast, type ToastOptions } from '../components/ui/Toast'
 
 beforeEach(() => {
@@ -13,11 +13,6 @@ afterEach(() => {
 function TestButton({ options }: { options: ToastOptions }) {
   const { addToast } = useToast()
   return <button onClick={() => addToast(options)}>Show Toast</button>
-}
-
-function TestRemoveButton({ id }: { id: string }) {
-  const { removeToast } = useToast()
-  return <button onClick={() => removeToast(id)}>Remove</button>
 }
 
 function TestAll() {
@@ -129,7 +124,6 @@ describe('removeToast', () => {
       return (
         <div>
           <button data-testid="add" onClick={() => {
-            const id = crypto.randomUUID()
             addToast({ title: 'To Remove' })
           }}>Add</button>
           {toasts.map(t => (

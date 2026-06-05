@@ -2,12 +2,7 @@
 using FinanceManagementApplication.Domain.Entities;
 using FinancialManagementApplication.Application.DTOs.Auth;
 using FinancialManagementApplication.Application.Interface.Securitiy;
-using System;
-using System.Collections.Generic;
-using System.Text;
 using BCrypt.Net;
-using FinancialManagementApplication.Application.Interface.Repositories;
-using FinancialManagementApplication.Domain.Entities;
 
 namespace FinancialManagementApplication.Application.Services
 {
@@ -38,13 +33,15 @@ namespace FinancialManagementApplication.Application.Services
                 UpdateAt = DateTime.UtcNow,
             };
 
-
-
             await _repo.AddAsync(account);
 
             return new AuthResponse
             {
-                Token = _jwt.Generate(account)
+                AccountId = account.AccountID,
+                Email = account.email,
+                DisplayName = account.displayName ?? string.Empty,
+                Token = _jwt.Generate(account),
+                CreateAt = account.CreateAt
             };
         }
 
@@ -58,8 +55,61 @@ namespace FinancialManagementApplication.Application.Services
 
             return new AuthResponse
             {
-                Token = _jwt.Generate(account)
+                AccountId = account.AccountID,
+                Email = account.email,
+                DisplayName = account.displayName ?? string.Empty,
+                Token = _jwt.Generate(account),
+                CreateAt = account.CreateAt
             };
+        }
+
+        public async Task<UserProfileDTO> GetProfileAsync(Guid accountId)
+        {
+            var account = await _repo.GetByIdAsync(accountId)
+                ?? throw new Exception("Account not found");
+
+            return new UserProfileDTO
+            {
+                AccountId = account.AccountID,
+                Email = account.email,
+                DisplayName = account.displayName,
+                CreateAt = account.CreateAt,
+                UpdateAt = account.UpdateAt
+            };
+        }
+
+        public async Task<UserProfileDTO> UpdateProfileAsync(Guid accountId, UpdateProfileDTO request)
+        {
+            var account = await _repo.GetByIdAsync(accountId)
+                ?? throw new Exception("Account not found");
+
+            account.displayName = request.DisplayName;
+            account.UpdateAt = DateTime.UtcNow;
+
+            await _repo.UpdateAsync(account);
+
+            return new UserProfileDTO
+            {
+                AccountId = account.AccountID,
+                Email = account.email,
+                DisplayName = account.displayName,
+                CreateAt = account.CreateAt,
+                UpdateAt = account.UpdateAt
+            };
+        }
+
+        public async Task ChangePasswordAsync(Guid accountId, ChangePasswordDTO request)
+        {
+            var account = await _repo.GetByIdAsync(accountId)
+                ?? throw new Exception("Account not found");
+
+            if (!BCrypt.Net.BCrypt.Verify(request.CurrentPassword, account.passwordHash))
+                throw new Exception("Current password is incorrect");
+
+            account.passwordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+            account.UpdateAt = DateTime.UtcNow;
+
+            await _repo.UpdateAsync(account);
         }
     }
 }

@@ -19,9 +19,20 @@ public class AccountRepository : IAccountRepository
         return await _context.Accounts.FirstOrDefaultAsync(x => x.email == email);
     }
 
+    public async Task<Account?> GetByIdAsync(Guid id)
+    {
+        return await _context.Accounts.FirstOrDefaultAsync(x => x.AccountID == id);
+    }
+
     public async Task AddAsync(Account account)
     {
         await _context.Accounts.AddAsync(account);
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task UpdateAsync(Account account)
+    {
+        _context.Accounts.Update(account);
         await _context.SaveChangesAsync();
     }
 }
