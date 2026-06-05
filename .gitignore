@@ -56,3 +56,4 @@ nunit-*.xml
 /FinancialManagementApplication.API/.vs
 /FinancialManagementApplication.API/FinancialManagementApplication.API/appsettings.json
 /FinancialManagementApplication.API/node_modules
+/FinancialManagementApplication.API/CoverageReport

@@ -266,6 +266,98 @@ public class CashFlowGrowthServiceTests
 
     #endregion
 
+    #region Edge Cases - Current Year Update
+
+    [Fact]
+    public async Task GetGrowthDataAsync_Yearly_WithCurrentYearSnapshot_AppliesCurrentValues()
+    {
+        var accountId = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+
+        var snapshots = new List<SnapshotSummary>
+        {
+            new() { RecordedAt = new DateTime(now.Year, 1, 15), TotalValue = 100_000_000, TotalInitialValue = 80_000_000 },
+            new() { RecordedAt = new DateTime(now.Year - 1, 12, 31), TotalValue = 90_000_000, TotalInitialValue = 70_000_000 },
+        };
+        SetupSnapshots(accountId, snapshots);
+        SetupCurrentValues(accountId, 150_000_000, 120_000_000);
+
+        var result = await _sut.GetGrowthDataAsync(accountId, "yearly");
+
+        var currentYearData = result.Data.First(d => d.Period == now.Year.ToString());
+        currentYearData.Value.Should().Be(150_000_000);
+        currentYearData.InitialValue.Should().Be(120_000_000);
+    }
+
+    [Fact]
+    public async Task GetGrowthDataAsync_Yearly_WithCurrentYearAndPreviousData_CalculatesChange()
+    {
+        var accountId = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+
+        var snapshots = new List<SnapshotSummary>
+        {
+            new() { RecordedAt = new DateTime(now.Year, 6, 1), TotalValue = 100_000_000, TotalInitialValue = 80_000_000 },
+            new() { RecordedAt = new DateTime(now.Year - 1, 12, 31), TotalValue = 70_000_000, TotalInitialValue = 50_000_000 },
+        };
+        SetupSnapshots(accountId, snapshots);
+        SetupCurrentValues(accountId, 100_000_000, 80_000_000);
+
+        var result = await _sut.GetGrowthDataAsync(accountId, "yearly");
+
+        var currentYearData = result.Data.First(d => d.Period == now.Year.ToString());
+        currentYearData.Value.Should().Be(100_000_000);
+        currentYearData.ChangeFromPrevious.Should().Be(30_000_000);
+        currentYearData.ChangePercentage.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task GetGrowthDataAsync_Yearly_OnlySingleCurrentYearSnapshot_AppliesCurrentValues()
+    {
+        var accountId = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+
+        var snapshots = new List<SnapshotSummary>
+        {
+            new() { RecordedAt = new DateTime(now.Year, 1, 1), TotalValue = 100_000_000, TotalInitialValue = 80_000_000 },
+        };
+        SetupSnapshots(accountId, snapshots);
+        SetupCurrentValues(accountId, 120_000_000, 90_000_000);
+
+        var result = await _sut.GetGrowthDataAsync(accountId, "yearly");
+
+        result.Data.Should().HaveCount(1);
+        result.Data[0].Value.Should().Be(120_000_000);
+        result.Data[0].InitialValue.Should().Be(90_000_000);
+        result.Data[0].ChangeFromPrevious.Should().BeNull();
+        result.Data[0].ChangePercentage.Should().BeNull();
+    }
+
+    #endregion
+
+    #region Edge Cases - Initial Value Propagation
+
+    [Fact]
+    public async Task GetGrowthDataAsync_Last12Months_WithMissingInitialValue_CarriesForward()
+    {
+        var accountId = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+
+        var snapshots = new List<SnapshotSummary>
+        {
+            new() { RecordedAt = new DateTime(now.Year, now.Month - 2, 1), TotalValue = 80_000_000, TotalInitialValue = 0 },
+        };
+        SetupSnapshots(accountId, snapshots);
+        SetupCurrentValues(accountId, 100_000_000, 90_000_000);
+
+        var result = await _sut.GetGrowthDataAsync(accountId, "last12months");
+
+        var dataWithMissingInit = result.Data.First(d => d.Value == 80_000_000);
+        dataWithMissingInit.InitialValue.Should().Be(90_000_000);
+    }
+
+    #endregion
+
     #region Helpers
 
     private void SetupSnapshots(Guid accountId, List<SnapshotSummary> snapshots)
