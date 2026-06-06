@@ -1,4 +1,5 @@
 using FinancialManagementApplication.Application.DTOs.Asset;
+using FinancialManagementApplication.Application.DTOs.Auth;
 using FinancialManagementApplication.Application.DTOs.Debt;
 using FinancialManagementApplication.Application.DTOs.Goal;
 using FinancialManagementApplication.Application.DTOs.Portfolio;
@@ -168,5 +169,45 @@ public class DtoTests
 
         dto.Payments.Should().NotBeNull();
         dto.Payments.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void UpdateProfileDTO_ShouldSetDisplayName()
+    {
+        var dto = new UpdateProfileDTO { DisplayName = "New Name" };
+
+        dto.DisplayName.Should().Be("New Name");
+    }
+
+    [Fact]
+    public void ChangePasswordDTO_ShouldSetProperties()
+    {
+        var dto = new ChangePasswordDTO
+        {
+            CurrentPassword = "old",
+            NewPassword = "new"
+        };
+
+        dto.CurrentPassword.Should().Be("old");
+        dto.NewPassword.Should().Be("new");
+    }
+
+    [Fact]
+    public void UserProfileDTO_ShouldSetProperties()
+    {
+        var now = DateTime.UtcNow;
+        var dto = new UserProfileDTO
+        {
+            AccountId = Guid.NewGuid(),
+            Email = "user@test.com",
+            DisplayName = "Test User",
+            CreateAt = now,
+            UpdateAt = now
+        };
+
+        dto.Email.Should().Be("user@test.com");
+        dto.DisplayName.Should().Be("Test User");
+        dto.CreateAt.Should().Be(now);
+        dto.UpdateAt.Should().Be(now);
     }
 }
