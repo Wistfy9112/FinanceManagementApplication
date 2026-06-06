@@ -12,6 +12,7 @@ namespace FinancialManagementApplication.Application.DTOs.Debt
         public DateTime? DueDate { get; set; }
         public string? Note { get; set; }
         public string? Description { get; set; }
+        public decimal? InterestRate { get; set; }
         public string Type { get; set; }
         public bool IsClosed { get; set; }
         public DateTime CreatedAt { get; set; }

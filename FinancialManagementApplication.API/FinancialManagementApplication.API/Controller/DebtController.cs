@@ -46,6 +46,7 @@ namespace FinancialManagementApplication.API.Controller
                 DueDate = dto.DueDate,
                 Note = dto.Note,
                 Description = dto.Description,
+                InterestRate = dto.InterestRate,
                 Type = dto.Type,
                 IsClosed = false,
                 CreatedAt = DateTime.UtcNow,
@@ -70,6 +71,7 @@ namespace FinancialManagementApplication.API.Controller
             debt.DueDate = dto.DueDate;
             debt.Note = dto.Note;
             debt.Description = dto.Description;
+            debt.InterestRate = dto.InterestRate;
             debt.Type = dto.Type;
             debt.UpdatedAt = DateTime.UtcNow;
 

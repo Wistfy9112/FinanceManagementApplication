@@ -632,12 +632,7 @@ export default function App() {
             >
               {t('Quản lý nợ')}
             </button>
-            <button 
-              className={`nav-link ${activeTab === 'profile' ? 'active' : ''}`}
-              onClick={() => setActiveTab('profile')}
-            >
-              {t('Thông tin cá nhân')}
-            </button>
+
           </div>
 
           <div className="nav-right">
@@ -2643,8 +2638,10 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
   const [formDueDate, setFormDueDate] = useState('');
   const [formNote, setFormNote] = useState('');
   const [formDescription, setFormDescription] = useState('');
+  const [formInterestRate, setFormInterestRate] = useState('');
   const [formType, setFormType] = useState('Borrowed');
   const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentDate, setPaymentDate] = useState('');
   const [paymentNote, setPaymentNote] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -2661,6 +2658,7 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
     setFormDueDate('');
     setFormNote('');
     setFormDescription('');
+    setFormInterestRate('');
     setFormType('Borrowed');
     setShowModal(true);
   };
@@ -2673,6 +2671,7 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
     setFormDueDate(debt.DueDate ? debt.DueDate.split('T')[0] : '');
     setFormNote(debt.Note || '');
     setFormDescription(debt.Description || '');
+    setFormInterestRate(debt.InterestRate != null ? String(debt.InterestRate) : '');
     setFormType(debt.Type || 'Borrowed');
     setShowModal(true);
   };
@@ -2680,6 +2679,7 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
   const handleSaveDebt = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const interestRate = formInterestRate !== '' ? parseFloat(formInterestRate.replace(/,/g, '')) : null;
       const payload: any = {
         Name: formName,
         TotalDebt: parseFloat(formTotalDebt.replace(/,/g, '')) || 0,
@@ -2687,6 +2687,7 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
         DueDate: formDueDate || undefined,
         Note: formNote || undefined,
         Description: formDescription || undefined,
+        InterestRate: interestRate,
         Type: formType
       };
       if (editingDebt) {
@@ -2724,6 +2725,7 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
   const openPaymentModal = (debt: any) => {
     setPayingDebt(debt);
     setPaymentAmount('');
+    setPaymentDate(new Date().toISOString().split('T')[0]);
     setPaymentNote('');
     setPayingError('');
     setShowPaymentModal(true);
@@ -2740,7 +2742,7 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
     }
     try {
       await debtService.addPayment(payingDebt.Id, {
-        PaymentDate: new Date().toISOString().split('T')[0],
+        PaymentDate: paymentDate,
         Amount: amount,
         Note: paymentNote || undefined
       });
@@ -2838,6 +2840,8 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
                 <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>{t('Tổng nợ')}</th>
                 <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>{t('Đã trả')}</th>
                 <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>{t('Còn lại')}</th>
+                <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>{t('Lãi suất')}</th>
+                <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>{t('Tiền lãi')}</th>
                 <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>{t('Ngày vay')}</th>
                 <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>{t('Hạn trả')}</th>
                 <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600 }}>{t('Ghi chú')}</th>
@@ -2851,6 +2855,27 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
                 const statusBadge = getStatusBadge(debt);
                 const typeBadge = getTypeBadge(debt.Type);
                 const isExpanded = expandedId === debt.Id;
+                const calcInterest = (d: any) => {
+                  if (d.InterestRate == null || d.InterestRate === 0 || !d.BorrowDate) return 0;
+                  const rate = d.InterestRate / 100;
+                  const payments = (d.Payments || []).slice().sort((a: any, b: any) => new Date(a.PaymentDate).getTime() - new Date(b.PaymentDate).getTime());
+                  let totalInterest = 0;
+                  let prevDate = new Date(d.BorrowDate);
+                  let balance = d.TotalDebt;
+                  for (const pmt of payments) {
+                    const pmtDate = new Date(pmt.PaymentDate);
+                    if (pmtDate <= prevDate) continue;
+                    const days = (pmtDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24);
+                    totalInterest += balance * rate * (days / 365);
+                    balance = pmt.RemainingAfterPayment ?? Math.max(0, balance - pmt.Amount);
+                    prevDate = pmtDate;
+                  }
+                  const now = new Date();
+                  const finalDays = Math.max(0, (now.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24));
+                  totalInterest += balance * rate * (finalDays / 365);
+                  return totalInterest;
+                };
+                const interestAmount = calcInterest(debt);
                 return (
                   <React.Fragment key={debt.Id}>
                     <tr id={`debt-row-${debt.Id}`} onClick={() => toggleExpand(debt.Id)} style={{ cursor: 'pointer', borderBottom: '1px solid var(--border)', background: isExpanded ? 'rgba(99,102,241,0.04)' : 'transparent' }}>
@@ -2861,6 +2886,10 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
                       <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-display)' }}>{formatInputNumber(debt.TotalDebt)}</td>
                       <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-display)', color: '#10b981' }}>{formatInputNumber(debt.PaidAmount || 0)}</td>
                       <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-display)', color: remaining > 0 ? '#ef4444' : '#10b981', fontWeight: 700 }}>{formatInputNumber(remaining)}</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                        {debt.InterestRate != null ? <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{debt.InterestRate}%</span> : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-display)', color: interestAmount > 0 ? '#f59e0b' : 'var(--text-muted)', fontWeight: 600 }}>{interestAmount > 0 ? formatInputNumber(Math.round(interestAmount)) : '—'}</td>
                       <td style={{ padding: '10px 12px', textAlign: 'center' }}>{formatDate(debt.BorrowDate)}</td>
                       <td style={{ padding: '10px 12px', textAlign: 'center' }}>{debt.DueDate ? formatDate(debt.DueDate) : <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
                       <td style={{ padding: '10px 12px', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: debt.Note ? 'inherit' : 'var(--text-muted)' }}>{debt.Note || '—'}</td>
@@ -2890,7 +2919,7 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
                     </tr>
                     {isExpanded && (
                       <tr key={`${debt.Id}-expanded`}>
-                        <td colSpan={10} style={{ padding: '16px 20px', background: 'rgba(99,102,241,0.02)', borderBottom: '1px solid var(--border)' }}>
+                        <td colSpan={12} style={{ padding: '16px 20px', background: 'rgba(99,102,241,0.02)', borderBottom: '1px solid var(--border)' }}>
                           {debt.Description && (
                             <div style={{ marginBottom: '12px', padding: '12px', background: 'rgba(99,102,241,0.05)', borderRadius: '8px', fontSize: '0.85rem', lineHeight: 1.6, color: 'var(--text-muted)' }}>
                               <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--text)' }}>{t('Mô tả')}</div>
@@ -2965,6 +2994,10 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
                 <textarea className="form-control" style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border)', fontSize: '0.85rem', resize: 'vertical' }} value={formDescription} onChange={(e) => setFormDescription(e.target.value)} placeholder={t('Nhập mô tả')} rows={3} />
               </div>
               <div className="form-group" style={{ marginBottom: '12px' }}>
+                <label className="form-label" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '4px', color: 'var(--text-muted)' }}>{t('Lãi suất (%/năm)')}</label>
+                <input className="form-control" type="number" step="0.01" min="0" style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border)', fontSize: '0.85rem' }} value={formInterestRate} onChange={(e) => setFormInterestRate(e.target.value)} placeholder={t('VD: 12.5')} />
+              </div>
+              <div className="form-group" style={{ marginBottom: '12px' }}>
                 <label className="form-label" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '4px', color: 'var(--text-muted)' }}>{t('Ghi chú')}</label>
                 <input className="form-control" style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border)', fontSize: '0.85rem' }} value={formNote} onChange={(e) => setFormNote(e.target.value)} />
               </div>
@@ -2986,6 +3019,10 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
               {payingDebt.Name} — {t('Còn lại')}: <strong style={{ fontFamily: 'var(--font-display)' }}>{formatInputNumber(payingDebt.RemainingAmount ?? (payingDebt.TotalDebt - payingDebt.PaidAmount))}</strong>
             </div>
             <form onSubmit={handleAddPayment}>
+              <div className="form-group" style={{ marginBottom: '12px' }}>
+                <label className="form-label" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '4px', color: 'var(--text-muted)' }}>{t('Ngày thanh toán')} *</label>
+                <input className="form-control" type="date" style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border)', fontSize: '0.85rem' }} value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} required />
+              </div>
               <div className="form-group" style={{ marginBottom: '12px' }}>
                 <label className="form-label" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '4px', color: 'var(--text-muted)' }}>{t('Số tiền')} *</label>
                 <input className="form-control" style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border)', fontSize: '0.85rem' }} value={formatInputNumber(parseFloat(paymentAmount.replace(/,/g, '')) || 0)} onChange={(e) => setPaymentAmount(e.target.value.replace(/,/g, ''))} required autoFocus />
