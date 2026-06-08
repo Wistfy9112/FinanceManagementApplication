@@ -178,6 +178,7 @@ public class CashFlowGrowthServiceTests
 
         var snapshots = new List<SnapshotSummary>
         {
+            new() { RecordedAt = new DateTime(2025, 6, 15), TotalValue = 70_000_000, TotalInitialValue = 50_000_000 },
             new() { RecordedAt = new DateTime(2025, 7, 1), TotalValue = 80_000_000, TotalInitialValue = 60_000_000 },
             new() { RecordedAt = new DateTime(2025, 12, 31), TotalValue = 100_000_000, TotalInitialValue = 75_000_000 },
             new() { RecordedAt = new DateTime(2026, 3, 15), TotalValue = 130_000_000, TotalInitialValue = 90_000_000 },
@@ -188,9 +189,9 @@ public class CashFlowGrowthServiceTests
         var result = await _sut.GetGrowthDataAsync(accountId, "last12months");
 
         result.Mode.Should().Be("last12months");
-        result.Data.Should().HaveCount(12);
-        result.Data[0].Period.Should().Contain("2025");
-        result.Data[^1].Period.Should().Contain("2026");
+        result.Data.Should().HaveCount(13);
+        result.Data[0].Period.Should().Be("Jun 2025");
+        result.Data[^1].Period.Should().Be("Jun 2026");
     }
 
     [Fact]

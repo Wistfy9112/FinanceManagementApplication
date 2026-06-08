@@ -875,7 +875,7 @@ const generateDemoCashFlowGrowth = (mode: string, year?: number) => {
 
   if (mode === 'last12months') {
     const months: { year: number; month: number; label: string }[] = [];
-    const start = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+    const start = new Date(now.getFullYear(), now.getMonth() - 12, 1);
     for (let d = new Date(start); d <= now; d.setMonth(d.getMonth() + 1)) {
       const y = d.getFullYear();
       const m = d.getMonth() + 1;

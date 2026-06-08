@@ -178,7 +178,7 @@ namespace FinancialManagementApplication.Application.Services
 
         private static CashFlowGrowthResponse BuildLast12Months(List<SnapshotSummary> snapshots, decimal currentTotal, decimal currentInitialTotal, DateTime now)
         {
-            var startDate = new DateTime(now.Year, now.Month, 1).AddMonths(-11);
+            var startDate = new DateTime(now.Year, now.Month, 1).AddMonths(-12);
 
             var months = new List<(int Year, int Month)>();
             for (var dt = startDate; dt <= now; dt = dt.AddMonths(1))

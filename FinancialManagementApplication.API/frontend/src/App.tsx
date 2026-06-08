@@ -95,7 +95,11 @@ export default function App() {
 
   // Loading & Error States
   const [loading, setLoading] = useState<boolean>(true);
+  const [authLoading, setAuthLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Delete Confirmation State
+  const [deleteConfirmAsset, setDeleteConfirmAsset] = useState<{ id: string; name: string } | null>(null);
 
   // Modal State
   const [assetModal, setAssetModal] = useState<{
@@ -191,40 +195,40 @@ export default function App() {
 
   const handleLogin = async (email: string, pass: string) => {
     try {
-      setLoading(true);
+      setAuthLoading(true);
       setError(null);
       const res = await authService.login(email, pass);
       setUser(res.user);
     } catch (err: any) {
       setError(err.message);
     } finally {
-      setLoading(false);
+      setAuthLoading(false);
     }
   };
 
   const handleRegister = async (email: string, pass: string, name: string) => {
     try {
-      setLoading(true);
+      setAuthLoading(true);
       setError(null);
       const res = await authService.register(email, pass, name);
       setUser(res.user);
     } catch (err: any) {
       setError(err.message);
     } finally {
-      setLoading(false);
+      setAuthLoading(false);
     }
   };
 
   const handleDemo = async () => {
     try {
-      setLoading(true);
+      setAuthLoading(true);
       setError(null);
       const res = await authService.loginDemo();
       setUser(res.user);
     } catch (err: any) {
       setError(err.message);
     } finally {
-      setLoading(false);
+      setAuthLoading(false);
     }
   };
 
@@ -256,14 +260,20 @@ export default function App() {
     }
   };
 
-  const handleDeleteAsset = async (id: string) => {
-    if (!window.confirm(t('Bạn có chắc chắn muốn xóa tài sản này?'))) return;
+  const handleDeleteAsset = async (id: string, name: string) => {
+    setDeleteConfirmAsset({ id, name });
+  };
+
+  const confirmDeleteAsset = async () => {
+    if (!deleteConfirmAsset) return;
     try {
       setError(null);
-      await assetService.delete(id);
+      await assetService.delete(deleteConfirmAsset.id);
       await loadData();
     } catch (err: any) {
       setError(err.message);
+    } finally {
+      setDeleteConfirmAsset(null);
     }
   };
 
@@ -324,7 +334,7 @@ export default function App() {
         Id: asset.Id,
         Name: asset.Name,
         InitialValue: asset.InitialValue + allocation.CurrentAmount,
-        CurrentValue: asset.CurrentValue,
+        CurrentValue: asset.CurrentValue + allocation.CurrentAmount,
         Type: asset.Type
       });
       await loadData();
@@ -388,6 +398,7 @@ export default function App() {
   };
 
   const handleSetupAmountChange = (val: number) => {
+    if (val < 0) val = 0;
     setSetupAmount(val);
     const updated = setupAllocations.map(al => {
       const newPercent = val > 0 ? (al.setupAmount / val) * 100 : 0;
@@ -397,6 +408,7 @@ export default function App() {
   };
 
   const handleSetupAllocationAmountChange = (id: string, newAmount: number) => {
+    if (newAmount < 0) newAmount = 0;
     const otherTotal = setupAllocations
       .filter(al => al.Id !== id)
       .reduce((sum, al) => sum + (al.setupAmount || 0), 0);
@@ -527,7 +539,7 @@ export default function App() {
       .reduce((sum, al) => sum + al.TargetPercentage, 0);
 
     return allocations.map(al => {
-      const currentAmount = income > 0 ? income * (al.TargetPercentage / 100) : al.CurrentAmount;
+      const currentAmount = income > 0 ? income * (al.TargetPercentage / 100) : 0;
       const isExcluded = exclusions.includes(al.Id);
       const reduction = (!isExcluded && nonExcludedPct > 0)
         ? targetReduction * (al.TargetPercentage / nonExcludedPct)
@@ -585,6 +597,7 @@ export default function App() {
         onDemo={handleDemo}
         error={error} 
         isDemo={isDemo}
+        loading={authLoading}
       />
     );
   }
@@ -724,7 +737,6 @@ export default function App() {
           <PortfolioPage 
             assets={assets}
             income={income}
-            onAllocateActual={handleSaveAllocationSnapshot}
             targetReduction={targetReduction}
             calculatedExpenses={calculatedExpenses}
             calculatedSavings={calculatedSavings}
@@ -865,6 +877,38 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Delete Asset Confirmation Modal */}
+      {deleteConfirmAsset && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '400px' }}>
+            <div className="modal-header">
+              <h3 className="modal-title">{t('Xóa tài sản')}</h3>
+              <button className="modal-close" onClick={() => setDeleteConfirmAsset(null)}>✕</button>
+            </div>
+            <div style={{ padding: '20px 24px', textAlign: 'center' }}>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6 }}>
+                {t('Bạn có chắc chắn muốn xóa tài sản')} <strong style={{ color: 'var(--text-primary)' }}>"{deleteConfirmAsset.name}"</strong>?
+              </p>
+            </div>
+            <div className="modal-actions" style={{ justifyContent: 'center', gap: '12px' }}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => setDeleteConfirmAsset(null)}
+              >
+                {t('Hủy')}
+              </button>
+              <button
+                className="btn btn-primary"
+                style={{ background: '#ef4444', borderColor: '#ef4444' }}
+                onClick={confirmDeleteAsset}
+              >
+                {t('Xóa')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -872,7 +916,7 @@ export default function App() {
 // ======================== COMPONENTS ========================
 
 // 1. AUTH PAGE COMPONENT
-function AuthPage({ onLogin, onRegister, onDemo, error, isDemo }: { onLogin: any; onRegister: any; onDemo: any; error: string | null; isDemo: boolean }) {
+function AuthPage({ onLogin, onRegister, onDemo, error, isDemo, loading }: { onLogin: any; onRegister: any; onDemo: any; error: string | null; isDemo: boolean; loading?: boolean }) {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -895,6 +939,7 @@ function AuthPage({ onLogin, onRegister, onDemo, error, isDemo }: { onLogin: any
 
   return (
     <div className="auth-wrapper">
+      <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
       <div className="card auth-card">
         <div className="auth-header">
           <div className="logo" style={{ justifyContent: 'center', marginBottom: '16px' }}>
@@ -950,8 +995,15 @@ function AuthPage({ onLogin, onRegister, onDemo, error, isDemo }: { onLogin: any
             />
           </div>
 
-          <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '10px' }}>
-            {isLogin ? t('Đăng Nhập') : t('Tạo Tài Khoản')}
+          <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '10px' }} disabled={loading}>
+            {loading ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ width: '14px', height: '14px', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+                {t('Đang xử lý...')}
+              </span>
+            ) : (
+              isLogin ? t('Đăng Nhập') : t('Tạo Tài Khoản')
+            )}
           </button>
         </form>
 
@@ -1496,7 +1548,7 @@ function AssetsPage({
             {asset.InitialValue > 0 ? (
               <>{interest > 0 ? '+' : ''}{ratio.toFixed(2)}%</>
             ) : (
-              '#DIV/0!'
+              <>0.00%</>
             )}
           </td>
           <td style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
@@ -1509,7 +1561,7 @@ function AssetsPage({
                   <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
                 </svg>
               </button>
-              <button className="btn-icon delete" onClick={() => onDelete(asset.Id)} title={t('Xóa tài sản')}>
+              <button className="btn-icon delete" onClick={() => onDelete(asset.Id, asset.Name)} title={t('Xóa tài sản')}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
                 </svg>
@@ -1732,7 +1784,6 @@ function AssetsPage({
 function PortfolioPage({
   assets,
   income,
-  onAllocateActual,
   targetReduction,
   calculatedExpenses,
   calculatedSavings,
@@ -1763,7 +1814,6 @@ function PortfolioPage({
 }: {
   assets: any[];
   income: number;
-  onAllocateActual: () => void;
   targetReduction: number;
   calculatedExpenses: any[];
   calculatedSavings: any[];
@@ -1993,14 +2043,7 @@ function PortfolioPage({
             </svg>
             {t('Thiết lập mới')}
           </button>
-          <button className="btn btn-primary" onClick={onAllocateActual} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-              <polyline points="17 21 17 13 7 13 7 21"/>
-              <polyline points="7 3 7 8 15 8"/>
-            </svg>
-            {t('Lưu Phân Bổ Thực Tế')}
-          </button>
+
         </div>
       </div>
 
