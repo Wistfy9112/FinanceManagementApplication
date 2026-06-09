@@ -19,6 +19,11 @@ public class AccountRepository : IAccountRepository
         return await _context.Accounts.FirstOrDefaultAsync(x => x.email == email);
     }
 
+    public async Task<Account?> GetByUsernameAsync(string username)
+    {
+        return await _context.Accounts.FirstOrDefaultAsync(x => x.username == username);
+    }
+
     public async Task<Account?> GetByIdAsync(Guid id)
     {
         return await _context.Accounts.FirstOrDefaultAsync(x => x.AccountID == id);

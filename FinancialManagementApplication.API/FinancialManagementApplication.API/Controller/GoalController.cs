@@ -1,6 +1,7 @@
 using FinancialManagementApplication.Application.DTOs.Goal;
 using FinancialManagementApplication.Application.Interface.Repositories;
 using FinancialManagementApplication.Domain.Entities;
+using FinancialManagementApplication.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FinancialManagementApplication.API.Controller
@@ -37,6 +38,27 @@ namespace FinancialManagementApplication.API.Controller
         [HttpPost]
         public async Task<ActionResult<GoalDTO>> CreateGoal(CreateGoalDTO dto)
         {
+            var now = DateTime.UtcNow;
+            var totalCurrent = await _assetsRepository.GetCurrentTotalValueAsync(dto.AccountId);
+
+            GoalStatus status;
+            if (dto.DueDate < now)
+            {
+                status = totalCurrent >= dto.TargetAmount
+                    ? GoalStatus.Successed
+                    : GoalStatus.Failed;
+            }
+            else if (!dto.StartDate.HasValue || dto.StartDate.Value > now)
+            {
+                status = GoalStatus.NotStarted;
+            }
+            else
+            {
+                status = totalCurrent >= dto.TargetAmount
+                    ? GoalStatus.Successed
+                    : GoalStatus.Processing;
+            }
+
             var goal = new Goal
             {
                 Id = Guid.NewGuid(),
@@ -45,7 +67,7 @@ namespace FinancialManagementApplication.API.Controller
                 TargetAmount = dto.TargetAmount,
                 StartDate = dto.StartDate,
                 DueDate = dto.DueDate,
-                Status = Domain.Enums.GoalStatus.NotStarted,
+                Status = status,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
@@ -64,6 +86,26 @@ namespace FinancialManagementApplication.API.Controller
             goal.StartDate = dto.StartDate;
             goal.DueDate = dto.DueDate;
             goal.UpdatedAt = DateTime.UtcNow;
+
+            var now = DateTime.UtcNow;
+            var totalCurrent = await _assetsRepository.GetCurrentTotalValueAsync(goal.AccountId);
+
+            if (goal.DueDate < now)
+            {
+                goal.Status = totalCurrent >= goal.TargetAmount
+                    ? GoalStatus.Successed
+                    : GoalStatus.Failed;
+            }
+            else if (!goal.StartDate.HasValue || goal.StartDate.Value > now)
+            {
+                goal.Status = GoalStatus.NotStarted;
+            }
+            else
+            {
+                goal.Status = totalCurrent >= goal.TargetAmount
+                    ? GoalStatus.Successed
+                    : GoalStatus.Processing;
+            }
 
             await _goalRepository.UpdateAsync(goal);
             await _goalRepository.UpdateStatusAsync(goal.AccountId);

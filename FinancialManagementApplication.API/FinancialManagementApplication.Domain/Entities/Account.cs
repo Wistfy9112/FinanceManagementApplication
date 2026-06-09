@@ -8,6 +8,7 @@ namespace FinanceManagementApplication.Domain.Entities
     public class Account
     {
         public Guid AccountID { get; set; }
+        public string username { get; set; }
         public string email { get; set; }
         public string passwordHash { get; set; }
         public string displayName { get; set; }

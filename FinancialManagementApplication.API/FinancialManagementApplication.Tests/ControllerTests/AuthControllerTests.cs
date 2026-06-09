@@ -31,6 +31,7 @@ public class AuthControllerTests
         var account = new FinanceManagementApplication.Domain.Entities.Account
         {
             AccountID = accountId,
+            username = "profileuser",
             email = "profile@test.com",
             displayName = "Profile User",
             passwordHash = "hash",
@@ -46,6 +47,7 @@ public class AuthControllerTests
 
         var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
         var profile = okResult.Value.Should().BeOfType<UserProfileDTO>().Subject;
+        profile.Username.Should().Be("profileuser");
         profile.Email.Should().Be("profile@test.com");
         profile.DisplayName.Should().Be("Profile User");
     }
@@ -70,6 +72,7 @@ public class AuthControllerTests
         var account = new FinanceManagementApplication.Domain.Entities.Account
         {
             AccountID = accountId,
+            username = "updateuser",
             email = "update@test.com",
             displayName = "Old Name",
             passwordHash = "hash",
@@ -110,6 +113,7 @@ public class AuthControllerTests
         var account = new FinanceManagementApplication.Domain.Entities.Account
         {
             AccountID = accountId,
+            username = "passuser",
             email = "pass@test.com",
             displayName = "Pass User",
             passwordHash = BCrypt.Net.BCrypt.HashPassword(password),
@@ -139,6 +143,7 @@ public class AuthControllerTests
         var account = new FinanceManagementApplication.Domain.Entities.Account
         {
             AccountID = accountId,
+            username = "passuser",
             email = "pass@test.com",
             displayName = "Pass User",
             passwordHash = BCrypt.Net.BCrypt.HashPassword("CorrectPass123!"),

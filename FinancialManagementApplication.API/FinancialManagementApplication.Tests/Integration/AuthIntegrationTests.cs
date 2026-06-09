@@ -29,6 +29,7 @@ public class AuthIntegrationTests : IClassFixture<CustomWebApplicationFactory>
     {
         var request = new
         {
+            Username = "newuser",
             Email = "newuser@example.com",
             Password = "SecurePass123!",
             DisplayName = "New User"
@@ -47,6 +48,7 @@ public class AuthIntegrationTests : IClassFixture<CustomWebApplicationFactory>
     {
         var request = new
         {
+            Username = "duplicateuser",
             Email = "duplicate@example.com",
             Password = "SecurePass123!",
             DisplayName = "First User"
@@ -56,6 +58,7 @@ public class AuthIntegrationTests : IClassFixture<CustomWebApplicationFactory>
 
         var duplicateRequest = new
         {
+            Username = "duplicateuser",
             Email = "duplicate@example.com",
             Password = "AnotherPass123!",
             DisplayName = "Second User"
@@ -71,6 +74,7 @@ public class AuthIntegrationTests : IClassFixture<CustomWebApplicationFactory>
     {
         var registerRequest = new
         {
+            Username = "logintest",
             Email = "login-test@example.com",
             Password = "MyPassword123!",
             DisplayName = "Login Test"
@@ -81,7 +85,7 @@ public class AuthIntegrationTests : IClassFixture<CustomWebApplicationFactory>
 
         var loginRequest = new
         {
-            Email = "login-test@example.com",
+            Username = "logintest",
             Password = "MyPassword123!"
         };
 
@@ -98,7 +102,7 @@ public class AuthIntegrationTests : IClassFixture<CustomWebApplicationFactory>
     {
         var request = new
         {
-            Email = "nonexistent@example.com",
+            Username = "nonexistentuser",
             Password = "SomePassword123!"
         };
 
@@ -112,6 +116,7 @@ public class AuthIntegrationTests : IClassFixture<CustomWebApplicationFactory>
     {
         var registerRequest = new
         {
+            Username = "wrongpass",
             Email = "wrong-pass@example.com",
             Password = "CorrectPassword123!",
             DisplayName = "Wrong Pass Test"
@@ -121,7 +126,7 @@ public class AuthIntegrationTests : IClassFixture<CustomWebApplicationFactory>
 
         var loginRequest = new
         {
-            Email = "wrong-pass@example.com",
+            Username = "wrongpass",
             Password = "WrongPassword456!"
         };
 

@@ -33,6 +33,7 @@ public class JwtTokenGeneratorTests
         var account = new Account
         {
             AccountID = Guid.NewGuid(),
+            username = "testuser",
             email = "test@example.com",
             displayName = "Test User"
         };
@@ -49,6 +50,7 @@ public class JwtTokenGeneratorTests
         var account = new Account
         {
             AccountID = accountId,
+            username = "claimstest",
             email = "claims@example.com",
             displayName = "Claims Test"
         };
@@ -63,6 +65,8 @@ public class JwtTokenGeneratorTests
             c.Type == ClaimTypes.Email && c.Value == "claims@example.com");
         jwtToken.Claims.Should().Contain(c =>
             c.Type == ClaimTypes.Name && c.Value == "Claims Test");
+        jwtToken.Claims.Should().Contain(c =>
+            c.Type == "username" && c.Value == "claimstest");
     }
 
     [Fact]
@@ -71,6 +75,7 @@ public class JwtTokenGeneratorTests
         var account = new Account
         {
             AccountID = Guid.NewGuid(),
+            username = "issuertest",
             email = "issuer@example.com",
             displayName = "Issuer Test"
         };
@@ -89,6 +94,7 @@ public class JwtTokenGeneratorTests
         var account = new Account
         {
             AccountID = Guid.NewGuid(),
+            username = "expirytest",
             email = "expiry@example.com",
             displayName = "Expiry Test"
         };
@@ -108,6 +114,7 @@ public class JwtTokenGeneratorTests
         var account = new Account
         {
             AccountID = Guid.NewGuid(),
+            username = "emptyuser",
             email = "empty@example.com",
             displayName = null
         };

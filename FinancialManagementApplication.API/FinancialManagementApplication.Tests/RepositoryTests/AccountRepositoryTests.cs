@@ -15,6 +15,7 @@ public class AccountRepositoryTests
         var account = new Account
         {
             AccountID = Guid.NewGuid(),
+            username = "testuser",
             email = "test@example.com",
             passwordHash = "hash",
             displayName = "Test User",
@@ -39,6 +40,7 @@ public class AccountRepositoryTests
         var account = new Account
         {
             AccountID = id,
+            username = "finduser",
             email = "find@example.com",
             passwordHash = "hash",
             displayName = "Find Me",
@@ -73,6 +75,7 @@ public class AccountRepositoryTests
         var account = new Account
         {
             AccountID = Guid.NewGuid(),
+            username = "emailuser",
             email = "email@example.com",
             passwordHash = "hash",
             displayName = "Email Test",
@@ -106,6 +109,7 @@ public class AccountRepositoryTests
         var account = new Account
         {
             AccountID = Guid.NewGuid(),
+            username = "updateuser",
             email = "update@example.com",
             passwordHash = "hash",
             displayName = "Original",
