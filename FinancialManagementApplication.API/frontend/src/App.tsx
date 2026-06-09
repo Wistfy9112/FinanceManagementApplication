@@ -2726,6 +2726,9 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
   const [editingDebt, setEditingDebt] = useState<any>(null);
   const [payingDebt, setPayingDebt] = useState<any>(null);
   const [payingError, setPayingError] = useState('');
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [closeConfirmId, setCloseConfirmId] = useState<string | null>(null);
+  const [saveConfirmData, setSaveConfirmData] = useState<any>(null);
 
   const openCreate = () => {
     setEditingDebt(null);
@@ -2755,24 +2758,34 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
 
   const handleSaveDebt = async (e: React.FormEvent) => {
     e.preventDefault();
+    const interestRate = formInterestRate !== '' ? parseFloat(formInterestRate.replace(/,/g, '')) : null;
+    const payload: any = {
+      Name: formName,
+      TotalDebt: parseFloat(formTotalDebt.replace(/,/g, '')) || 0,
+      BorrowDate: formBorrowDate,
+      DueDate: formDueDate || undefined,
+      Note: formNote || undefined,
+      Description: formDescription || undefined,
+      InterestRate: interestRate,
+      Type: formType
+    };
+    if (editingDebt) {
+      setSaveConfirmData(payload);
+    } else {
+      await doSaveDebt(payload);
+    }
+  };
+
+  const doSaveDebt = async (payload: any) => {
     try {
-      const interestRate = formInterestRate !== '' ? parseFloat(formInterestRate.replace(/,/g, '')) : null;
-      const payload: any = {
-        Name: formName,
-        TotalDebt: parseFloat(formTotalDebt.replace(/,/g, '')) || 0,
-        BorrowDate: formBorrowDate,
-        DueDate: formDueDate || undefined,
-        Note: formNote || undefined,
-        Description: formDescription || undefined,
-        InterestRate: interestRate,
-        Type: formType
-      };
       if (editingDebt) {
         await debtService.update(editingDebt.Id, payload, userId);
       } else {
         await debtService.create(payload, userId);
       }
       setShowModal(false);
+      setSaveConfirmData(null);
+      setEditingDebt(null);
       onRefresh();
     } catch (err: any) {
       alert(err.message || t('Có lỗi xảy ra'));
@@ -2780,22 +2793,34 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm(t('Xác nhận xóa sổ nợ này?'))) return;
+    setDeleteConfirmId(id);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirmId) return;
     try {
-      await debtService.delete(id);
+      await debtService.delete(deleteConfirmId);
+      setDeleteConfirmId(null);
       onRefresh();
     } catch (err: any) {
       alert(err.message || t('Có lỗi xảy ra'));
+      setDeleteConfirmId(null);
     }
   };
 
   const handleClose = async (id: string) => {
-    if (!window.confirm(t('Xác nhận đóng sổ nợ này?'))) return;
+    setCloseConfirmId(id);
+  };
+
+  const confirmClose = async () => {
+    if (!closeConfirmId) return;
     try {
-      await debtService.close(id);
+      await debtService.close(closeConfirmId);
+      setCloseConfirmId(null);
       onRefresh();
     } catch (err: any) {
       alert(err.message || t('Có lỗi xảy ra'));
+      setCloseConfirmId(null);
     }
   };
 
@@ -2948,6 +2973,7 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
                     prevDate = pmtDate;
                   }
                   const now = new Date();
+                  now.setHours(23, 59, 59, 999);
                   const finalDays = Math.max(0, (now.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24));
                   totalInterest += balance * rate * (finalDays / 365);
                   return totalInterest;
@@ -3083,6 +3109,54 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
                 <button type="submit" style={{ padding: '8px 16px', borderRadius: '6px', border: 'none', background: 'var(--primary)', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}>{editingDebt ? t('Lưu') : t('Thêm')}</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmId && (
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div className="modal" style={{ background: 'var(--bg-card)', borderRadius: '12px', padding: '24px', width: '90%', maxWidth: '400px', textAlign: 'center' }}>
+            <h3 style={{ margin: '0 0 12px' }}>{t('Xóa sổ nợ')}</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6, margin: '0 0 20px' }}>
+              {t('Bạn có chắc chắn muốn xóa sổ nợ này? Hành động này không thể hoàn tác.')}
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button className="btn btn-secondary" onClick={() => setDeleteConfirmId(null)} style={{ padding: '8px 20px', fontSize: '0.85rem' }}>{t('Hủy')}</button>
+              <button onClick={confirmDelete} style={{ padding: '8px 20px', borderRadius: '6px', border: 'none', background: '#ef4444', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}>{t('Xóa')}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Close Confirmation Modal */}
+      {closeConfirmId && (
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div className="modal" style={{ background: 'var(--bg-card)', borderRadius: '12px', padding: '24px', width: '90%', maxWidth: '400px', textAlign: 'center' }}>
+            <h3 style={{ margin: '0 0 12px' }}>{t('Đóng sổ nợ')}</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6, margin: '0 0 20px' }}>
+              {t('Bạn có chắc chắn muốn đóng sổ nợ này? Sau khi đóng sẽ không thể thay đổi.')}
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button className="btn btn-secondary" onClick={() => setCloseConfirmId(null)} style={{ padding: '8px 20px', fontSize: '0.85rem' }}>{t('Hủy')}</button>
+              <button onClick={confirmClose} style={{ padding: '8px 20px', borderRadius: '6px', border: 'none', background: 'var(--primary)', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}>{t('Đóng')}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Save Confirmation Modal */}
+      {saveConfirmData && (
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div className="modal" style={{ background: 'var(--bg-card)', borderRadius: '12px', padding: '24px', width: '90%', maxWidth: '400px', textAlign: 'center' }}>
+            <h3 style={{ margin: '0 0 12px' }}>{t('Xác nhận chỉnh sửa')}</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6, margin: '0 0 20px' }}>
+              {t('Bạn có chắc chắn muốn lưu các thay đổi cho sổ nợ này?')}
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button className="btn btn-secondary" onClick={() => setSaveConfirmData(null)} style={{ padding: '8px 20px', fontSize: '0.85rem' }}>{t('Hủy')}</button>
+              <button onClick={() => doSaveDebt(saveConfirmData)} style={{ padding: '8px 20px', borderRadius: '6px', border: 'none', background: 'var(--primary)', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}>{t('Xác nhận')}</button>
+            </div>
           </div>
         </div>
       )}
