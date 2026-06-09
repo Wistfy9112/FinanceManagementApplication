@@ -193,11 +193,11 @@ export default function App() {
   // Auth Handlers
   const { addToast } = useToast();
 
-  const handleLogin = async (email: string, pass: string) => {
+  const handleLogin = async (username: string, pass: string) => {
     try {
       setAuthLoading(true);
       setError(null);
-      const res = await authService.login(email, pass);
+      const res = await authService.login(username, pass);
       setUser(res.user);
     } catch (err: any) {
       setError(err.message);
@@ -206,11 +206,11 @@ export default function App() {
     }
   };
 
-  const handleRegister = async (email: string, pass: string, name: string) => {
+  const handleRegister = async (username: string, pass: string, name: string, email?: string) => {
     try {
       setAuthLoading(true);
       setError(null);
-      const res = await authService.register(email, pass, name);
+      const res = await authService.register(username, pass, name, email);
       setUser(res.user);
     } catch (err: any) {
       setError(err.message);
@@ -918,22 +918,23 @@ export default function App() {
 // 1. AUTH PAGE COMPONENT
 function AuthPage({ onLogin, onRegister, onDemo, error, isDemo, loading }: { onLogin: any; onRegister: any; onDemo: any; error: string | null; isDemo: boolean; loading?: boolean }) {
   const [isLogin, setIsLogin] = useState(true);
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [email, setEmail] = useState('');
   const { t } = useLanguage();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (isLogin) {
-      onLogin(email, password);
+      onLogin(username, password);
     } else {
-      onRegister(email, password, displayName);
+      onRegister(username, password, displayName, email || undefined);
     }
   };
 
   const handleUseDemoAccount = () => {
-    setEmail('demo@example.com');
+    setUsername('demo');
     setPassword('demo123');
   };
 
@@ -973,16 +974,28 @@ function AuthPage({ onLogin, onRegister, onDemo, error, isDemo, loading }: { onL
             </div>
           )}
           <div className="form-group">
-            <label className="form-label">{t('Địa chỉ Email')}</label>
+            <label className="form-label">{t('Tên đăng nhập')}</label>
             <input 
-              type="email" 
+              type="text" 
               className="form-control" 
               required 
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder={t('nhập.email@của.ban')} 
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder={t('Nhập tên đăng nhập')} 
             />
           </div>
+          {!isLogin && (
+            <div className="form-group">
+              <label className="form-label">{t('Địa chỉ Email')}</label>
+              <input 
+                type="email" 
+                className="form-control" 
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder={t('nhập.email@của.ban')} 
+              />
+            </div>
+          )}
           <div className="form-group">
             <label className="form-label">{t('Mật khẩu')}</label>
             <input 
@@ -3298,6 +3311,7 @@ function ProfilePage({ user, onUserUpdate }: { user: any; onUserUpdate: (u: any)
   const { addToast } = useToast();
 
   const [displayName, setDisplayName] = useState(user?.displayName || '');
+  const [email, setEmail] = useState(user?.email || '');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -3311,7 +3325,7 @@ function ProfilePage({ user, onUserUpdate }: { user: any; onUserUpdate: (u: any)
     setProfileLoading(true);
     try {
       const api = await import('./services/api');
-      const result = await api.authService.updateProfile(user?.id, displayName.trim());
+      const result = await api.authService.updateProfile(user?.id, displayName.trim(), email.trim() || undefined);
       onUserUpdate(result);
       addToast({ title: t('Cập nhật hồ sơ thành công!'), variant: 'success' });
     } catch (err: any) {
@@ -3360,8 +3374,8 @@ function ProfilePage({ user, onUserUpdate }: { user: any; onUserUpdate: (u: any)
         <div className="card-body">
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div>
-              <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Email</label>
-              <div style={{ fontSize: '0.95rem', fontWeight: 500, padding: '8px 0' }}>{user?.email || '-'}</div>
+              <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{t('Tên đăng nhập')}</label>
+              <div style={{ fontSize: '0.95rem', fontWeight: 500, padding: '8px 0' }}>{user?.username || '-'}</div>
             </div>
             <div>
               <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{t('Ngày tạo')}</label>
@@ -3371,10 +3385,10 @@ function ProfilePage({ user, onUserUpdate }: { user: any; onUserUpdate: (u: any)
         </div>
       </div>
 
-      {/* Update Display Name */}
+      {/* Update Profile (Display Name + Email) */}
       <div className="card" style={{ marginBottom: '20px' }}>
         <div className="card-header">
-          <h3 className="card-title">{t('Tên hiển thị')}</h3>
+          <h3 className="card-title">{t('Thông tin cá nhân')}</h3>
         </div>
         <div className="card-body">
           <form onSubmit={handleUpdateProfile}>
@@ -3387,6 +3401,16 @@ function ProfilePage({ user, onUserUpdate }: { user: any; onUserUpdate: (u: any)
                 onChange={(e) => setDisplayName(e.target.value)}
                 placeholder={t('Nhập tên hiển thị mới')}
                 required
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">{t('Địa chỉ Email')}</label>
+              <input
+                type="email"
+                className="form-control"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder={t('nhập.email@của.ban')}
               />
             </div>
             <button type="submit" className="btn btn-primary" disabled={profileLoading}>

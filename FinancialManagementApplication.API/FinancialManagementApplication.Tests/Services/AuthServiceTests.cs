@@ -28,6 +28,7 @@ public class AuthServiceTests
     {
         var request = new RegisterRequest
         {
+            Username = "testuser",
             Email = "test@example.com",
             Password = "SecurePass123!",
             DisplayName = "Test User"
@@ -35,7 +36,7 @@ public class AuthServiceTests
         var expectedToken = "jwt-token-12345";
 
         _repoMock
-            .Setup(r => r.GetByEmailAsync(request.Email))
+            .Setup(r => r.GetByUsernameAsync(request.Username))
             .ReturnsAsync((Account?)null);
 
         _jwtMock
@@ -46,12 +47,14 @@ public class AuthServiceTests
 
         result.Should().NotBeNull();
         result.Token.Should().Be(expectedToken);
+        result.Username.Should().Be(request.Username);
         result.Email.Should().Be(request.Email);
         result.DisplayName.Should().Be(request.DisplayName);
         result.CreateAt.Should().NotBe(default);
 
         _repoMock.Verify(r => r.AddAsync(It.Is<Account>(a =>
             a.email == request.Email &&
+            a.username == request.Username &&
             a.displayName == request.DisplayName &&
             !string.IsNullOrEmpty(a.passwordHash)
         )), Times.Once);
@@ -62,6 +65,7 @@ public class AuthServiceTests
     {
         var request = new RegisterRequest
         {
+            Username = "existinguser",
             Email = "existing@example.com",
             Password = "SecurePass123!",
             DisplayName = "Existing User"
@@ -69,19 +73,20 @@ public class AuthServiceTests
         var existingAccount = new Account
         {
             AccountID = Guid.NewGuid(),
+            username = request.Username,
             email = request.Email,
             passwordHash = "hash",
             displayName = "Existing"
         };
 
         _repoMock
-            .Setup(r => r.GetByEmailAsync(request.Email))
+            .Setup(r => r.GetByUsernameAsync(request.Username))
             .ReturnsAsync(existingAccount);
 
         var act = () => _sut.RegisterAsync(request);
 
         await act.Should().ThrowAsync<Exception>()
-            .WithMessage("Email already exists");
+            .WithMessage("Username already exists");
 
         _repoMock.Verify(r => r.AddAsync(It.IsAny<Account>()), Times.Never);
         _jwtMock.Verify(j => j.Generate(It.IsAny<Account>()), Times.Never);
@@ -92,13 +97,14 @@ public class AuthServiceTests
     {
         var request = new RegisterRequest
         {
+            Username = "testuser",
             Email = "test@example.com",
             Password = "MySecretPassword",
             DisplayName = "Test User"
         };
 
         _repoMock
-            .Setup(r => r.GetByEmailAsync(request.Email))
+            .Setup(r => r.GetByUsernameAsync(request.Username))
             .ReturnsAsync((Account?)null);
 
         _jwtMock
@@ -125,19 +131,20 @@ public class AuthServiceTests
         var account = new Account
         {
             AccountID = accountId,
+            username = "testuser",
             email = "user@example.com",
             passwordHash = BCrypt.Net.BCrypt.HashPassword(password),
             displayName = "Test User"
         };
         var request = new LoginRequest
         {
-            Email = "user@example.com",
+            Username = "testuser",
             Password = password
         };
         var expectedToken = "jwt-token-67890";
 
         _repoMock
-            .Setup(r => r.GetByEmailAsync(request.Email))
+            .Setup(r => r.GetByUsernameAsync(request.Username))
             .ReturnsAsync(account);
 
         _jwtMock
@@ -148,7 +155,7 @@ public class AuthServiceTests
 
         result.Should().NotBeNull();
         result.Token.Should().Be(expectedToken);
-        result.Email.Should().Be(account.email);
+        result.Username.Should().Be(account.username);
         result.DisplayName.Should().Be(account.displayName);
         result.AccountId.Should().Be(accountId);
     }
@@ -158,12 +165,12 @@ public class AuthServiceTests
     {
         var request = new LoginRequest
         {
-            Email = "nonexistent@example.com",
+            Username = "nonexistentuser",
             Password = "SomePassword123!"
         };
 
         _repoMock
-            .Setup(r => r.GetByEmailAsync(request.Email))
+            .Setup(r => r.GetByUsernameAsync(request.Username))
             .ReturnsAsync((Account?)null);
 
         var act = () => _sut.LoginAsync(request);
@@ -180,18 +187,19 @@ public class AuthServiceTests
         var account = new Account
         {
             AccountID = Guid.NewGuid(),
+            username = "testuser",
             email = "user@example.com",
             passwordHash = BCrypt.Net.BCrypt.HashPassword("CorrectPassword123!"),
             displayName = "Test User"
         };
         var request = new LoginRequest
         {
-            Email = "user@example.com",
+            Username = "testuser",
             Password = "WrongPassword456!"
         };
 
         _repoMock
-            .Setup(r => r.GetByEmailAsync(request.Email))
+            .Setup(r => r.GetByUsernameAsync(request.Username))
             .ReturnsAsync(account);
 
         var act = () => _sut.LoginAsync(request);
@@ -213,6 +221,7 @@ public class AuthServiceTests
         var account = new Account
         {
             AccountID = accountId,
+            username = "profileuser",
             email = "profile@example.com",
             passwordHash = "hash",
             displayName = "Profile User",
@@ -228,6 +237,7 @@ public class AuthServiceTests
 
         result.Should().NotBeNull();
         result.AccountId.Should().Be(accountId);
+        result.Username.Should().Be("profileuser");
         result.Email.Should().Be("profile@example.com");
         result.DisplayName.Should().Be("Profile User");
     }
@@ -256,6 +266,7 @@ public class AuthServiceTests
         var account = new Account
         {
             AccountID = accountId,
+            username = "updateuser",
             email = "update@example.com",
             passwordHash = "hash",
             displayName = "Old Name",
@@ -303,6 +314,7 @@ public class AuthServiceTests
         var account = new Account
         {
             AccountID = accountId,
+            username = "passuser",
             email = "pass@example.com",
             passwordHash = BCrypt.Net.BCrypt.HashPassword(currentPassword),
             displayName = "Pass User",
@@ -334,6 +346,7 @@ public class AuthServiceTests
         var account = new Account
         {
             AccountID = accountId,
+            username = "passuser",
             email = "pass@example.com",
             passwordHash = BCrypt.Net.BCrypt.HashPassword("CorrectPass123!"),
             displayName = "Pass User",

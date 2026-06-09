@@ -27,7 +27,8 @@ namespace FinancialManagementApplication.Infrastructure.Security
             {
             new Claim(ClaimTypes.NameIdentifier, account.AccountID.ToString()),
             new Claim(ClaimTypes.Email, account.email),
-            new Claim(ClaimTypes.Name, account.displayName ?? string.Empty)
+            new Claim(ClaimTypes.Name, account.displayName ?? string.Empty),
+            new Claim("username", account.username)
         };
 
             var key = new SymmetricSecurityKey(

@@ -49,6 +49,8 @@ const en: Record<string, string> = {
   'Quản lý dòng tiền và tài sản cá nhân cao cấp': 'Premium personal cash flow and asset management',
   'Tên hiển thị': 'Display Name',
   'Nhập tên hiển thị của bạn': 'Enter your display name',
+  'Tên đăng nhập': 'Username',
+  'Nhập tên đăng nhập': 'Enter your username',
   'Địa chỉ Email': 'Email Address',
   'nhap.email@cua.ban': 'your.email@address.com',
   'Mật khẩu': 'Password',

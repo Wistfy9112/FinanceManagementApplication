@@ -26,8 +26,9 @@ export const decodeJwt = (token: string) => {
     const id = parsed["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"] || parsed.sub || parsed.nameid || 'u1';
     const email = parsed["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"] || parsed.email || '';
     const displayName = parsed["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name"] || parsed.name || parsed.unique_name || (email ? email.split('@')[0] : 'Guest');
+    const username = parsed.username || '';
     
-    return { id, email, displayName };
+    return { id, email, displayName, username };
   } catch (e) {
     console.error('JWT token decode error:', e);
     return null;
@@ -213,16 +214,15 @@ export const getLoggedUserId = (): string => {
 export const getIsDemoMode = () => isDemoMode;
 
 export const authService = {
-  login: async (email: string, password: string): Promise<{ token: string; user: any }> => {
+  login: async (username: string, password: string): Promise<{ token: string; user: any }> => {
     localStorage.setItem('fm_is_demo', 'false');
     isDemoMode = false;
-    // Clear any demo-seeded data so real API data is loaded fresh
     ['fm_assets', 'fm_portfolios', 'fm_allocations', 'fm_income', 'fm_target_reduction', 'fm_exclusions'].forEach(k => localStorage.removeItem(k));
     
     const res = await fetch(`${API_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
+      body: JSON.stringify({ username, password })
     });
     if (!res.ok) throw new Error('Login failed. Please check your credentials.');
     const data = await res.json();
@@ -230,7 +230,8 @@ export const authService = {
     const decoded = decodeJwt(data.token);
     const mockUser = { 
       id: decoded?.id || data.accountId || 'u1', 
-      email: data.email || decoded?.email || email, 
+      username: data.username || decoded?.username || username,
+      email: data.email || decoded?.email || '', 
       displayName: data.displayName || decoded?.displayName || 'Member',
       createdAt: data.createAt
     };
@@ -241,24 +242,27 @@ export const authService = {
     return { token: data.token, user: mockUser };
   },
 
-  register: async (email: string, password: string, displayName: string): Promise<{ token: string; user: any }> => {
+  register: async (username: string, password: string, displayName: string, email?: string): Promise<{ token: string; user: any }> => {
     localStorage.setItem('fm_is_demo', 'false');
     isDemoMode = false;
-    // Clear any demo-seeded data so real API data is loaded fresh
     ['fm_assets', 'fm_portfolios', 'fm_allocations', 'fm_income', 'fm_target_reduction', 'fm_exclusions'].forEach(k => localStorage.removeItem(k));
+
+    const body: any = { username, password, displayName };
+    if (email) body.email = email;
 
     const res = await fetch(`${API_URL}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, displayName })
+      body: JSON.stringify(body)
     });
-    if (!res.ok) throw new Error('Registration failed. Email may already exist.');
+    if (!res.ok) throw new Error('Registration failed. Username may already exist.');
     const data = await res.json();
     
     const decoded = decodeJwt(data.token);
     const mockUser = { 
       id: decoded?.id || data.accountId || 'u1', 
-      email: data.email || decoded?.email || email, 
+      username: data.username || decoded?.username || username,
+      email: data.email || decoded?.email || email || '', 
       displayName: data.displayName || decoded?.displayName || displayName,
       createdAt: data.createAt
     };
@@ -281,7 +285,7 @@ export const authService = {
     setStorage('fm_target_reduction', 500000);
     setStorage('fm_exclusions', ['al12']);
 
-    const mockUser = { id: 'u1', email: 'demo@example.com', displayName: 'Demo User', createdAt: new Date().toISOString() };
+    const mockUser = { id: 'u1', username: 'demo', email: 'demo@example.com', displayName: 'Demo User', createdAt: new Date().toISOString() };
     localStorage.setItem('fm_token', 'mock-jwt-token-12345');
     localStorage.setItem('fm_user', JSON.stringify(mockUser));
     triggerStatusChange();
@@ -297,26 +301,28 @@ export const authService = {
     await checkConnection();
     if (isDemoMode) {
       const raw = getLoggedUser();
-      return { accountId: raw?.id || accountId, email: raw?.email || 'demo@example.com', displayName: raw?.displayName || 'Demo User', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      return { accountId: raw?.id || accountId, username: raw?.username || 'demo', email: raw?.email || 'demo@example.com', displayName: raw?.displayName || 'Demo User', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     }
     const res = await fetch(`${API_URL}/auth/profile/${accountId}`, { headers: getAuthHeader() });
     if (!res.ok) throw new Error('Failed to get profile');
     return res.json();
   },
 
-  updateProfile: async (accountId: string, displayName: string): Promise<any> => {
+  updateProfile: async (accountId: string, displayName: string, email?: string): Promise<any> => {
     await checkConnection();
     if (isDemoMode) {
       const raw = getLoggedUser();
-      const updated = { ...raw, displayName };
+      const updated = { ...raw, displayName, ...(email !== undefined ? { email } : {}) };
       localStorage.setItem('fm_user', JSON.stringify(updated));
       triggerStatusChange();
-      return { accountId, email: raw?.email || '', displayName, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      return { accountId, username: raw?.username || 'demo', email: email || raw?.email || '', displayName, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     }
+    const body: any = { displayName };
+    if (email !== undefined) body.email = email;
     const res = await fetch(`${API_URL}/auth/profile/${accountId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
-      body: JSON.stringify({ displayName })
+      body: JSON.stringify(body)
     });
     if (!res.ok) throw new Error('Failed to update profile');
     return res.json();
