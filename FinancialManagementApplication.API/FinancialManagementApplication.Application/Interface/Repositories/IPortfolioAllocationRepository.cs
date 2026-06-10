@@ -15,5 +15,6 @@ namespace FinancialManagementApplication.Application.Interface.Repositories
         Task<PortfolioAllocationHistory> SaveSnapshotAsync(Guid accountId);
         Task<IEnumerable<PortfolioAllocationHistory>> GetHistoryAsync(Guid accountId);
         Task<bool> RestoreFromHistoryAsync(Guid historyId);
+        Task<bool> DeleteHistoryAsync(Guid historyId);
     }
 }

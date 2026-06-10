@@ -130,6 +130,18 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
                 .SumAsync(a => a.InitialValue);
         }
 
+        public async Task<bool> DeleteHistoryAsync(Guid historyId)
+        {
+            var history = await _context.AssetHistories
+                .FirstOrDefaultAsync(h => h.Id == historyId);
+
+            if (history == null) return false;
+
+            _context.AssetHistories.Remove(history);
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
         public async Task<bool> RestoreFromHistoryAsync(Guid historyId)
         {
             var history = await _context.AssetHistories

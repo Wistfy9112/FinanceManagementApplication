@@ -466,7 +466,12 @@ export const portfolioService = {
     await checkConnection();
     if (isDemoMode) {
       const p = getStorage('fm_portfolios', [DEFAULT_PORTFOLIO])[0];
-      const allocs = getStorage('fm_allocations', DEFAULT_ALLOCATIONS);
+      const allocs = getStorage('fm_allocations', DEFAULT_ALLOCATIONS).sort((a: any, b: any) => {
+        const catOrder: Record<string, number> = { Expense: 0, Saving: 1, Investment: 2 };
+        const catDiff = (catOrder[a.FinancialCategory] ?? 0) - (catOrder[b.FinancialCategory] ?? 0);
+        if (catDiff !== 0) return catDiff;
+        return (a.Name || '').localeCompare(b.Name || '');
+      });
       return { portfolio: p, allocations: allocs };
     }
 
@@ -727,6 +732,23 @@ export const historyService = {
     return false;
   },
 
+  deleteAssetHistory: async (historyId: string): Promise<boolean> => {
+    await checkConnection();
+    if (isDemoMode) {
+      return true;
+    }
+    try {
+      const res = await fetch(`${API_URL}/history/asset/${historyId}`, {
+        method: 'DELETE',
+        headers: { ...getAuthHeader() }
+      });
+      return res.ok;
+    } catch (e) {
+      console.error('Error deleting asset history:', e);
+    }
+    return false;
+  },
+
   getAllocationHistoryByAccount: async (accountId: string): Promise<any[]> => {
     await checkConnection();
     if (isDemoMode) return [];
@@ -770,6 +792,23 @@ export const historyService = {
       return res.ok;
     } catch (e) {
       console.error('Error restoring allocation history:', e);
+    }
+    return false;
+  },
+
+  deleteAllocationHistory: async (historyId: string): Promise<boolean> => {
+    await checkConnection();
+    if (isDemoMode) {
+      return true;
+    }
+    try {
+      const res = await fetch(`${API_URL}/history/allocation/${historyId}`, {
+        method: 'DELETE',
+        headers: { ...getAuthHeader() }
+      });
+      return res.ok;
+    } catch (e) {
+      console.error('Error deleting allocation history:', e);
     }
     return false;
   }

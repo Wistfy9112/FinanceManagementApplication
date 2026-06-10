@@ -41,6 +41,14 @@ namespace FinancialManagementApplication.API.Controller
             return Ok(new { message = "Khôi phục thành công" });
         }
 
+        [HttpDelete("asset/{historyId:guid}")]
+        public async Task<ActionResult> DeleteAssetHistory(Guid historyId)
+        {
+            var success = await _assetsRepository.DeleteHistoryAsync(historyId);
+            if (!success) return NotFound();
+            return Ok(new { message = "Xóa lịch sử tài sản thành công" });
+        }
+
         [HttpGet("allocation-history/{accountId:guid}")]
         public async Task<ActionResult<IEnumerable<PortfolioAllocationHistory>>> GetAllocationHistory(Guid accountId)
         {
@@ -61,6 +69,14 @@ namespace FinancialManagementApplication.API.Controller
             var success = await _allocationRepository.RestoreFromHistoryAsync(historyId);
             if (!success) return NotFound();
             return Ok(new { message = "Khôi phục phân bổ thành công" });
+        }
+
+        [HttpDelete("allocation/{historyId:guid}")]
+        public async Task<ActionResult> DeleteAllocationHistory(Guid historyId)
+        {
+            var success = await _allocationRepository.DeleteHistoryAsync(historyId);
+            if (!success) return NotFound();
+            return Ok(new { message = "Xóa lịch sử phân bổ thành công" });
         }
     }
 }

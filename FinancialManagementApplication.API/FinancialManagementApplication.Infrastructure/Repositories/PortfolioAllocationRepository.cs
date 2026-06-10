@@ -36,7 +36,10 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
         {
             return await _context.PortfolioAllocations
                 .Include(x => x.Asset)
-                .Where(x => x.PortfolioId == portfolioId).ToListAsync();
+                .Where(x => x.PortfolioId == portfolioId)
+                .OrderBy(x => x.FinancialCategory)
+                .ThenBy(x => x.Name)
+                .ToListAsync();
         }
 
         public async Task<PortfolioAllocation> GetAsync(Guid id)
@@ -97,6 +100,18 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
                 .Where(h => h.AccountId == accountId)
                 .OrderByDescending(h => h.RecordedAt)
                 .ToListAsync();
+        }
+
+        public async Task<bool> DeleteHistoryAsync(Guid historyId)
+        {
+            var history = await _context.PortfolioAllocationHistories
+                .FirstOrDefaultAsync(h => h.Id == historyId);
+
+            if (history == null) return false;
+
+            _context.PortfolioAllocationHistories.Remove(history);
+            await _context.SaveChangesAsync();
+            return true;
         }
 
         public async Task<bool> RestoreFromHistoryAsync(Guid historyId)
