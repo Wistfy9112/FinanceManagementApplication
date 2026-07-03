@@ -1,4 +1,5 @@
 using FinancialManagementApplication.Application.DTOs.CashFlow;
+using FinancialManagementApplication.Application.DTOs.Common;
 using FinancialManagementApplication.Application.Interface.Repositories;
 using FinancialManagementApplication.Application.Interface.Services;
 

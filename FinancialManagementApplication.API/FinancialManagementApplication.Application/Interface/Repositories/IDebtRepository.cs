@@ -4,7 +4,7 @@ namespace FinancialManagementApplication.Application.Interface.Repositories
 {
     public interface IDebtRepository
     {
-        Task<Debt> GetAsync(Guid id);
+        Task<Debt?> GetAsync(Guid id);
         Task<IEnumerable<Debt>> GetAllByAccountIdAsync(Guid accountId);
         Task<Debt> CreateAsync(Debt debt);
         Task<Debt> UpdateAsync(Debt debt);

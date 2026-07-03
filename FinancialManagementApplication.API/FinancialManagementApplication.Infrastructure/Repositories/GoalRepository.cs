@@ -38,7 +38,7 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
                 .ToListAsync();
         }
 
-        public async Task<Goal> GetAsync(Guid id)
+        public async Task<Goal?> GetAsync(Guid id)
         {
             return await _context.Goals.FindAsync(id);
         }
@@ -50,7 +50,7 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
             return goal;
         }
 
-        public async Task<Goal> StartAsync(Guid id)
+        public async Task<Goal?> StartAsync(Guid id)
         {
             var goal = await _context.Goals.FindAsync(id);
             if (goal == null) return null;
@@ -65,7 +65,7 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
             return goal;
         }
 
-        public async Task<Goal> CancelAsync(Guid id)
+        public async Task<Goal?> CancelAsync(Guid id)
         {
             var goal = await _context.Goals.FindAsync(id);
             if (goal == null) return null;

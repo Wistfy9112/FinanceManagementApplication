@@ -3,17 +3,18 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace FinanceManagementApplication.Domain.Entities
+namespace FinancialManagementApplication.Domain.Entities
 {
     public class Account
     {
         public Guid AccountID { get; set; }
-        public string username { get; set; }
-        public string email { get; set; }
-        public string passwordHash { get; set; }
-        public string displayName { get; set; }
-        public DateTime CreateAt { get; set; }
-        public DateTime UpdateAt { get; set; }
+        public string Username { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string PasswordHash { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+        public TimeSpan? TimezoneOffset { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
 
         // Navigation properties
         public virtual ICollection<Assets> Assets { get; set; } = new List<Assets>();

@@ -1,7 +1,7 @@
 using FinancialManagementApplication.API.Controllers;
 using FinancialManagementApplication.Application.DTOs.Auth;
 using FinancialManagementApplication.Application.Services;
-using FinanceManagementApplication.Application.Interface.Repositories;
+using FinancialManagementApplication.Application.Interface.Repositories;
 using FinancialManagementApplication.Application.Interface.Securitiy;
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
@@ -28,15 +28,15 @@ public class AuthControllerTests
     public async Task GetProfile_WithValidId_ReturnsOk()
     {
         var accountId = Guid.NewGuid();
-        var account = new FinanceManagementApplication.Domain.Entities.Account
+        var account = new FinancialManagementApplication.Domain.Entities.Account
         {
             AccountID = accountId,
-            username = "profileuser",
-            email = "profile@test.com",
-            displayName = "Profile User",
-            passwordHash = "hash",
-            CreateAt = DateTime.UtcNow,
-            UpdateAt = DateTime.UtcNow
+            Username = "profileuser",
+            Email = "profile@test.com",
+            DisplayName = "Profile User",
+            PasswordHash = "hash",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
         };
 
         _repoMock
@@ -57,7 +57,7 @@ public class AuthControllerTests
     {
         _repoMock
             .Setup(r => r.GetByIdAsync(It.IsAny<Guid>()))
-            .ReturnsAsync((FinanceManagementApplication.Domain.Entities.Account?)null);
+            .ReturnsAsync((FinancialManagementApplication.Domain.Entities.Account?)null);
 
         var result = await _sut.GetProfile(Guid.NewGuid());
 
@@ -69,15 +69,15 @@ public class AuthControllerTests
     public async Task UpdateProfile_WithValidData_ReturnsOk()
     {
         var accountId = Guid.NewGuid();
-        var account = new FinanceManagementApplication.Domain.Entities.Account
+        var account = new FinancialManagementApplication.Domain.Entities.Account
         {
             AccountID = accountId,
-            username = "updateuser",
-            email = "update@test.com",
-            displayName = "Old Name",
-            passwordHash = "hash",
-            CreateAt = DateTime.UtcNow,
-            UpdateAt = DateTime.UtcNow
+            Username = "updateuser",
+            Email = "update@test.com",
+            DisplayName = "Old Name",
+            PasswordHash = "hash",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
         };
 
         _repoMock
@@ -97,7 +97,7 @@ public class AuthControllerTests
     {
         _repoMock
             .Setup(r => r.GetByIdAsync(It.IsAny<Guid>()))
-            .ReturnsAsync((FinanceManagementApplication.Domain.Entities.Account?)null);
+            .ReturnsAsync((FinancialManagementApplication.Domain.Entities.Account?)null);
 
         var result = await _sut.UpdateProfile(Guid.NewGuid(), new UpdateProfileDTO { DisplayName = "Name" });
 
@@ -110,15 +110,15 @@ public class AuthControllerTests
     {
         var accountId = Guid.NewGuid();
         var password = "CurrentPass123!";
-        var account = new FinanceManagementApplication.Domain.Entities.Account
+        var account = new FinancialManagementApplication.Domain.Entities.Account
         {
             AccountID = accountId,
-            username = "passuser",
-            email = "pass@test.com",
-            displayName = "Pass User",
-            passwordHash = BCrypt.Net.BCrypt.HashPassword(password),
-            CreateAt = DateTime.UtcNow,
-            UpdateAt = DateTime.UtcNow
+            Username = "passuser",
+            Email = "pass@test.com",
+            DisplayName = "Pass User",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
         };
 
         _repoMock
@@ -140,15 +140,15 @@ public class AuthControllerTests
     public async Task ChangePassword_WithWrongPassword_ReturnsBadRequest()
     {
         var accountId = Guid.NewGuid();
-        var account = new FinanceManagementApplication.Domain.Entities.Account
+        var account = new FinancialManagementApplication.Domain.Entities.Account
         {
             AccountID = accountId,
-            username = "passuser",
-            email = "pass@test.com",
-            displayName = "Pass User",
-            passwordHash = BCrypt.Net.BCrypt.HashPassword("CorrectPass123!"),
-            CreateAt = DateTime.UtcNow,
-            UpdateAt = DateTime.UtcNow
+            Username = "passuser",
+            Email = "pass@test.com",
+            DisplayName = "Pass User",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("CorrectPass123!"),
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
         };
 
         _repoMock

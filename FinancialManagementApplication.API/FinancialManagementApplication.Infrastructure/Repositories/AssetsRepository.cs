@@ -1,4 +1,6 @@
-﻿using FinancialManagementApplication.Application.Interface.Repositories;
+﻿using FinancialManagementApplication.Application.DTOs.Common;
+using FinancialManagementApplication.Application.DTOs.History;
+using FinancialManagementApplication.Application.Interface.Repositories;
 using FinancialManagementApplication.Domain.Entities;
 using FinancialManagementApplication.Domain.Enums;
 using FinancialManagementApplication.Infrastructure.Data;
@@ -50,7 +52,7 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
             return await _context.Assets.Where(x => x.AccountID == accountID).ToListAsync();
         }
 
-        public async Task<Assets> GetAsync(Guid id)
+        public async Task<Assets?> GetAsync(Guid id)
         {
             return await _context.Assets.Where(x => x.Id == id).FirstOrDefaultAsync();
         }
@@ -62,7 +64,7 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
             return asset;
         }
 
-        public async Task<AssetHistory> SaveSnapshotAsync(Guid accountId)
+        public async Task<AssetHistory> SaveSnapshotAsync(Guid accountId, DateTime? recordedAt = null)
         {
             var assets = await _context.Assets
                 .Where(a => a.AccountID == accountId)
@@ -72,7 +74,7 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
             {
                 Id = Guid.NewGuid(),
                 AccountId = accountId,
-                RecordedAt = DateTime.UtcNow
+                RecordedAt = recordedAt ?? DateTime.UtcNow
             };
 
             foreach (var a in assets)
@@ -128,6 +130,42 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
             return await _context.Assets
                 .Where(a => a.AccountID == accountId)
                 .SumAsync(a => a.InitialValue);
+        }
+
+        public async Task<AssetHistory?> UpdateAssetHistoryTimeAsync(Guid historyId, DateTime recordedAt)
+        {
+            var history = await _context.AssetHistories
+                .Include(h => h.Details)
+                .FirstOrDefaultAsync(h => h.Id == historyId);
+            if (history == null) return null;
+            history.RecordedAt = recordedAt;
+            await _context.SaveChangesAsync();
+            return history;
+        }
+
+        public async Task<AssetHistory?> UpdateAssetHistoryAsync(Guid historyId, UpdateAssetHistoryDTO dto)
+        {
+            var history = await _context.AssetHistories
+                .Include(h => h.Details)
+                .FirstOrDefaultAsync(h => h.Id == historyId);
+            if (history == null) return null;
+
+            history.RecordedAt = dto.RecordedAt;
+
+            foreach (var detailDto in dto.Details)
+            {
+                var detail = history.Details.FirstOrDefault(d => d.Id == detailDto.Id);
+                if (detail != null)
+                {
+                    detail.Name = detailDto.Name;
+                    detail.InitialValue = detailDto.InitialValue;
+                    detail.CurrentValue = detailDto.CurrentValue;
+                    detail.Type = detailDto.Type;
+                }
+            }
+
+            await _context.SaveChangesAsync();
+            return history;
         }
 
         public async Task<bool> DeleteHistoryAsync(Guid historyId)

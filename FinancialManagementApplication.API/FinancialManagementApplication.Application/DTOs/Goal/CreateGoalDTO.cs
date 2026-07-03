@@ -9,7 +9,7 @@ namespace FinancialManagementApplication.Application.DTOs.Goal
         public Guid AccountId { get; set; }
 
         [Required(ErrorMessage = "Tên mục tiêu không được để trống")]
-        public string Name { get; set; }
+        public string Name { get; set; } = string.Empty;
 
         [Range(0.01, double.MaxValue, ErrorMessage = "Số tiền mục tiêu phải lớn hơn 0")]
         public decimal TargetAmount { get; set; }

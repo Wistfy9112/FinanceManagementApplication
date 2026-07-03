@@ -2,7 +2,7 @@ namespace FinancialManagementApplication.Application.DTOs.CashFlow
 {
     public class CashFlowDataPoint
     {
-        public string Period { get; set; }
+        public string Period { get; set; } = string.Empty;
         public DateTime Date { get; set; }
         public decimal Value { get; set; }
         public decimal InitialValue { get; set; }
@@ -12,7 +12,7 @@ namespace FinancialManagementApplication.Application.DTOs.CashFlow
 
     public class CashFlowGrowthResponse
     {
-        public string Mode { get; set; }
+        public string Mode { get; set; } = string.Empty;
         public int? Year { get; set; }
         public List<CashFlowDataPoint> Data { get; set; } = new();
     }

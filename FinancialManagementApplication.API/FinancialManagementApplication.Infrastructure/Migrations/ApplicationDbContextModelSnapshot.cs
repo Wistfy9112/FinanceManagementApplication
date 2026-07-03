@@ -22,31 +22,34 @@ namespace FinancialManagementApplication.Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("FinanceManagementApplication.Domain.Entities.Account", b =>
+            modelBuilder.Entity("FinancialManagementApplication.Domain.Entities.Account", b =>
                 {
                     b.Property<Guid>("AccountID")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<DateTime>("CreateAt")
+                    b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<DateTime>("UpdateAt")
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<TimeSpan?>("TimezoneOffset")
+                        .HasColumnType("interval");
+
+                    b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<string>("displayName")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("email")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("passwordHash")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("username")
+                    b.Property<string>("Username")
                         .IsRequired()
                         .HasColumnType("text");
 
@@ -432,7 +435,7 @@ namespace FinancialManagementApplication.Infrastructure.Migrations
 
             modelBuilder.Entity("FinancialManagementApplication.Domain.Entities.Assets", b =>
                 {
-                    b.HasOne("FinanceManagementApplication.Domain.Entities.Account", "Account")
+                    b.HasOne("FinancialManagementApplication.Domain.Entities.Account", "Account")
                         .WithMany("Assets")
                         .HasForeignKey("AccountID")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -443,7 +446,7 @@ namespace FinancialManagementApplication.Infrastructure.Migrations
 
             modelBuilder.Entity("FinancialManagementApplication.Domain.Entities.Debt", b =>
                 {
-                    b.HasOne("FinanceManagementApplication.Domain.Entities.Account", "Account")
+                    b.HasOne("FinancialManagementApplication.Domain.Entities.Account", "Account")
                         .WithMany("Debts")
                         .HasForeignKey("AccountId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -465,7 +468,7 @@ namespace FinancialManagementApplication.Infrastructure.Migrations
 
             modelBuilder.Entity("FinancialManagementApplication.Domain.Entities.Goal", b =>
                 {
-                    b.HasOne("FinanceManagementApplication.Domain.Entities.Account", "Account")
+                    b.HasOne("FinancialManagementApplication.Domain.Entities.Account", "Account")
                         .WithMany("Goals")
                         .HasForeignKey("AccountId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -476,7 +479,7 @@ namespace FinancialManagementApplication.Infrastructure.Migrations
 
             modelBuilder.Entity("FinancialManagementApplication.Domain.Entities.Portfolio", b =>
                 {
-                    b.HasOne("FinanceManagementApplication.Domain.Entities.Account", "Account")
+                    b.HasOne("FinancialManagementApplication.Domain.Entities.Account", "Account")
                         .WithMany("Portfolios")
                         .HasForeignKey("AccountID")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -514,7 +517,7 @@ namespace FinancialManagementApplication.Infrastructure.Migrations
                     b.Navigation("PortfolioAllocationHistory");
                 });
 
-            modelBuilder.Entity("FinanceManagementApplication.Domain.Entities.Account", b =>
+            modelBuilder.Entity("FinancialManagementApplication.Domain.Entities.Account", b =>
                 {
                     b.Navigation("Assets");
 
@@ -532,8 +535,7 @@ namespace FinancialManagementApplication.Infrastructure.Migrations
 
             modelBuilder.Entity("FinancialManagementApplication.Domain.Entities.Assets", b =>
                 {
-                    b.Navigation("PortfolioAllocation")
-                        .IsRequired();
+                    b.Navigation("PortfolioAllocation");
                 });
 
             modelBuilder.Entity("FinancialManagementApplication.Domain.Entities.Debt", b =>

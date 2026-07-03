@@ -1,4 +1,4 @@
-using FinanceManagementApplication.Application.Interface.Repositories;
+using System.Text;
 using FinancialManagementApplication.Application.Interface.Repositories;
 using FinancialManagementApplication.Application.Interface.Securitiy;
 using FinancialManagementApplication.Application.Interface.Services;
@@ -6,7 +6,9 @@ using FinancialManagementApplication.Application.Services;
 using FinancialManagementApplication.Infrastructure.Data;
 using FinancialManagementApplication.Infrastructure.Repositories;
 using FinancialManagementApplication.Infrastructure.Security;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using System.Text.Json.Serialization;
 
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
@@ -64,6 +66,23 @@ builder.Services.AddCors(options =>
         });
 });
 
+var jwtKey = builder.Configuration["Jwt:Key"]!;
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
+            ValidateIssuer = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidateAudience = true,
+            ValidAudience = builder.Configuration["Jwt:Audience"],
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.Zero
+        };
+    });
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -79,6 +98,7 @@ app.UseCors("AllowFrontend");
 
 app.UseHttpsRedirection();
 
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();

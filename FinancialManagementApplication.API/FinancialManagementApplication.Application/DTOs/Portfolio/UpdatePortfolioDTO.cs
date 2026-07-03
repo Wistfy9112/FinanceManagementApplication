@@ -6,7 +6,7 @@ namespace FinancialManagementApplication.Application.DTOs.Portfolio
 {
     public class UpdatePortfolioDTO
     {
-        public string Name { get; set; }
+        public string Name { get; set; } = string.Empty;
         public decimal Amount { get; set; }
     }
 }

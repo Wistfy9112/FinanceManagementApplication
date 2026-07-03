@@ -1,4 +1,4 @@
-﻿using FinanceManagementApplication.Domain.Entities;
+﻿using FinancialManagementApplication.Domain.Entities;
 using FinancialManagementApplication.Domain.Enums;
 using System;
 using System.Collections.Generic;
@@ -10,11 +10,11 @@ namespace FinancialManagementApplication.Domain.Entities
     {
         public Guid Id { get; set; }
         public Guid AccountID { get; set; }
-        public string Name { get; set; }
+        public string Name { get; set; } = string.Empty;
         public decimal Amount { get; set; }
 
         // Navigation properties
         public virtual ICollection<PortfolioAllocation> PortfolioAllocations { get; set; } = new List<PortfolioAllocation>();
-        public virtual Account Account { get; set; }
+        public virtual Account Account { get; set; } = null!;
     }
 }

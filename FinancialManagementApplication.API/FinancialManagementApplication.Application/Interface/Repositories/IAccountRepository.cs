@@ -1,6 +1,6 @@
-﻿using FinanceManagementApplication.Domain.Entities;
+﻿using FinancialManagementApplication.Domain.Entities;
 
-namespace FinanceManagementApplication.Application.Interface.Repositories
+namespace FinancialManagementApplication.Application.Interface.Repositories
 {
     public interface IAccountRepository
     {

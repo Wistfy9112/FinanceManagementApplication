@@ -811,6 +811,48 @@ export const historyService = {
       console.error('Error deleting allocation history:', e);
     }
     return false;
+  },
+
+  updateAssetHistoryTime: async (historyId: string, recordedAt: string): Promise<any> => {
+    await checkConnection();
+    if (isDemoMode) return null;
+    try {
+      const res = await fetch(`${API_URL}/history/asset/${historyId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+        body: JSON.stringify({ recordedAt })
+      });
+      if (res.ok) {
+        const result = await res.json();
+        return result ? { Id: result.id || result.Id, RecordedAt: result.recordedAt || result.RecordedAt, Details: (result.details || result.Details || []).map((d: any) => ({
+          Id: d.id || d.Id, Name: d.name || d.Name, InitialValue: d.initialValue ?? d.InitialValue ?? 0, CurrentValue: d.currentValue ?? d.CurrentValue ?? 0, Type: d.type || d.Type || 'Saving'
+        })) } : null;
+      }
+    } catch (e) {
+      console.error('Error updating asset history time:', e);
+    }
+    return null;
+  },
+
+  updateAllocationHistoryTime: async (historyId: string, recordedAt: string): Promise<any> => {
+    await checkConnection();
+    if (isDemoMode) return null;
+    try {
+      const res = await fetch(`${API_URL}/history/allocation/${historyId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+        body: JSON.stringify({ recordedAt })
+      });
+      if (res.ok) {
+        const result = await res.json();
+        return result ? { Id: result.id || result.Id, RecordedAt: result.recordedAt || result.RecordedAt, CurrentAmount: result.currentAmount ?? result.CurrentAmount ?? 0, Details: (result.details || result.Details || []).map((d: any) => ({
+          Id: d.id || d.Id, Name: d.name || d.Name, FinancialCategory: d.financialCategory || d.FinancialCategory, CurrentAmount: d.currentAmount ?? d.CurrentAmount ?? 0, TargetPercentage: d.targetPercentage ?? d.TargetPercentage ?? 0, AssetType: d.assetType || d.AssetType || 'Saving'
+        })) } : null;
+      }
+    } catch (e) {
+      console.error('Error updating allocation history time:', e);
+    }
+    return null;
   }
 };
 

@@ -68,6 +68,42 @@ const formatDateTime = (iso: string) => {
   return `${day}/${month}/${year} ${hours}:${minutes}:${secs}`;
 };
 
+function DateTimeEdit({ value, onSave }: { value: string; onSave: (iso: string) => void }) {
+  const d = new Date(value);
+  const [date, setDate] = useState(d.toISOString().slice(0, 10));
+  const [hour, setHour] = useState(String(d.getHours() % 12 || 12));
+  const [minute, setMinute] = useState(String(d.getMinutes()).padStart(2, '0'));
+  const [isPM, setIsPM] = useState(d.getHours() >= 12);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  const commit = () => {
+    const h = (parseInt(hour) || 12) % 12 + (isPM ? 12 : 0);
+    const m = Math.min(59, Math.max(0, parseInt(minute) || 0));
+    const s = `${date}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
+    onSave(new Date(s).toISOString());
+  };
+
+  return (
+    <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
+      <input ref={inputRef} type="date" value={date} onChange={(e) => setDate(e.target.value)} onBlur={commit}
+        style={{ padding: '2px 4px', border: '1px solid var(--primary)', borderRadius: '4px', fontSize: '0.8rem', width: '95px' }} />
+      <input type="number" min={1} max={12} value={hour} onChange={(e) => setHour(e.target.value)} onBlur={commit}
+        onKeyDown={(e) => { if (e.key === 'Enter') commit(); }}
+        style={{ padding: '2px 4px', border: '1px solid var(--primary)', borderRadius: '4px', fontSize: '0.8rem', width: '35px', textAlign: 'center' }} />
+      <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>:</span>
+      <input type="number" min={0} max={59} value={minute} onChange={(e) => setMinute(e.target.value)} onBlur={commit}
+        onKeyDown={(e) => { if (e.key === 'Enter') commit(); }}
+        style={{ padding: '2px 4px', border: '1px solid var(--primary)', borderRadius: '4px', fontSize: '0.8rem', width: '35px', textAlign: 'center' }} />
+      <button onClick={() => setIsPM(p => !p)} onBlur={commit}
+        style={{ padding: '2px 6px', border: '1px solid var(--primary)', borderRadius: '4px', fontSize: '0.75rem', cursor: 'pointer', background: isPM ? 'rgba(99,102,241,0.15)' : 'transparent', color: 'var(--primary)', fontWeight: 600 }}>
+        {isPM ? 'CH' : 'SA'}
+      </button>
+    </div>
+  );
+}
+
 export default function App() {
   const [user, setUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'assets' | 'portfolio' | 'goals' | 'debts' | 'profile'>('dashboard');
@@ -303,6 +339,30 @@ export default function App() {
     } catch (err: any) {
       addToast({ title: t('Lỗi khôi phục'), description: err.message, variant: 'error' });
     }
+  };
+
+  const handleUpdateAssetHistoryTime = async (historyId: string, recordedAt: string) => {
+    try {
+      if (!user) return null;
+      const updated = await historyService.updateAssetHistoryTime(historyId, recordedAt);
+      if (updated) {
+        setHistoryRecords(prev => prev.map((r: any) => r.Id === historyId ? updated : r));
+        return updated;
+      }
+      return null;
+    } catch { return null; }
+  };
+
+  const handleUpdateAllocationHistoryTime = async (historyId: string, recordedAt: string) => {
+    try {
+      if (!user) return null;
+      const updated = await historyService.updateAllocationHistoryTime(historyId, recordedAt);
+      if (updated) {
+        setAllocationHistoryRecords(prev => prev.map((r: any) => r.Id === historyId ? updated : r));
+        return updated;
+      }
+      return null;
+    } catch { return null; }
   };
 
   const handleDeleteAssetHistory = async (historyId: string) => {
@@ -763,6 +823,7 @@ export default function App() {
             onSave={handleSaveAllAssets}
             onRestore={handleRestoreFromHistory}
             onDeleteHistory={handleDeleteAssetHistory}
+            onUpdateTime={handleUpdateAssetHistoryTime}
           />
         )}
 
@@ -798,6 +859,7 @@ export default function App() {
             allocationHistoryRecords={allocationHistoryRecords}
             onRestoreAllocationHistory={handleRestoreAllocationHistory}
             onDeleteAllocationHistory={handleDeleteAllocationHistory}
+            onUpdateAllocationTime={handleUpdateAllocationHistoryTime}
           />
         )}
 
@@ -1549,7 +1611,8 @@ function AssetsPage({
   onDelete,
   onSave,
   onRestore,
-  onDeleteHistory
+  onDeleteHistory,
+  onUpdateTime
 }: { 
   assets: any[]; 
   historyRecords: any[];
@@ -1562,10 +1625,12 @@ function AssetsPage({
   onDelete: any;
   onSave: any;
   onRestore: any;
-  onDeleteHistory: any
+  onDeleteHistory: any;
+  onUpdateTime: (historyId: string, recordedAt: string) => Promise<any>;
 }) {
   const { t } = useLanguage();
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
+  const [editingTimeId, setEditingTimeId] = useState<string | null>(null);
   const expenseAssets = assets.filter(a => a.Type === 'Expense');
   const savingAssets = assets.filter(a => a.Type === 'Saving');
   const investmentAssets = assets.filter(a => a.Type === 'Investment');
@@ -1753,11 +1818,24 @@ function AssetsPage({
                   border: selectedHistoryId === r.Id ? '1px solid rgba(99,102,241,0.3)' : '1px solid transparent',
                   transition: 'all 0.15s'
                 }}>
-                  <div onClick={() => setSelectedHistoryId(selectedHistoryId === r.Id ? null : r.Id)}
+                  <div onClick={() => setSelectedHistoryId(r.Id)}
                     style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 500, fontSize: '0.85rem' }}>
-                      {formatDateTime(r.RecordedAt)}
-                    </div>
+                    {editingTimeId === r.Id ? (
+                      <DateTimeEdit value={r.RecordedAt} onSave={async (newIso) => {
+                        const oldTime = new Date(r.RecordedAt).getTime();
+                        const newTime = new Date(newIso).getTime();
+                        if (Math.abs(newTime - oldTime) > 60000) {
+                          await onUpdateTime(r.Id, newIso);
+                        }
+                        setEditingTimeId(null);
+                      }} />
+                    ) : (
+                      <div style={{ fontWeight: 500, fontSize: '0.85rem', cursor: 'pointer' }}
+                        onClick={(e) => { e.stopPropagation(); setSelectedHistoryId(r.Id); if (selectedHistoryId === r.Id) setEditingTimeId(r.Id); }}
+                        title={t('Nhấn để sửa thời gian')}>
+                        {formatDateTime(r.RecordedAt)}
+                      </div>
+                    )}
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
                       {r.Details?.length || 0} {t('tài sản · tổng')} {formatCurrency((r.Details || []).reduce((s: number, d: any) => s + d.CurrentValue, 0))}
                     </div>
@@ -1883,7 +1961,8 @@ function PortfolioPage({
   onApplyToAsset,
   allocationHistoryRecords,
   onRestoreAllocationHistory,
-  onDeleteAllocationHistory
+  onDeleteAllocationHistory,
+  onUpdateAllocationTime
 }: {
   assets: any[];
   income: number;
@@ -1915,6 +1994,7 @@ function PortfolioPage({
   allocationHistoryRecords: any[];
   onRestoreAllocationHistory: (historyId: string) => void;
   onDeleteAllocationHistory: (historyId: string) => void;
+  onUpdateAllocationTime: (historyId: string, recordedAt: string) => Promise<any>;
 }) {
   const { t } = useLanguage();
 
@@ -2097,6 +2177,7 @@ function PortfolioPage({
               onDelete={onDeleteAllocationHistory}
               formatDateTime={formatDateTime}
               formatCurrency={formatCurrency}
+              onUpdateTime={onUpdateAllocationTime}
             />
           )}
         </div>
@@ -3270,15 +3351,17 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
   );
 }
 
-function AllocationHistorySection({ records, onRestore, onDelete, formatDateTime, formatCurrency }: {
+function AllocationHistorySection({ records, onRestore, onDelete, formatDateTime, formatCurrency, onUpdateTime }: {
   records: any[];
   onRestore: (id: string) => void;
   onDelete: (id: string) => void;
   formatDateTime: (iso: string) => string;
   formatCurrency: (value: number) => string;
+  onUpdateTime: (historyId: string, recordedAt: string) => Promise<any>;
 }) {
   const { t } = useLanguage();
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
+  const [editingTimeId, setEditingTimeId] = useState<string | null>(null);
 
   return (
     <div style={{ display: 'flex', gap: '16px' }}>
@@ -3291,11 +3374,24 @@ function AllocationHistorySection({ records, onRestore, onDelete, formatDateTime
             border: selectedHistoryId === r.Id ? '1px solid rgba(99,102,241,0.3)' : '1px solid transparent',
             transition: 'all 0.15s'
           }}>
-            <div onClick={() => setSelectedHistoryId(selectedHistoryId === r.Id ? null : r.Id)}
+            <div onClick={() => setSelectedHistoryId(r.Id)}
               style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 500, fontSize: '0.85rem' }}>
-                {formatDateTime(r.RecordedAt)}
-              </div>
+              {editingTimeId === r.Id ? (
+                      <DateTimeEdit value={r.RecordedAt} onSave={async (newIso) => {
+                        const oldTime = new Date(r.RecordedAt).getTime();
+                        const newTime = new Date(newIso).getTime();
+                        if (Math.abs(newTime - oldTime) > 60000) {
+                          await onUpdateTime(r.Id, newIso);
+                        }
+                        setEditingTimeId(null);
+                      }} />
+                    ) : (
+                <div style={{ fontWeight: 500, fontSize: '0.85rem', cursor: 'pointer' }}
+                  onClick={(e) => { e.stopPropagation(); setSelectedHistoryId(r.Id); if (selectedHistoryId === r.Id) setEditingTimeId(r.Id); }}
+                  title={t('Nhấn để sửa thời gian')}>
+                  {formatDateTime(r.RecordedAt)}
+                </div>
+              )}
               <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
                 {r.Details?.length || 0} {t('danh mục')}
               </div>

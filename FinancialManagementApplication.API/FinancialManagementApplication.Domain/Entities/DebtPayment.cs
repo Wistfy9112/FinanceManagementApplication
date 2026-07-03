@@ -10,6 +10,6 @@ namespace FinancialManagementApplication.Domain.Entities
         public string? Note { get; set; }
         public DateTime CreatedAt { get; set; }
 
-        public virtual Debt Debt { get; set; }
+        public virtual Debt Debt { get; set; } = null!;
     }
 }

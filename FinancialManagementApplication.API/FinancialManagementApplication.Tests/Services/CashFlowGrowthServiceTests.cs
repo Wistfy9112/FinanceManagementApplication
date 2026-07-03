@@ -1,3 +1,4 @@
+using FinancialManagementApplication.Application.DTOs.Common;
 using FinancialManagementApplication.Application.Interface.Repositories;
 using FinancialManagementApplication.Application.Interface.Services;
 using FinancialManagementApplication.Application.Services;
@@ -175,13 +176,15 @@ public class CashFlowGrowthServiceTests
     public async Task GetGrowthDataAsync_Last12Months_ReturnsTwelveMonths()
     {
         var accountId = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+        var startDate = new DateTime(now.Year, now.Month, 1).AddMonths(-12);
 
         var snapshots = new List<SnapshotSummary>
         {
-            new() { RecordedAt = new DateTime(2025, 6, 15), TotalValue = 70_000_000, TotalInitialValue = 50_000_000 },
-            new() { RecordedAt = new DateTime(2025, 7, 1), TotalValue = 80_000_000, TotalInitialValue = 60_000_000 },
-            new() { RecordedAt = new DateTime(2025, 12, 31), TotalValue = 100_000_000, TotalInitialValue = 75_000_000 },
-            new() { RecordedAt = new DateTime(2026, 3, 15), TotalValue = 130_000_000, TotalInitialValue = 90_000_000 },
+            new() { RecordedAt = startDate.AddDays(5), TotalValue = 70_000_000, TotalInitialValue = 50_000_000 },
+            new() { RecordedAt = startDate.AddMonths(1).AddDays(1), TotalValue = 80_000_000, TotalInitialValue = 60_000_000 },
+            new() { RecordedAt = startDate.AddMonths(6).AddDays(1), TotalValue = 100_000_000, TotalInitialValue = 75_000_000 },
+            new() { RecordedAt = startDate.AddMonths(9).AddDays(1), TotalValue = 130_000_000, TotalInitialValue = 90_000_000 },
         };
         SetupSnapshots(accountId, snapshots);
         SetupCurrentValues(accountId, 150_000_000, 105_000_000);
@@ -190,19 +193,21 @@ public class CashFlowGrowthServiceTests
 
         result.Mode.Should().Be("last12months");
         result.Data.Should().HaveCount(13);
-        result.Data[0].Period.Should().Be("Jun 2025");
-        result.Data[^1].Period.Should().Be("Jun 2026");
+        result.Data[0].Period.Should().Be(startDate.ToString("MMM yyyy"));
+        result.Data[^1].Period.Should().Be(now.ToString("MMM yyyy"));
     }
 
     [Fact]
     public async Task GetGrowthDataAsync_Last12Months_WithMissingMonths_CarriesForward()
     {
         var accountId = Guid.NewGuid();
+        var now = DateTime.UtcNow;
+        var startDate = new DateTime(now.Year, now.Month, 1).AddMonths(-12);
 
         var snapshots = new List<SnapshotSummary>
         {
-            new() { RecordedAt = new DateTime(2025, 7, 1), TotalValue = 80_000_000, TotalInitialValue = 60_000_000 },
-            new() { RecordedAt = new DateTime(2026, 6, 1), TotalValue = 150_000_000, TotalInitialValue = 110_000_000 },
+            new() { RecordedAt = startDate.AddMonths(1).AddDays(1), TotalValue = 80_000_000, TotalInitialValue = 60_000_000 },
+            new() { RecordedAt = startDate.AddMonths(11).AddDays(1), TotalValue = 150_000_000, TotalInitialValue = 110_000_000 },
         };
         SetupSnapshots(accountId, snapshots);
         SetupCurrentValues(accountId, 150_000_000, 110_000_000);

@@ -1,6 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
-using FinanceManagementApplication.Domain.Entities;
+using FinancialManagementApplication.Domain.Entities;
 using FinancialManagementApplication.Application.Interface.Securitiy;
 using FinancialManagementApplication.Infrastructure.Security;
 using FluentAssertions;
@@ -33,9 +33,9 @@ public class JwtTokenGeneratorTests
         var account = new Account
         {
             AccountID = Guid.NewGuid(),
-            username = "testuser",
-            email = "test@example.com",
-            displayName = "Test User"
+            Username = "testuser",
+            Email = "test@example.com",
+            DisplayName = "Test User"
         };
 
         var token = _sut.Generate(account);
@@ -50,9 +50,9 @@ public class JwtTokenGeneratorTests
         var account = new Account
         {
             AccountID = accountId,
-            username = "claimstest",
-            email = "claims@example.com",
-            displayName = "Claims Test"
+            Username = "claimstest",
+            Email = "claims@example.com",
+            DisplayName = "Claims Test"
         };
 
         var token = _sut.Generate(account);
@@ -75,9 +75,9 @@ public class JwtTokenGeneratorTests
         var account = new Account
         {
             AccountID = Guid.NewGuid(),
-            username = "issuertest",
-            email = "issuer@example.com",
-            displayName = "Issuer Test"
+            Username = "issuertest",
+            Email = "issuer@example.com",
+            DisplayName = "Issuer Test"
         };
 
         var token = _sut.Generate(account);
@@ -94,9 +94,9 @@ public class JwtTokenGeneratorTests
         var account = new Account
         {
             AccountID = Guid.NewGuid(),
-            username = "expirytest",
-            email = "expiry@example.com",
-            displayName = "Expiry Test"
+            Username = "expirytest",
+            Email = "expiry@example.com",
+            DisplayName = "Expiry Test"
         };
 
         var token = _sut.Generate(account);
@@ -114,9 +114,9 @@ public class JwtTokenGeneratorTests
         var account = new Account
         {
             AccountID = Guid.NewGuid(),
-            username = "emptyuser",
-            email = "empty@example.com",
-            displayName = null
+            Username = "emptyuser",
+            Email = "empty@example.com",
+            DisplayName = null!
         };
 
         var token = _sut.Generate(account);
