@@ -1,8 +1,8 @@
-using FinanceManagementApplication.Application.Interface.Repositories;
+using FinancialManagementApplication.Application.Interface.Repositories;
 using FinancialManagementApplication.Application.DTOs.Auth;
 using FinancialManagementApplication.Application.Interface.Securitiy;
 using FinancialManagementApplication.Application.Services;
-using FinanceManagementApplication.Domain.Entities;
+using FinancialManagementApplication.Domain.Entities;
 using FluentAssertions;
 using Moq;
 
@@ -53,10 +53,10 @@ public class AuthServiceTests
         result.CreateAt.Should().NotBe(default);
 
         _repoMock.Verify(r => r.AddAsync(It.Is<Account>(a =>
-            a.email == request.Email &&
-            a.username == request.Username &&
-            a.displayName == request.DisplayName &&
-            !string.IsNullOrEmpty(a.passwordHash)
+            a.Email == request.Email &&
+            a.Username == request.Username &&
+            a.DisplayName == request.DisplayName &&
+            !string.IsNullOrEmpty(a.PasswordHash)
         )), Times.Once);
     }
 
@@ -73,10 +73,10 @@ public class AuthServiceTests
         var existingAccount = new Account
         {
             AccountID = Guid.NewGuid(),
-            username = request.Username,
-            email = request.Email,
-            passwordHash = "hash",
-            displayName = "Existing"
+            Username = request.Username,
+            Email = request.Email,
+            PasswordHash = "hash",
+            DisplayName = "Existing"
         };
 
         _repoMock
@@ -114,8 +114,8 @@ public class AuthServiceTests
         await _sut.RegisterAsync(request);
 
         _repoMock.Verify(r => r.AddAsync(It.Is<Account>(a =>
-            a.passwordHash != request.Password &&
-            a.passwordHash.StartsWith("$2")
+            a.PasswordHash != request.Password &&
+            a.PasswordHash.StartsWith("$2")
         )), Times.Once);
     }
 
@@ -131,10 +131,10 @@ public class AuthServiceTests
         var account = new Account
         {
             AccountID = accountId,
-            username = "testuser",
-            email = "user@example.com",
-            passwordHash = BCrypt.Net.BCrypt.HashPassword(password),
-            displayName = "Test User"
+            Username = "testuser",
+            Email = "user@example.com",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
+            DisplayName = "Test User"
         };
         var request = new LoginRequest
         {
@@ -155,8 +155,8 @@ public class AuthServiceTests
 
         result.Should().NotBeNull();
         result.Token.Should().Be(expectedToken);
-        result.Username.Should().Be(account.username);
-        result.DisplayName.Should().Be(account.displayName);
+        result.Username.Should().Be(account.Username);
+        result.DisplayName.Should().Be(account.DisplayName);
         result.AccountId.Should().Be(accountId);
     }
 
@@ -187,10 +187,10 @@ public class AuthServiceTests
         var account = new Account
         {
             AccountID = Guid.NewGuid(),
-            username = "testuser",
-            email = "user@example.com",
-            passwordHash = BCrypt.Net.BCrypt.HashPassword("CorrectPassword123!"),
-            displayName = "Test User"
+            Username = "testuser",
+            Email = "user@example.com",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("CorrectPassword123!"),
+            DisplayName = "Test User"
         };
         var request = new LoginRequest
         {
@@ -221,12 +221,12 @@ public class AuthServiceTests
         var account = new Account
         {
             AccountID = accountId,
-            username = "profileuser",
-            email = "profile@example.com",
-            passwordHash = "hash",
-            displayName = "Profile User",
-            CreateAt = DateTime.UtcNow,
-            UpdateAt = DateTime.UtcNow
+            Username = "profileuser",
+            Email = "profile@example.com",
+            PasswordHash = "hash",
+            DisplayName = "Profile User",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
         };
 
         _repoMock
@@ -266,12 +266,12 @@ public class AuthServiceTests
         var account = new Account
         {
             AccountID = accountId,
-            username = "updateuser",
-            email = "update@example.com",
-            passwordHash = "hash",
-            displayName = "Old Name",
-            CreateAt = DateTime.UtcNow,
-            UpdateAt = DateTime.UtcNow
+            Username = "updateuser",
+            Email = "update@example.com",
+            PasswordHash = "hash",
+            DisplayName = "Old Name",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
         };
         var dto = new UpdateProfileDTO { DisplayName = "New Name" };
 
@@ -285,7 +285,7 @@ public class AuthServiceTests
         result.DisplayName.Should().Be("New Name");
         result.AccountId.Should().Be(accountId);
         _repoMock.Verify(r => r.UpdateAsync(It.Is<Account>(a =>
-            a.displayName == "New Name"
+            a.DisplayName == "New Name"
         )), Times.Once);
     }
 
@@ -314,12 +314,12 @@ public class AuthServiceTests
         var account = new Account
         {
             AccountID = accountId,
-            username = "passuser",
-            email = "pass@example.com",
-            passwordHash = BCrypt.Net.BCrypt.HashPassword(currentPassword),
-            displayName = "Pass User",
-            CreateAt = DateTime.UtcNow,
-            UpdateAt = DateTime.UtcNow
+            Username = "passuser",
+            Email = "pass@example.com",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(currentPassword),
+            DisplayName = "Pass User",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
         };
         var dto = new ChangePasswordDTO
         {
@@ -334,8 +334,8 @@ public class AuthServiceTests
         await _sut.ChangePasswordAsync(accountId, dto);
 
         _repoMock.Verify(r => r.UpdateAsync(It.Is<Account>(a =>
-            a.passwordHash != currentPassword &&
-            a.passwordHash.StartsWith("$2")
+            a.PasswordHash != currentPassword &&
+            a.PasswordHash.StartsWith("$2")
         )), Times.Once);
     }
 
@@ -346,12 +346,12 @@ public class AuthServiceTests
         var account = new Account
         {
             AccountID = accountId,
-            username = "passuser",
-            email = "pass@example.com",
-            passwordHash = BCrypt.Net.BCrypt.HashPassword("CorrectPass123!"),
-            displayName = "Pass User",
-            CreateAt = DateTime.UtcNow,
-            UpdateAt = DateTime.UtcNow
+            Username = "passuser",
+            Email = "pass@example.com",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("CorrectPass123!"),
+            DisplayName = "Pass User",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
         };
         var dto = new ChangePasswordDTO
         {

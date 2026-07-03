@@ -1,6 +1,3 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
 using BCrypt.Net;
 
 namespace FinancialManagementApplication.Infrastructure.Security
@@ -17,5 +14,4 @@ namespace FinancialManagementApplication.Infrastructure.Security
             return BCrypt.Net.BCrypt.Verify(password, hash);
         }
     }
-
 }

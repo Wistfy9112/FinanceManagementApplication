@@ -6,7 +6,7 @@ namespace FinancialManagementApplication.Application.DTOs.Goal
     {
         public Guid Id { get; set; }
         public Guid AccountId { get; set; }
-        public string Name { get; set; }
+        public string Name { get; set; } = string.Empty;
         public decimal TargetAmount { get; set; }
         public DateTime? StartDate { get; set; }
         public DateTime DueDate { get; set; }

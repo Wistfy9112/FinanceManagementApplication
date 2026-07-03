@@ -1,11 +1,8 @@
-﻿using FinancialManagementApplication.Application.Interface.Repositories;
+﻿using FinancialManagementApplication.Application.DTOs.History;
+using FinancialManagementApplication.Application.Interface.Repositories;
 using FinancialManagementApplication.Domain.Entities;
 using FinancialManagementApplication.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 
 namespace FinancialManagementApplication.Infrastructure.Repositories
 {
@@ -36,10 +33,13 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
         {
             return await _context.PortfolioAllocations
                 .Include(x => x.Asset)
-                .Where(x => x.PortfolioId == portfolioId).ToListAsync();
+                .Where(x => x.PortfolioId == portfolioId)
+                .OrderBy(x => x.FinancialCategory)
+                .ThenBy(x => x.Name)
+                .ToListAsync();
         }
 
-        public async Task<PortfolioAllocation> GetAsync(Guid id)
+        public async Task<PortfolioAllocation?> GetAsync(Guid id)
         {
             return await _context.PortfolioAllocations
                 .Include(x => x.Asset)
@@ -53,7 +53,7 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
             return portfolioAllocation;
         }
 
-        public async Task<PortfolioAllocationHistory> SaveSnapshotAsync(Guid accountId)
+        public async Task<PortfolioAllocationHistory> SaveSnapshotAsync(Guid accountId, DateTime? recordedAt = null)
         {
             var allocations = await _context.PortfolioAllocations
                 .Where(al => al.Portfolio.AccountID == accountId)
@@ -69,7 +69,7 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
                 Id = Guid.NewGuid(),
                 AccountId = accountId,
                 CurrentAmount = portfolioAmount,
-                RecordedAt = DateTime.UtcNow
+                RecordedAt = recordedAt ?? DateTime.UtcNow
             };
 
             foreach (var al in allocations)
@@ -97,6 +97,56 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
                 .Where(h => h.AccountId == accountId)
                 .OrderByDescending(h => h.RecordedAt)
                 .ToListAsync();
+        }
+
+        public async Task<PortfolioAllocationHistory?> UpdateAllocationHistoryTimeAsync(Guid historyId, DateTime recordedAt)
+        {
+            var history = await _context.PortfolioAllocationHistories
+                .Include(h => h.Details)
+                .FirstOrDefaultAsync(h => h.Id == historyId);
+            if (history == null) return null;
+            history.RecordedAt = recordedAt;
+            await _context.SaveChangesAsync();
+            return history;
+        }
+
+        public async Task<PortfolioAllocationHistory?> UpdateAllocationHistoryAsync(Guid historyId, UpdateAllocationHistoryDTO dto)
+        {
+            var history = await _context.PortfolioAllocationHistories
+                .Include(h => h.Details)
+                .FirstOrDefaultAsync(h => h.Id == historyId);
+            if (history == null) return null;
+
+            history.RecordedAt = dto.RecordedAt;
+            history.CurrentAmount = dto.CurrentAmount;
+
+            foreach (var detailDto in dto.Details)
+            {
+                var detail = history.Details.FirstOrDefault(d => d.Id == detailDto.Id);
+                if (detail != null)
+                {
+                    detail.Name = detailDto.Name;
+                    detail.FinancialCategory = detailDto.FinancialCategory;
+                    detail.CurrentAmount = detailDto.CurrentAmount;
+                    detail.TargetPercentage = detailDto.TargetPercentage;
+                    detail.AssetType = detailDto.AssetType;
+                }
+            }
+
+            await _context.SaveChangesAsync();
+            return history;
+        }
+
+        public async Task<bool> DeleteHistoryAsync(Guid historyId)
+        {
+            var history = await _context.PortfolioAllocationHistories
+                .FirstOrDefaultAsync(h => h.Id == historyId);
+
+            if (history == null) return false;
+
+            _context.PortfolioAllocationHistories.Remove(history);
+            await _context.SaveChangesAsync();
+            return true;
         }
 
         public async Task<bool> RestoreFromHistoryAsync(Guid historyId)

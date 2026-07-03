@@ -1,5 +1,4 @@
-﻿using FinanceManagementApplication.Domain.Entities;
-using FinancialManagementApplication.Domain.Entities;
+﻿using FinancialManagementApplication.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using System.Collections.Generic;

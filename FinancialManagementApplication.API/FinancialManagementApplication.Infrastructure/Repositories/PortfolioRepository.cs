@@ -27,7 +27,7 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
             try
             {
                 await _context.Portfolio.Where(x => x.Id == id).ExecuteDeleteAsync();
-            } catch (Exception e){
+            } catch (Exception){
                 return false;
             }
             return true;
@@ -38,7 +38,7 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
             return await _context.Portfolio.Where(x => x.AccountID == accountId).ToListAsync();
         }
 
-        public async Task<Portfolio> GetAsync(Guid id)
+        public async Task<Portfolio?> GetAsync(Guid id)
         {
             return await _context.Portfolio.Where(x => x.Id == id).FirstOrDefaultAsync();
         }
@@ -50,7 +50,7 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
             return portfolio;
         }
 
-        public async Task<Portfolio> GetByAccountIdAsync(Guid accountId)
+        public async Task<Portfolio?> GetByAccountIdAsync(Guid accountId)
         {
             return await _context.Portfolio.Where(x => x.AccountID == accountId).FirstOrDefaultAsync();
         }

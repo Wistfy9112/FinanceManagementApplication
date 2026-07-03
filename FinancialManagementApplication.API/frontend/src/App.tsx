@@ -68,6 +68,42 @@ const formatDateTime = (iso: string) => {
   return `${day}/${month}/${year} ${hours}:${minutes}:${secs}`;
 };
 
+function DateTimeEdit({ value, onSave }: { value: string; onSave: (iso: string) => void }) {
+  const d = new Date(value);
+  const [date, setDate] = useState(d.toISOString().slice(0, 10));
+  const [hour, setHour] = useState(String(d.getHours() % 12 || 12));
+  const [minute, setMinute] = useState(String(d.getMinutes()).padStart(2, '0'));
+  const [isPM, setIsPM] = useState(d.getHours() >= 12);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  const commit = () => {
+    const h = (parseInt(hour) || 12) % 12 + (isPM ? 12 : 0);
+    const m = Math.min(59, Math.max(0, parseInt(minute) || 0));
+    const s = `${date}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
+    onSave(new Date(s).toISOString());
+  };
+
+  return (
+    <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
+      <input ref={inputRef} type="date" value={date} onChange={(e) => setDate(e.target.value)} onBlur={commit}
+        style={{ padding: '2px 4px', border: '1px solid var(--primary)', borderRadius: '4px', fontSize: '0.8rem', width: '95px' }} />
+      <input type="number" min={1} max={12} value={hour} onChange={(e) => setHour(e.target.value)} onBlur={commit}
+        onKeyDown={(e) => { if (e.key === 'Enter') commit(); }}
+        style={{ padding: '2px 4px', border: '1px solid var(--primary)', borderRadius: '4px', fontSize: '0.8rem', width: '35px', textAlign: 'center' }} />
+      <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>:</span>
+      <input type="number" min={0} max={59} value={minute} onChange={(e) => setMinute(e.target.value)} onBlur={commit}
+        onKeyDown={(e) => { if (e.key === 'Enter') commit(); }}
+        style={{ padding: '2px 4px', border: '1px solid var(--primary)', borderRadius: '4px', fontSize: '0.8rem', width: '35px', textAlign: 'center' }} />
+      <button onClick={() => setIsPM(p => !p)} onBlur={commit}
+        style={{ padding: '2px 6px', border: '1px solid var(--primary)', borderRadius: '4px', fontSize: '0.75rem', cursor: 'pointer', background: isPM ? 'rgba(99,102,241,0.15)' : 'transparent', color: 'var(--primary)', fontWeight: 600 }}>
+        {isPM ? 'CH' : 'SA'}
+      </button>
+    </div>
+  );
+}
+
 export default function App() {
   const [user, setUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'assets' | 'portfolio' | 'goals' | 'debts' | 'profile'>('dashboard');
@@ -305,6 +341,48 @@ export default function App() {
     }
   };
 
+  const handleUpdateAssetHistoryTime = async (historyId: string, recordedAt: string) => {
+    try {
+      if (!user) return null;
+      const updated = await historyService.updateAssetHistoryTime(historyId, recordedAt);
+      if (updated) {
+        setHistoryRecords(prev => prev.map((r: any) => r.Id === historyId ? updated : r));
+        return updated;
+      }
+      return null;
+    } catch { return null; }
+  };
+
+  const handleUpdateAllocationHistoryTime = async (historyId: string, recordedAt: string) => {
+    try {
+      if (!user) return null;
+      const updated = await historyService.updateAllocationHistoryTime(historyId, recordedAt);
+      if (updated) {
+        setAllocationHistoryRecords(prev => prev.map((r: any) => r.Id === historyId ? updated : r));
+        return updated;
+      }
+      return null;
+    } catch { return null; }
+  };
+
+  const handleDeleteAssetHistory = async (historyId: string) => {
+    if (!window.confirm(t('Bạn có chắc chắn muốn xóa lịch sử này?'))) return;
+    try {
+      setError(null);
+      if (!user) return;
+      const ok = await historyService.deleteAssetHistory(historyId);
+      if (ok) {
+        const freshHistory = historyRecords.filter((r: any) => r.Id !== historyId);
+        setHistoryRecords(freshHistory);
+        addToast({ title: t('Đã xóa lịch sử tài sản!'), variant: 'success' });
+      } else {
+        addToast({ title: t('Xóa lịch sử thất bại'), variant: 'error' });
+      }
+    } catch (err: any) {
+      addToast({ title: t('Lỗi xóa lịch sử'), description: err.message, variant: 'error' });
+    }
+  };
+
   // Budget Cut Handlers
   const handleUpdateIncome = (val: number) => {
     setIncome(val);
@@ -380,6 +458,24 @@ export default function App() {
       }
     } catch (err: any) {
       addToast({ title: t('Lỗi khôi phục'), description: err.message, variant: 'error' });
+    }
+  };
+
+  const handleDeleteAllocationHistory = async (historyId: string) => {
+    if (!window.confirm(t('Bạn có chắc chắn muốn xóa lịch sử này?'))) return;
+    try {
+      setError(null);
+      if (!user) return;
+      const ok = await historyService.deleteAllocationHistory(historyId);
+      if (ok) {
+        const freshHistory = allocationHistoryRecords.filter((r: any) => r.Id !== historyId);
+        setAllocationHistoryRecords(freshHistory);
+        addToast({ title: t('Đã xóa lịch sử phân bổ!'), variant: 'success' });
+      } else {
+        addToast({ title: t('Xóa lịch sử thất bại'), variant: 'error' });
+      }
+    } catch (err: any) {
+      addToast({ title: t('Lỗi xóa lịch sử'), description: err.message, variant: 'error' });
     }
   };
 
@@ -726,6 +822,8 @@ export default function App() {
             onDelete={handleDeleteAsset}
             onSave={handleSaveAllAssets}
             onRestore={handleRestoreFromHistory}
+            onDeleteHistory={handleDeleteAssetHistory}
+            onUpdateTime={handleUpdateAssetHistoryTime}
           />
         )}
 
@@ -760,6 +858,8 @@ export default function App() {
             onApplyToAsset={handleApplyToAsset}
             allocationHistoryRecords={allocationHistoryRecords}
             onRestoreAllocationHistory={handleRestoreAllocationHistory}
+            onDeleteAllocationHistory={handleDeleteAllocationHistory}
+            onUpdateAllocationTime={handleUpdateAllocationHistoryTime}
           />
         )}
 
@@ -1510,7 +1610,9 @@ function AssetsPage({
   onEdit, 
   onDelete,
   onSave,
-  onRestore
+  onRestore,
+  onDeleteHistory,
+  onUpdateTime
 }: { 
   assets: any[]; 
   historyRecords: any[];
@@ -1522,10 +1624,13 @@ function AssetsPage({
   onEdit: any; 
   onDelete: any;
   onSave: any;
-  onRestore: any
+  onRestore: any;
+  onDeleteHistory: any;
+  onUpdateTime: (historyId: string, recordedAt: string) => Promise<any>;
 }) {
   const { t } = useLanguage();
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
+  const [editingTimeId, setEditingTimeId] = useState<string | null>(null);
   const expenseAssets = assets.filter(a => a.Type === 'Expense');
   const savingAssets = assets.filter(a => a.Type === 'Saving');
   const investmentAssets = assets.filter(a => a.Type === 'Investment');
@@ -1706,20 +1811,46 @@ function AssetsPage({
           <div style={{ display: 'flex', gap: '16px' }}>
             <div style={{ flex: '0 0 280px', maxHeight: '360px', overflowY: 'auto' }}>
               {historyRecords.map((r: any) => (
-                <div key={r.Id} onClick={() => setSelectedHistoryId(selectedHistoryId === r.Id ? null : r.Id)}
-                  style={{
-                    padding: '10px 14px', borderRadius: '6px', cursor: 'pointer', marginBottom: '4px',
-                    background: selectedHistoryId === r.Id ? 'rgba(99,102,241,0.1)' : 'transparent',
-                    border: selectedHistoryId === r.Id ? '1px solid rgba(99,102,241,0.3)' : '1px solid transparent',
-                    transition: 'all 0.15s'
+                <div key={r.Id} style={{
+                  display: 'flex', alignItems: 'center', gap: '4px',
+                  padding: '8px 10px', borderRadius: '6px', cursor: 'pointer', marginBottom: '4px',
+                  background: selectedHistoryId === r.Id ? 'rgba(99,102,241,0.1)' : 'transparent',
+                  border: selectedHistoryId === r.Id ? '1px solid rgba(99,102,241,0.3)' : '1px solid transparent',
+                  transition: 'all 0.15s'
+                }}>
+                  <div onClick={() => setSelectedHistoryId(r.Id)}
+                    style={{ flex: 1, minWidth: 0 }}>
+                    {editingTimeId === r.Id ? (
+                      <DateTimeEdit value={r.RecordedAt} onSave={async (newIso) => {
+                        const oldTime = new Date(r.RecordedAt).getTime();
+                        const newTime = new Date(newIso).getTime();
+                        if (Math.abs(newTime - oldTime) > 60000) {
+                          await onUpdateTime(r.Id, newIso);
+                        }
+                        setEditingTimeId(null);
+                      }} />
+                    ) : (
+                      <div style={{ fontWeight: 500, fontSize: '0.85rem', cursor: 'pointer' }}
+                        onClick={(e) => { e.stopPropagation(); setSelectedHistoryId(r.Id); if (selectedHistoryId === r.Id) setEditingTimeId(r.Id); }}
+                        title={t('Nhấn để sửa thời gian')}>
+                        {formatDateTime(r.RecordedAt)}
+                      </div>
+                    )}
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                      {r.Details?.length || 0} {t('tài sản · tổng')} {formatCurrency((r.Details || []).reduce((s: number, d: any) => s + d.CurrentValue, 0))}
+                    </div>
+                  </div>
+                  <button onClick={(e) => { e.stopPropagation(); onDeleteHistory(r.Id); }} style={{
+                    background: 'transparent', border: 'none', color: '#6b7280', cursor: 'pointer',
+                    padding: '4px', borderRadius: '4px', fontSize: '0.8rem', flexShrink: 0
                   }}
-                >
-                  <div style={{ fontWeight: 500, fontSize: '0.85rem' }}>
-                    {formatDateTime(r.RecordedAt)}
-                  </div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                    {r.Details?.length || 0} {t('tài sản · tổng')} {formatCurrency((r.Details || []).reduce((s: number, d: any) => s + d.CurrentValue, 0))}
-                  </div>
+                    onMouseOver={(e) => (e.currentTarget.style.color = '#f43f5e')}
+                    onMouseOut={(e) => (e.currentTarget.style.color = '#6b7280')}
+                    title={t('Xóa lịch sử')}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                    </svg>
+                  </button>
                 </div>
               ))}
             </div>
@@ -1761,7 +1892,17 @@ function AssetsPage({
                           ))}
                         </tbody>
                       </table>
-                      <div style={{ marginTop: '12px', textAlign: 'right' }}>
+                      <div style={{ marginTop: '12px', textAlign: 'right', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                        <button onClick={() => onDeleteHistory(record.Id)} style={{
+                          background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.3)',
+                          color: '#f43f5e', borderRadius: '6px', padding: '8px 20px', cursor: 'pointer',
+                          fontSize: '0.85rem', fontWeight: 600
+                        }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px', verticalAlign: 'middle' }}>
+                            <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                          </svg>
+                          {t('Xóa')}
+                        </button>
                         <button onClick={() => onRestore(record.Id)} style={{
                           background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)',
                           color: 'var(--primary)', borderRadius: '6px', padding: '8px 20px', cursor: 'pointer',
@@ -1819,7 +1960,9 @@ function PortfolioPage({
   onSetupAllocationAmountChange,
   onApplyToAsset,
   allocationHistoryRecords,
-  onRestoreAllocationHistory
+  onRestoreAllocationHistory,
+  onDeleteAllocationHistory,
+  onUpdateAllocationTime
 }: {
   assets: any[];
   income: number;
@@ -1850,6 +1993,8 @@ function PortfolioPage({
   onApplyToAsset: (allocation: any) => void;
   allocationHistoryRecords: any[];
   onRestoreAllocationHistory: (historyId: string) => void;
+  onDeleteAllocationHistory: (historyId: string) => void;
+  onUpdateAllocationTime: (historyId: string, recordedAt: string) => Promise<any>;
 }) {
   const { t } = useLanguage();
 
@@ -2029,8 +2174,10 @@ function PortfolioPage({
             <AllocationHistorySection 
               records={allocationHistoryRecords}
               onRestore={onRestoreAllocationHistory}
+              onDelete={onDeleteAllocationHistory}
               formatDateTime={formatDateTime}
               formatCurrency={formatCurrency}
+              onUpdateTime={onUpdateAllocationTime}
             />
           )}
         </div>
@@ -3204,36 +3351,65 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
   );
 }
 
-function AllocationHistorySection({ records, onRestore, formatDateTime, formatCurrency }: {
+function AllocationHistorySection({ records, onRestore, onDelete, formatDateTime, formatCurrency, onUpdateTime }: {
   records: any[];
   onRestore: (id: string) => void;
+  onDelete: (id: string) => void;
   formatDateTime: (iso: string) => string;
   formatCurrency: (value: number) => string;
+  onUpdateTime: (historyId: string, recordedAt: string) => Promise<any>;
 }) {
   const { t } = useLanguage();
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
+  const [editingTimeId, setEditingTimeId] = useState<string | null>(null);
 
   return (
     <div style={{ display: 'flex', gap: '16px' }}>
       <div style={{ flex: '0 0 280px', maxHeight: '360px', overflowY: 'auto' }}>
         {records.map((r: any) => (
-          <div key={r.Id} onClick={() => setSelectedHistoryId(selectedHistoryId === r.Id ? null : r.Id)}
-            style={{
-              padding: '10px 14px', borderRadius: '6px', cursor: 'pointer', marginBottom: '4px',
-              background: selectedHistoryId === r.Id ? 'rgba(99,102,241,0.1)' : 'transparent',
-              border: selectedHistoryId === r.Id ? '1px solid rgba(99,102,241,0.3)' : '1px solid transparent',
-              transition: 'all 0.15s'
+          <div key={r.Id} style={{
+            display: 'flex', alignItems: 'center', gap: '4px',
+            padding: '8px 10px', borderRadius: '6px', cursor: 'pointer', marginBottom: '4px',
+            background: selectedHistoryId === r.Id ? 'rgba(99,102,241,0.1)' : 'transparent',
+            border: selectedHistoryId === r.Id ? '1px solid rgba(99,102,241,0.3)' : '1px solid transparent',
+            transition: 'all 0.15s'
+          }}>
+            <div onClick={() => setSelectedHistoryId(r.Id)}
+              style={{ flex: 1, minWidth: 0 }}>
+              {editingTimeId === r.Id ? (
+                      <DateTimeEdit value={r.RecordedAt} onSave={async (newIso) => {
+                        const oldTime = new Date(r.RecordedAt).getTime();
+                        const newTime = new Date(newIso).getTime();
+                        if (Math.abs(newTime - oldTime) > 60000) {
+                          await onUpdateTime(r.Id, newIso);
+                        }
+                        setEditingTimeId(null);
+                      }} />
+                    ) : (
+                <div style={{ fontWeight: 500, fontSize: '0.85rem', cursor: 'pointer' }}
+                  onClick={(e) => { e.stopPropagation(); setSelectedHistoryId(r.Id); if (selectedHistoryId === r.Id) setEditingTimeId(r.Id); }}
+                  title={t('Nhấn để sửa thời gian')}>
+                  {formatDateTime(r.RecordedAt)}
+                </div>
+              )}
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                {r.Details?.length || 0} {t('danh mục')}
+              </div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--primary)', marginTop: '2px', fontWeight: 500 }}>
+                {t('Gốc: ')}{formatCurrency(r.CurrentAmount)}
+              </div>
+            </div>
+            <button onClick={(e) => { e.stopPropagation(); onDelete(r.Id); }} style={{
+              background: 'transparent', border: 'none', color: '#6b7280', cursor: 'pointer',
+              padding: '4px', borderRadius: '4px', fontSize: '0.8rem', flexShrink: 0
             }}
-          >
-            <div style={{ fontWeight: 500, fontSize: '0.85rem' }}>
-              {formatDateTime(r.RecordedAt)}
-            </div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-              {r.Details?.length || 0} {t('danh mục')}
-            </div>
-            <div style={{ fontSize: '0.7rem', color: 'var(--primary)', marginTop: '2px', fontWeight: 500 }}>
-              {t('Gốc: ')}{formatCurrency(r.CurrentAmount)}
-            </div>
+              onMouseOver={(e) => (e.currentTarget.style.color = '#f43f5e')}
+              onMouseOut={(e) => (e.currentTarget.style.color = '#6b7280')}
+              title={t('Xóa lịch sử')}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+            </button>
           </div>
         ))}
       </div>
@@ -3276,7 +3452,17 @@ function AllocationHistorySection({ records, onRestore, formatDateTime, formatCu
                     ))}
                   </tbody>
                 </table>
-                <div style={{ marginTop: '12px', textAlign: 'right' }}>
+                <div style={{ marginTop: '12px', textAlign: 'right', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                  <button onClick={() => onDelete(record.Id)} style={{
+                    background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.3)',
+                    color: '#f43f5e', borderRadius: '6px', padding: '8px 20px', cursor: 'pointer',
+                    fontSize: '0.85rem', fontWeight: 600
+                  }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px', verticalAlign: 'middle' }}>
+                      <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                    </svg>
+                    {t('Xóa')}
+                  </button>
                   <button onClick={() => onRestore(record.Id)} style={{
                     background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)',
                     color: 'var(--primary)', borderRadius: '6px', padding: '8px 20px', cursor: 'pointer',

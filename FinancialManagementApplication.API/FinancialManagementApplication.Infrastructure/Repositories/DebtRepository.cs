@@ -38,7 +38,7 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
                 .ToListAsync();
         }
 
-        public async Task<Debt> GetAsync(Guid id)
+        public async Task<Debt?> GetAsync(Guid id)
         {
             return await _context.Debts
                 .Include(x => x.Payments.OrderBy(p => p.PaymentDate))

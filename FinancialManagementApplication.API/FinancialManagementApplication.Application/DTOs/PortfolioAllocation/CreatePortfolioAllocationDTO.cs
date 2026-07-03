@@ -8,8 +8,8 @@ namespace FinancialManagementApplication.Application.DTOs.PortfolioAllocation
     public class CreatePortfolioAllocationDTO
     {
         public Guid PortfolioId { get; set; }
-        public string FinancialCategory { get; set; }
-        public string Name { get; set; }
+        public string FinancialCategory { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
         public decimal CurrentAmount { get; set; }
         public decimal TargetPercentage { get; set; }
         public DateTime UpdateAt { get; set; }

@@ -4,7 +4,7 @@ namespace FinancialManagementApplication.Application.DTOs.Debt
 {
     public class UpdateDebtDTO
     {
-        public string Name { get; set; }
+        public string Name { get; set; } = string.Empty;
         public decimal TotalDebt { get; set; }
         public DateTime BorrowDate { get; set; }
         public DateTime? DueDate { get; set; }

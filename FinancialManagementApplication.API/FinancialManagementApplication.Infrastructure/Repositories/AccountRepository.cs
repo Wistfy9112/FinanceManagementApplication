@@ -1,5 +1,5 @@
-﻿using FinanceManagementApplication.Application.Interface.Repositories;
-using FinanceManagementApplication.Domain.Entities;
+﻿using FinancialManagementApplication.Application.Interface.Repositories;
+using FinancialManagementApplication.Domain.Entities;
 using FinancialManagementApplication.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -16,12 +16,12 @@ public class AccountRepository : IAccountRepository
 
     public async Task<Account?> GetByEmailAsync(string email)
     {
-        return await _context.Accounts.FirstOrDefaultAsync(x => x.email == email);
+        return await _context.Accounts.FirstOrDefaultAsync(x => x.Email == email);
     }
 
     public async Task<Account?> GetByUsernameAsync(string username)
     {
-        return await _context.Accounts.FirstOrDefaultAsync(x => x.username == username);
+        return await _context.Accounts.FirstOrDefaultAsync(x => x.Username == username);
     }
 
     public async Task<Account?> GetByIdAsync(Guid id)

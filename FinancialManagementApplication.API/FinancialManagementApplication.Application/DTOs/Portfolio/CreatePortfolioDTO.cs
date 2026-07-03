@@ -7,7 +7,7 @@ namespace FinancialManagementApplication.Application.DTOs.Portfolio
     public class CreatePortfolioDTO
     {
         public Guid AccountID { get; set; }
-        public string Name { get; set; }
+        public string Name { get; set; } = string.Empty;
         public decimal Amount { get; set; }
     }
 }

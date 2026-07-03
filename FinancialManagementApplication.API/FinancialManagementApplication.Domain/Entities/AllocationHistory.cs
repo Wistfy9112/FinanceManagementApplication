@@ -9,6 +9,6 @@ namespace FinancialManagementApplication.Domain.Entities
         public decimal CurrentAmount { get; set; }
         public decimal TargetPercentage { get; set; }
         public DateTime RecordedAt { get; set; }
-        public virtual PortfolioAllocation Allocation { get; set; }
+        public virtual PortfolioAllocation Allocation { get; set; } = null!;
     }
 }

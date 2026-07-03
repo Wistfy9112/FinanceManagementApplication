@@ -1,5 +1,5 @@
-﻿using FinanceManagementApplication.Application.Interface.Repositories;
-using FinanceManagementApplication.Domain.Entities;
+﻿using FinancialManagementApplication.Application.Interface.Repositories;
+using FinancialManagementApplication.Domain.Entities;
 using FinancialManagementApplication.Application.DTOs.Auth;
 using FinancialManagementApplication.Application.Interface.Securitiy;
 using BCrypt.Net;
@@ -26,12 +26,12 @@ namespace FinancialManagementApplication.Application.Services
             var account = new Account
             {
                 AccountID = Guid.NewGuid(),
-                username = request.Username,
-                email = request.Email ?? string.Empty,
-                passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
-                displayName = request.DisplayName,
-                CreateAt = DateTime.UtcNow,
-                UpdateAt = DateTime.UtcNow,
+                Username = request.Username,
+                Email = request.Email ?? string.Empty,
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
+                DisplayName = request.DisplayName,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
             };
 
             await _repo.AddAsync(account);
@@ -39,11 +39,11 @@ namespace FinancialManagementApplication.Application.Services
             return new AuthResponse
             {
                 AccountId = account.AccountID,
-                Username = account.username,
-                Email = account.email,
-                DisplayName = account.displayName ?? string.Empty,
+                Username = account.Username,
+                Email = account.Email,
+                DisplayName = account.DisplayName ?? string.Empty,
                 Token = _jwt.Generate(account),
-                CreateAt = account.CreateAt
+                CreateAt = account.CreatedAt
             };
         }
 
@@ -52,17 +52,17 @@ namespace FinancialManagementApplication.Application.Services
             var account = await _repo.GetByUsernameAsync(request.Username)
                 ?? throw new Exception("Invalid credentials");
 
-            if (!BCrypt.Net.BCrypt.Verify(request.Password, account.passwordHash))
+            if (!BCrypt.Net.BCrypt.Verify(request.Password, account.PasswordHash))
                 throw new Exception("Invalid credentials");
 
             return new AuthResponse
             {
                 AccountId = account.AccountID,
-                Username = account.username,
-                Email = account.email,
-                DisplayName = account.displayName ?? string.Empty,
+                Username = account.Username,
+                Email = account.Email,
+                DisplayName = account.DisplayName ?? string.Empty,
                 Token = _jwt.Generate(account),
-                CreateAt = account.CreateAt
+                CreateAt = account.CreatedAt
             };
         }
 
@@ -74,11 +74,11 @@ namespace FinancialManagementApplication.Application.Services
             return new UserProfileDTO
             {
                 AccountId = account.AccountID,
-                Username = account.username,
-                Email = account.email,
-                DisplayName = account.displayName,
-                CreateAt = account.CreateAt,
-                UpdateAt = account.UpdateAt
+                Username = account.Username,
+                Email = account.Email,
+                DisplayName = account.DisplayName,
+                CreateAt = account.CreatedAt,
+                UpdateAt = account.UpdatedAt
             };
         }
 
@@ -87,21 +87,21 @@ namespace FinancialManagementApplication.Application.Services
             var account = await _repo.GetByIdAsync(accountId)
                 ?? throw new Exception("Account not found");
 
-            account.displayName = request.DisplayName;
+            account.DisplayName = request.DisplayName;
             if (request.Email != null)
-                account.email = request.Email;
-            account.UpdateAt = DateTime.UtcNow;
+                account.Email = request.Email;
+            account.UpdatedAt = DateTime.UtcNow;
 
             await _repo.UpdateAsync(account);
 
             return new UserProfileDTO
             {
                 AccountId = account.AccountID,
-                Username = account.username,
-                Email = account.email,
-                DisplayName = account.displayName,
-                CreateAt = account.CreateAt,
-                UpdateAt = account.UpdateAt
+                Username = account.Username,
+                Email = account.Email,
+                DisplayName = account.DisplayName,
+                CreateAt = account.CreatedAt,
+                UpdateAt = account.UpdatedAt
             };
         }
 
@@ -110,11 +110,11 @@ namespace FinancialManagementApplication.Application.Services
             var account = await _repo.GetByIdAsync(accountId)
                 ?? throw new Exception("Account not found");
 
-            if (!BCrypt.Net.BCrypt.Verify(request.CurrentPassword, account.passwordHash))
+            if (!BCrypt.Net.BCrypt.Verify(request.CurrentPassword, account.PasswordHash))
                 throw new Exception("Current password is incorrect");
 
-            account.passwordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
-            account.UpdateAt = DateTime.UtcNow;
+            account.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+            account.UpdatedAt = DateTime.UtcNow;
 
             await _repo.UpdateAsync(account);
         }
