@@ -3212,18 +3212,18 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
           <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
             <thead>
               <tr style={{ background: 'var(--bg-secondary)' }}>
-                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600 }}>{t('Tên')}</th>
-                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600 }}>{t('Loại')}</th>
-                <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>{t('Tổng nợ')}</th>
-                <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>{t('Đã trả')}</th>
-                <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>{t('Còn lại')}</th>
-                <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>{t('Lãi suất')}</th>
-                <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>{t('Tiền lãi')}</th>
-                <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>{t('Ngày vay')}</th>
-                <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>{t('Hạn trả')}</th>
-                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600 }}>{t('Ghi chú')}</th>
-                <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>{t('Trạng thái')}</th>
-                <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>{t('Thao tác')}</th>
+                <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600 }}>{t('Tên')}</th>
+                <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600 }}>{t('Loại')}</th>
+                <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600 }}>{t('Tổng nợ')}</th>
+                <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600 }}>{t('Đã trả')}</th>
+                <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600 }}>{t('Còn lại')}</th>
+                <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{t('Lãi suất')}</th>
+                <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600 }}>{t('Tiền lãi')}</th>
+                <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{t('Ngày vay')}</th>
+                <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{t('Hạn trả')}</th>
+                <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600 }}>{t('Ghi chú')}</th>
+                <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{t('Trạng thái')}</th>
+                <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{t('Thao tác')}</th>
               </tr>
             </thead>
             <tbody>
@@ -3274,24 +3274,24 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
                 return (
                   <React.Fragment key={debt.Id}>
                     <tr id={`debt-row-${debt.Id}`} onClick={() => toggleExpand(debt.Id)} style={{ cursor: 'pointer', borderBottom: '1px solid var(--border)', background: isExpanded ? 'rgba(99,102,241,0.04)' : 'transparent' }}>
-                      <td style={{ padding: '10px 12px', fontWeight: 600 }}>{debt.Name}</td>
-                      <td style={{ padding: '10px 12px' }}>
-                        <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '10px', fontWeight: 600, background: typeBadge.bg, color: typeBadge.color }}>{typeBadge.text}</span>
+                      <td style={{ padding: '12px 16px', fontWeight: 600 }}>{debt.Name}</td>
+                      <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
+                        <span style={{ fontSize: '0.8rem', padding: '3px 10px', borderRadius: '10px', fontWeight: 600, background: typeBadge.bg, color: typeBadge.color }}>{typeBadge.text}</span>
                       </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-display)' }}>{formatInputNumber(debt.TotalDebt)}</td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-display)', color: '#10b981' }}>{formatInputNumber(debt.PaidAmount || 0)}</td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-display)', color: remaining > 0 ? '#ef4444' : '#10b981', fontWeight: 700 }}>{formatInputNumber(remaining)}</td>
-                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                      <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: 'var(--font-display)' }}>{formatInputNumber(debt.TotalDebt)}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: 'var(--font-display)', color: '#10b981' }}>{formatInputNumber(debt.PaidAmount || 0)}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: 'var(--font-display)', color: remaining > 0 ? '#ef4444' : '#10b981', fontWeight: 700 }}>{formatInputNumber(remaining)}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                         {debt.InterestRate != null ? <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{debt.InterestRate}%</span> : <span style={{ color: 'var(--text-muted)' }}>—</span>}
                       </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-display)', color: interestAmount > 0 ? '#f59e0b' : 'var(--text-muted)', fontWeight: 600 }}>{interestAmount > 0 ? formatInputNumber(Math.round(interestAmount)) : '—'}</td>
-                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>{formatDate(debt.BorrowDate)}</td>
-                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>{debt.DueDate ? formatDate(debt.DueDate) : <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
-                      <td style={{ padding: '10px 12px', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: debt.Note ? 'inherit' : 'var(--text-muted)' }}>{debt.Note || '—'}</td>
-                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                      <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: 'var(--font-display)', color: interestAmount > 0 ? '#f59e0b' : 'var(--text-muted)', fontWeight: 600 }}>{interestAmount > 0 ? formatInputNumber(Math.round(interestAmount)) : '—'}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>{formatDate(debt.BorrowDate)}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>{debt.DueDate ? formatDate(debt.DueDate) : <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
+                      <td style={{ padding: '12px 16px', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: debt.Note ? 'inherit' : 'var(--text-muted)' }}>{debt.Note || '—'}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                         <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '10px', fontWeight: 600, background: statusBadge.bg, color: statusBadge.color }}>{statusBadge.text}</span>
                       </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                         <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
                           {!debt.IsClosed && remaining > 0 && (
                             <button onClick={(e) => { e.stopPropagation(); openPaymentModal(debt); }} style={{ background: 'rgba(16,185,129,0.1)', border: 'none', borderRadius: '4px', padding: '4px 8px', cursor: 'pointer', fontSize: '0.75rem', color: '#10b981' }} title={t('Thanh toán')}>
