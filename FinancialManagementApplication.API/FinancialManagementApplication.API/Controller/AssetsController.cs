@@ -44,7 +44,8 @@ namespace FinancialManagementApplication.API.Controller
                 Name = dto.Name,
                 InitialValue = dto.InitialValue,
                 CurrentValue = dto.CurrentValue,
-                Type = dto.Type
+                Type = dto.Type,
+                CreatedAt = dto.CreatedAt ?? DateTime.Now
             };
             var result = await _assetsRepository.CreateAsync(asset);
             return CreatedAtAction(nameof(GetAsset), new { id = result.Id }, result);

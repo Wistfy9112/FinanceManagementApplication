@@ -18,6 +18,7 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
 
         public async Task<Assets> CreateAsync(Assets asset)
         {
+            asset.CreatedAt = DateTime.Now;
             await _context.AddAsync(asset);
             await _context.SaveChangesAsync();
             return asset;
@@ -49,7 +50,7 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
 
         public async Task<IEnumerable<Assets>> GetAllByAccountIdAsync(Guid accountID)
         {
-            return await _context.Assets.Where(x => x.AccountID == accountID).ToListAsync();
+            return await _context.Assets.Where(x => x.AccountID == accountID).OrderBy(x => x.CreatedAt).ToListAsync();
         }
 
         public async Task<Assets?> GetAsync(Guid id)
@@ -74,7 +75,7 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
             {
                 Id = Guid.NewGuid(),
                 AccountId = accountId,
-                RecordedAt = recordedAt ?? DateTime.UtcNow
+                RecordedAt = recordedAt ?? DateTime.Now
             };
 
             foreach (var a in assets)

@@ -55,13 +55,23 @@ const formatPercentage = (value: number) => {
   return `${value.toFixed(4)}%`;
 };
 
+const formatDateShort = (iso: string) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+};
+
 const formatDateTime = (iso: string) => {
   if (!iso) return '';
   const d = new Date(iso);
   if (isNaN(d.getTime())) return iso;
   const day = String(d.getDate()).padStart(2, '0');
   const month = String(d.getMonth() + 1).padStart(2, '0');
-  const year = String(d.getFullYear()).slice(-2);
+  const year = String(d.getFullYear());
   const hours = String(d.getHours()).padStart(2, '0');
   const minutes = String(d.getMinutes()).padStart(2, '0');
   const secs = String(d.getSeconds()).padStart(2, '0');
@@ -71,35 +81,34 @@ const formatDateTime = (iso: string) => {
 function DateTimeEdit({ value, onSave }: { value: string; onSave: (iso: string) => void }) {
   const d = new Date(value);
   const [date, setDate] = useState(d.toISOString().slice(0, 10));
-  const [hour, setHour] = useState(String(d.getHours() % 12 || 12));
+  const [hour, setHour] = useState(String(d.getHours()).padStart(2, '0'));
   const [minute, setMinute] = useState(String(d.getMinutes()).padStart(2, '0'));
-  const [isPM, setIsPM] = useState(d.getHours() >= 12);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 
   const commit = () => {
-    const h = (parseInt(hour) || 12) % 12 + (isPM ? 12 : 0);
+    const h = Math.min(23, Math.max(0, parseInt(hour) || 0));
     const m = Math.min(59, Math.max(0, parseInt(minute) || 0));
     const s = `${date}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
-    onSave(new Date(s).toISOString());
+    onSave(s);
+  };
+
+  const handleBlur = (e: React.FocusEvent) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) commit();
   };
 
   return (
-    <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
-      <input ref={inputRef} type="date" value={date} onChange={(e) => setDate(e.target.value)} onBlur={commit}
+    <div tabIndex={-1} onBlur={handleBlur} style={{ display: 'flex', gap: '4px', alignItems: 'center', outline: 'none' }} onClick={(e) => e.stopPropagation()}>
+      <input ref={inputRef} type="date" value={date} onChange={(e) => setDate(e.target.value)}
         style={{ padding: '2px 4px', border: '1px solid var(--primary)', borderRadius: '4px', fontSize: '0.8rem', width: '95px' }} />
-      <input type="number" min={1} max={12} value={hour} onChange={(e) => setHour(e.target.value)} onBlur={commit}
+      <input type="number" min={0} max={23} value={hour} onChange={(e) => setHour(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Enter') commit(); }}
         style={{ padding: '2px 4px', border: '1px solid var(--primary)', borderRadius: '4px', fontSize: '0.8rem', width: '35px', textAlign: 'center' }} />
       <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>:</span>
-      <input type="number" min={0} max={59} value={minute} onChange={(e) => setMinute(e.target.value)} onBlur={commit}
+      <input type="number" min={0} max={59} value={minute} onChange={(e) => setMinute(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Enter') commit(); }}
         style={{ padding: '2px 4px', border: '1px solid var(--primary)', borderRadius: '4px', fontSize: '0.8rem', width: '35px', textAlign: 'center' }} />
-      <button onClick={() => setIsPM(p => !p)} onBlur={commit}
-        style={{ padding: '2px 6px', border: '1px solid var(--primary)', borderRadius: '4px', fontSize: '0.75rem', cursor: 'pointer', background: isPM ? 'rgba(99,102,241,0.15)' : 'transparent', color: 'var(--primary)', fontWeight: 600 }}>
-        {isPM ? 'CH' : 'SA'}
-      </button>
     </div>
   );
 }
@@ -136,6 +145,7 @@ export default function App() {
 
   // Delete Confirmation State
   const [deleteConfirmAsset, setDeleteConfirmAsset] = useState<{ id: string; name: string } | null>(null);
+  const [deleteConfirmHistory, setDeleteConfirmHistory] = useState<{ id: string; type: 'asset' | 'allocation' } | null>(null);
 
   // Modal State
   const [assetModal, setAssetModal] = useState<{
@@ -313,6 +323,34 @@ export default function App() {
     }
   };
 
+  const confirmDeleteHistory = async () => {
+    if (!deleteConfirmHistory || !user) return;
+    const { id, type } = deleteConfirmHistory;
+    setDeleteConfirmHistory(null);
+    try {
+      setError(null);
+      if (type === 'asset') {
+        const ok = await historyService.deleteAssetHistory(id);
+        if (ok) {
+          setHistoryRecords((prev: any[]) => prev.filter((r: any) => r.Id !== id));
+          addToast({ title: t('Đã xóa lịch sử tài sản!'), variant: 'success' });
+        } else {
+          addToast({ title: t('Xóa lịch sử thất bại'), variant: 'error' });
+        }
+      } else {
+        const ok = await historyService.deleteAllocationHistory(id);
+        if (ok) {
+          setAllocationHistoryRecords((prev: any[]) => prev.filter((r: any) => r.Id !== id));
+          addToast({ title: t('Đã xóa lịch sử phân bổ!'), variant: 'success' });
+        } else {
+          addToast({ title: t('Xóa lịch sử thất bại'), variant: 'error' });
+        }
+      }
+    } catch (err: any) {
+      addToast({ title: t('Lỗi xóa lịch sử'), description: err.message, variant: 'error' });
+    }
+  };
+
   const handleSaveAllAssets = async () => {
     try {
       setError(null);
@@ -366,21 +404,7 @@ export default function App() {
   };
 
   const handleDeleteAssetHistory = async (historyId: string) => {
-    if (!window.confirm(t('Bạn có chắc chắn muốn xóa lịch sử này?'))) return;
-    try {
-      setError(null);
-      if (!user) return;
-      const ok = await historyService.deleteAssetHistory(historyId);
-      if (ok) {
-        const freshHistory = historyRecords.filter((r: any) => r.Id !== historyId);
-        setHistoryRecords(freshHistory);
-        addToast({ title: t('Đã xóa lịch sử tài sản!'), variant: 'success' });
-      } else {
-        addToast({ title: t('Xóa lịch sử thất bại'), variant: 'error' });
-      }
-    } catch (err: any) {
-      addToast({ title: t('Lỗi xóa lịch sử'), description: err.message, variant: 'error' });
-    }
+    setDeleteConfirmHistory({ id: historyId, type: 'asset' });
   };
 
   // Budget Cut Handlers
@@ -462,21 +486,7 @@ export default function App() {
   };
 
   const handleDeleteAllocationHistory = async (historyId: string) => {
-    if (!window.confirm(t('Bạn có chắc chắn muốn xóa lịch sử này?'))) return;
-    try {
-      setError(null);
-      if (!user) return;
-      const ok = await historyService.deleteAllocationHistory(historyId);
-      if (ok) {
-        const freshHistory = allocationHistoryRecords.filter((r: any) => r.Id !== historyId);
-        setAllocationHistoryRecords(freshHistory);
-        addToast({ title: t('Đã xóa lịch sử phân bổ!'), variant: 'success' });
-      } else {
-        addToast({ title: t('Xóa lịch sử thất bại'), variant: 'error' });
-      }
-    } catch (err: any) {
-      addToast({ title: t('Lỗi xóa lịch sử'), description: err.message, variant: 'error' });
-    }
+    setDeleteConfirmHistory({ id: historyId, type: 'allocation' });
   };
 
   // Setup mode handlers
@@ -998,6 +1008,38 @@ export default function App() {
                 className="btn btn-primary"
                 style={{ background: '#ef4444', borderColor: '#ef4444' }}
                 onClick={confirmDeleteAsset}
+              >
+                {t('Xóa')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete History Confirmation Modal */}
+      {deleteConfirmHistory && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '400px' }}>
+            <div className="modal-header">
+              <h3 className="modal-title">{t('Xóa lịch sử')}</h3>
+              <button className="modal-close" onClick={() => setDeleteConfirmHistory(null)}>✕</button>
+            </div>
+            <div style={{ padding: '20px 24px', textAlign: 'center' }}>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6 }}>
+                {t('Bạn có chắc chắn muốn xóa lịch sử này?')}
+              </p>
+            </div>
+            <div className="modal-actions" style={{ justifyContent: 'center', gap: '12px' }}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => setDeleteConfirmHistory(null)}
+              >
+                {t('Hủy')}
+              </button>
+              <button
+                className="btn btn-primary"
+                style={{ background: '#ef4444', borderColor: '#ef4444' }}
+                onClick={confirmDeleteHistory}
               >
                 {t('Xóa')}
               </button>
@@ -1631,9 +1673,10 @@ function AssetsPage({
   const { t } = useLanguage();
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
   const [editingTimeId, setEditingTimeId] = useState<string | null>(null);
-  const expenseAssets = assets.filter(a => a.Type === 'Expense');
-  const savingAssets = assets.filter(a => a.Type === 'Saving');
-  const investmentAssets = assets.filter(a => a.Type === 'Investment');
+  const sortByCreatedAt = (list: any[]) => [...list].sort((a, b) => new Date(a.CreatedAt || 0).getTime() - new Date(b.CreatedAt || 0).getTime());
+  const expenseAssets = sortByCreatedAt(assets.filter(a => a.Type === 'Expense'));
+  const savingAssets = sortByCreatedAt(assets.filter(a => a.Type === 'Saving'));
+  const investmentAssets = sortByCreatedAt(assets.filter(a => a.Type === 'Investment'));
 
   const renderAssetRows = (list: any[], startIdx: number) =>
     list.map((asset, idx) => {
@@ -1666,7 +1709,7 @@ function AssetsPage({
             )}
           </td>
           <td style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-            26/05/2026
+            {asset.CreatedAt ? formatDateShort(asset.CreatedAt) : ''}
           </td>
           <td style={{ textAlign: 'center' }}>
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>

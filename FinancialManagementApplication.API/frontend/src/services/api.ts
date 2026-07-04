@@ -58,7 +58,8 @@ const mapAssetToFrontend = (a: any) => ({
   InitialValue: a.initialValue !== undefined ? Number(a.initialValue) : Number(a.InitialValue || 0),
   CurrentValue: a.currentValue !== undefined ? Number(a.currentValue) : Number(a.CurrentValue || 0),
   AccountID: a.accountId || a.accountID || a.AccountID,
-  Type: mapType(a.type !== undefined ? a.type : a.Type)
+  Type: mapType(a.type !== undefined ? a.type : a.Type),
+  CreatedAt: a.createdAt || a.CreatedAt
 });
 
 const mapHistoryToFrontend = (r: any) => ({
@@ -367,8 +368,10 @@ export const assetService = {
     return [];
   },
 
-  create: async (asset: { Name: string; InitialValue: number; CurrentValue: number; Type: string }, userId: string = getLoggedUserId()): Promise<any> => {
+  create: async (asset: { Name: string; InitialValue: number; CurrentValue: number; Type: string; CreatedAt?: string }, userId: string = getLoggedUserId()): Promise<any> => {
     await checkConnection();
+    const now = new Date().toISOString();
+    const createdAt = asset.CreatedAt || now;
     const mockId = 'a-' + Math.random().toString(36).substr(2, 9);
     const newAssetFrontend = {
       Id: mockId,
@@ -376,7 +379,8 @@ export const assetService = {
       InitialValue: asset.InitialValue,
       CurrentValue: asset.CurrentValue,
       Type: asset.Type || 'Saving',
-      AccountID: userId
+      AccountID: userId,
+      CreatedAt: createdAt
     };
     
     if (isDemoMode) {
@@ -395,7 +399,8 @@ export const assetService = {
           name: asset.Name,
           initialValue: asset.InitialValue,
           currentValue: asset.CurrentValue,
-          type: asset.Type
+          type: asset.Type,
+          createdAt: createdAt
         })
       });
       if (res.ok) {
@@ -920,27 +925,18 @@ const generateDemoCashFlowGrowth = (mode: string, year?: number) => {
       }
     }
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const firstKey = Object.keys(grouped).map(Number).sort();
-    const firstMonthWithData = firstKey.length > 0 ? firstKey[0] : 1;
-    const lastMonth = currentYear === targetYear ? now.getMonth() + 1 : 12;
+    const sortedMonths = Object.keys(grouped).map(Number).sort();
     const data: any[] = [];
-    let carryValue: number | null = null;
-    let carryInitial: number | null = null;
 
-    for (let m = 1; m <= lastMonth; m++) {
-      let val: number;
-      let initVal: number;
+    for (let i = 0; i < sortedMonths.length; i++) {
+      const m = sortedMonths[i];
+      let val = grouped[m].value;
+      let initVal = grouped[m].initialValue;
 
-      if (m in grouped) {
-        val = grouped[m].value;
-        initVal = grouped[m].initialValue;
-        carryValue = val;
-        carryInitial = initVal;
-      } else if (carryValue !== null && m >= firstMonthWithData) {
-        val = carryValue;
-        initVal = carryInitial ?? 0;
-      } else {
-        continue;
+      const isCurrentMonth = currentYear === targetYear && m === now.getMonth() + 1;
+      if (isCurrentMonth) {
+        val = 350000000;
+        initVal = 210000000;
       }
 
       const dt = new Date(targetYear, m - 1, 1);
