@@ -23,7 +23,7 @@ const en: Record<string, string> = {
   'Lỗi lưu phân bổ': 'Allocation save error',
   'Đã khôi phục phân bổ!': 'Allocation restored!',
   'Lỗi lưu tài sản': 'Asset save error',
-  'Không thể thêm danh mục mới vì đã đạt hoặc vượt quá phân bổ gốc.': 'Cannot add new category because base allocation has been reached or exceeded.',
+  'Không thể thêm danh mục mới vì đã đạt hoặc vượt quá phân bổ gốc. Hãy điều chỉnh hoặc gia tăng phân bổ gốc': 'Cannot add new category because base allocation has been reached or exceeded. Please adjust or increase the base allocation.',
   'Vui lòng thêm ít nhất một danh mục.': 'Please add at least one category.',
   'Vui lòng nhập tên cho tất cả danh mục.': 'Please enter names for all categories.',
   'Tổng số tiền danh mục vượt quá phân bổ gốc. Vui lòng điều chỉnh lại.': 'Total category amount exceeds base allocation. Please adjust.',

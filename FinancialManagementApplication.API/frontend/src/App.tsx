@@ -565,7 +565,7 @@ export default function App() {
   const handleSetupAddAllocation = () => {
     const totalAllocated = setupAllocations.reduce((sum, al) => sum + (al.setupAmount || 0), 0);
     if (totalAllocated >= setupAmount) {
-      setError(t('Không thể thêm danh mục mới vì đã đạt hoặc vượt quá phân bổ gốc.'));
+      setError(t('Không thể thêm danh mục mới vì đã đạt hoặc vượt quá phân bổ gốc. Hãy điều chỉnh hoặc gia tăng phân bổ gốc'));
       return;
     }
     const newId = 'al-' + Math.random().toString(36).substr(2, 9);
