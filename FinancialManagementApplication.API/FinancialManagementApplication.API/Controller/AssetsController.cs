@@ -77,5 +77,14 @@ namespace FinancialManagementApplication.API.Controller
             await _assetsRepository.DeleteAsync(id);
             return NoContent();
         }
+
+        [HttpPut("reorder")]
+        public async Task<IActionResult> ReorderAssets([FromBody] ReorderAssetDTO dto)
+        {
+            if (dto?.Items == null || dto.Items.Count == 0)
+                return BadRequest(new { message = "Invalid reorder data" });
+            await _assetsRepository.ReorderAsync(dto.Items);
+            return Ok(new { message = "Reorder successful" });
+        }
     }
 }

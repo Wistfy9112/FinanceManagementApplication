@@ -16,6 +16,7 @@ namespace FinancialManagementApplication.Domain.Entities
         public decimal CurrentValue { get; set; }
         public AssetType Type { get; set; } = AssetType.Saving;
         public DateTime CreatedAt { get; set; }
+        public int SortOrder { get; set; }
         // Navigation properties
         public virtual Account Account { get; set; } = null!;
         [JsonIgnore]

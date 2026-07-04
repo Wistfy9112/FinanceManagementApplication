@@ -432,6 +432,13 @@ export default function App() {
     setDeleteConfirmHistory({ id: historyId, type: 'asset' });
   };
 
+  const handleReorderAssets = async (orderedList: any[]) => {
+    const items = orderedList.map((a: any, i: number) => ({ id: a.Id, sortOrder: i + 1 }));
+    await assetService.reorder(items);
+    await loadData();
+    addToast({ title: t('Đã sắp xếp lại thứ tự!'), variant: 'success' });
+  };
+
   // Budget Cut Handlers
   const handleUpdateIncome = (val: number) => {
     setIncome(val);
@@ -859,6 +866,7 @@ export default function App() {
             onRestore={handleRestoreFromHistory}
             onDeleteHistory={handleDeleteAssetHistory}
             onUpdateTime={handleUpdateAssetHistoryTime}
+            onReorder={handleReorderAssets}
           />
         )}
 
@@ -1679,7 +1687,8 @@ function AssetsPage({
   onSave,
   onRestore,
   onDeleteHistory,
-  onUpdateTime
+  onUpdateTime,
+  onReorder
 }: { 
   assets: any[]; 
   historyRecords: any[];
@@ -1694,22 +1703,64 @@ function AssetsPage({
   onRestore: any;
   onDeleteHistory: any;
   onUpdateTime: (historyId: string, recordedAt: string) => Promise<any>;
+  onReorder: (orderedList: any[]) => Promise<void>;
 }) {
   const { t } = useLanguage();
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
   const [editingTimeId, setEditingTimeId] = useState<string | null>(null);
-  const sortByCreatedAt = (list: any[]) => [...list].sort((a, b) => new Date(a.CreatedAt || 0).getTime() - new Date(b.CreatedAt || 0).getTime());
-  const expenseAssets = sortByCreatedAt(assets.filter(a => a.Type === 'Expense'));
-  const savingAssets = sortByCreatedAt(assets.filter(a => a.Type === 'Saving'));
-  const investmentAssets = sortByCreatedAt(assets.filter(a => a.Type === 'Investment'));
 
-  const renderAssetRows = (list: any[], startIdx: number) =>
+  const handleMoveUp = (id: string, typeGroup: string) => {
+    const group = sortByOrder(assets.filter(a => a.Type === typeGroup));
+    const idx = group.findIndex(a => a.Id === id);
+    if (idx <= 0) return;
+    [group[idx - 1], group[idx]] = [group[idx], group[idx - 1]];
+    const groupTypes = ['Expense', 'Saving', 'Investment'];
+    const reordered: any[] = [];
+    for (const gt of groupTypes) {
+      if (gt === typeGroup) reordered.push(...group);
+      else reordered.push(...assets.filter(a => a.Type === gt));
+    }
+    onReorder(reordered);
+  };
+
+  const handleMoveDown = (id: string, typeGroup: string) => {
+    const group = sortByOrder(assets.filter(a => a.Type === typeGroup));
+    const idx = group.findIndex(a => a.Id === id);
+    if (idx < 0 || idx >= group.length - 1) return;
+    [group[idx], group[idx + 1]] = [group[idx + 1], group[idx]];
+    const groupTypes = ['Expense', 'Saving', 'Investment'];
+    const reordered: any[] = [];
+    for (const gt of groupTypes) {
+      if (gt === typeGroup) reordered.push(...group);
+      else reordered.push(...assets.filter(a => a.Type === gt));
+    }
+    onReorder(reordered);
+  };
+
+  const sortByOrder = (list: any[]) => [...list].sort((a, b) => (a.SortOrder ?? 0) - (b.SortOrder ?? 0));
+  const expenseAssets = sortByOrder(assets.filter(a => a.Type === 'Expense'));
+  const savingAssets = sortByOrder(assets.filter(a => a.Type === 'Saving'));
+  const investmentAssets = sortByOrder(assets.filter(a => a.Type === 'Investment'));
+
+  const renderAssetRows = (list: any[], startIdx: number, typeGroup: string) =>
     list.map((asset, idx) => {
       const interest = asset.CurrentValue - asset.InitialValue;
       const ratio = asset.InitialValue > 0 ? (interest / asset.InitialValue) * 100 : 0;
       return (
         <tr key={asset.Id}>
-          <td style={{ textAlign: 'center', color: 'var(--text-muted)' }}>{startIdx + idx + 1}</td>
+          <td style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+              <button onClick={() => handleMoveUp(asset.Id, typeGroup)} disabled={idx === 0} title={t('Di chuyển lên')}
+                style={{ background: 'none', border: 'none', cursor: idx === 0 ? 'default' : 'pointer', padding: '0', lineHeight: '1', color: idx === 0 ? 'var(--text-muted)' : 'var(--text-secondary)', opacity: idx === 0 ? 0.3 : 1 }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5l-7 7h14l-7-7z"/></svg>
+              </button>
+              <span style={{ fontSize: '0.85rem' }}>{startIdx + idx + 1}</span>
+              <button onClick={() => handleMoveDown(asset.Id, typeGroup)} disabled={idx === list.length - 1} title={t('Di chuyển xuống')}
+                style={{ background: 'none', border: 'none', cursor: idx === list.length - 1 ? 'default' : 'pointer', padding: '0', lineHeight: '1', color: idx === list.length - 1 ? 'var(--text-muted)' : 'var(--text-secondary)', opacity: idx === list.length - 1 ? 0.3 : 1 }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 19l7-7H5l7 7z"/></svg>
+              </button>
+            </div>
+          </td>
           <td style={{ fontWeight: 600 }}>{asset.Name}</td>
           <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 500 }}>
             {formatCurrency(asset.InitialValue)}
@@ -1812,7 +1863,7 @@ function AssetsPage({
                         {t('💳 Sinh hoạt')}
                       </td>
                     </tr>
-                    {renderAssetRows(expenseAssets, 0)}
+                    {renderAssetRows(expenseAssets, 0, 'Expense')}
                   </>
                 )}
 
@@ -1824,7 +1875,7 @@ function AssetsPage({
                         {t('🏦 Tiết kiệm')}
                       </td>
                     </tr>
-                    {renderAssetRows(savingAssets, expenseAssets.length)}
+                    {renderAssetRows(savingAssets, expenseAssets.length, 'Saving')}
                   </>
                 )}
 
@@ -1836,7 +1887,7 @@ function AssetsPage({
                         {t('📈 Đầu tư')}
                       </td>
                     </tr>
-                    {renderAssetRows(investmentAssets, expenseAssets.length + savingAssets.length)}
+                    {renderAssetRows(investmentAssets, expenseAssets.length + savingAssets.length, 'Investment')}
                   </>
                 )}
 

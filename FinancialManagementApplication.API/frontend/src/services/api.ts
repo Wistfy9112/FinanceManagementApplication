@@ -59,7 +59,8 @@ const mapAssetToFrontend = (a: any) => ({
   CurrentValue: a.currentValue !== undefined ? Number(a.currentValue) : Number(a.CurrentValue || 0),
   AccountID: a.accountId || a.accountID || a.AccountID,
   Type: mapType(a.type !== undefined ? a.type : a.Type),
-  CreatedAt: a.createdAt || a.CreatedAt
+  CreatedAt: a.createdAt || a.CreatedAt,
+  SortOrder: a.sortOrder ?? a.SortOrder ?? 0
 });
 
 const mapHistoryToFrontend = (r: any) => ({
@@ -129,18 +130,18 @@ export const checkConnection = async (): Promise<boolean> => {
 
 // Seed Data for Demo Mode
 const DEFAULT_ASSETS = [
-  { Id: 'a1', Name: 'Saving', InitialValue: 23984562, CurrentValue: 764842, Type: 'Saving' },
-  { Id: 'a2', Name: 'Emergency', InitialValue: 6497662, CurrentValue: 562566, Type: 'Saving' },
-  { Id: 'a3', Name: 'Unemployment fund', InitialValue: 2583793, CurrentValue: 2584453, Type: 'Saving' },
-  { Id: 'a4', Name: 'Health', InitialValue: 12238827, CurrentValue: 12138827, Type: 'Saving' },
-  { Id: 'a5', Name: 'Goal fund', InitialValue: 674481, CurrentValue: 177617, Type: 'Saving' },
-  { Id: 'a6', Name: 'Skill Investment', InitialValue: 674481, CurrentValue: 177617, Type: 'Saving' },
-  { Id: 'a7', Name: 'Margin', InitialValue: 77140127, CurrentValue: 19725414, Type: 'Investment' },
-  { Id: 'a8', Name: 'ETF', InitialValue: 23567444, CurrentValue: 27220403, Type: 'Investment' },
-  { Id: 'a9', Name: 'Cash', InitialValue: 90403667, CurrentValue: 95172704, Type: 'Expense' },
-  { Id: 'a10', Name: 'Investment certificate', InitialValue: 22664368, CurrentValue: 21493033, Type: 'Investment' },
-  { Id: 'a11', Name: 'Gold (Cash)', InitialValue: 2520966, CurrentValue: 637392, Type: 'Investment' },
-  { Id: 'a12', Name: 'Gold', InitialValue: 0, CurrentValue: 0, Type: 'Investment' }
+  { Id: 'a1', Name: 'Saving', InitialValue: 23984562, CurrentValue: 764842, Type: 'Saving', SortOrder: 1 },
+  { Id: 'a2', Name: 'Emergency', InitialValue: 6497662, CurrentValue: 562566, Type: 'Saving', SortOrder: 2 },
+  { Id: 'a3', Name: 'Unemployment fund', InitialValue: 2583793, CurrentValue: 2584453, Type: 'Saving', SortOrder: 3 },
+  { Id: 'a4', Name: 'Health', InitialValue: 12238827, CurrentValue: 12138827, Type: 'Saving', SortOrder: 4 },
+  { Id: 'a5', Name: 'Goal fund', InitialValue: 674481, CurrentValue: 177617, Type: 'Saving', SortOrder: 5 },
+  { Id: 'a6', Name: 'Skill Investment', InitialValue: 674481, CurrentValue: 177617, Type: 'Saving', SortOrder: 6 },
+  { Id: 'a7', Name: 'Margin', InitialValue: 77140127, CurrentValue: 19725414, Type: 'Investment', SortOrder: 7 },
+  { Id: 'a8', Name: 'ETF', InitialValue: 23567444, CurrentValue: 27220403, Type: 'Investment', SortOrder: 8 },
+  { Id: 'a9', Name: 'Cash', InitialValue: 90403667, CurrentValue: 95172704, Type: 'Expense', SortOrder: 9 },
+  { Id: 'a10', Name: 'Investment certificate', InitialValue: 22664368, CurrentValue: 21493033, Type: 'Investment', SortOrder: 10 },
+  { Id: 'a11', Name: 'Gold (Cash)', InitialValue: 2520966, CurrentValue: 637392, Type: 'Investment', SortOrder: 11 },
+  { Id: 'a12', Name: 'Gold', InitialValue: 0, CurrentValue: 0, Type: 'Investment', SortOrder: 12 }
 ];
 
 const DEFAULT_PORTFOLIO = {
@@ -463,6 +464,30 @@ export const assetService = {
     } catch (e) {
       console.error('Error deleting asset:', e);
     }
+  },
+
+  reorder: async (items: { id: string; sortOrder: number }[]): Promise<boolean> => {
+    await checkConnection();
+    if (isDemoMode) {
+      const list = getStorage('fm_assets', DEFAULT_ASSETS);
+      for (const item of items) {
+        const asset = list.find((a: any) => a.Id === item.id);
+        if (asset) asset.SortOrder = item.sortOrder;
+      }
+      setStorage('fm_assets', list);
+      return true;
+    }
+    try {
+      const res = await fetch(`${API_URL}/assets/reorder`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+        body: JSON.stringify({ items })
+      });
+      return res.ok;
+    } catch (e) {
+      console.error('Error reordering assets:', e);
+    }
+    return false;
   }
 };
 
