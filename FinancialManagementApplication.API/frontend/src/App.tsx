@@ -3249,8 +3249,25 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
                   }
                   const now = new Date();
                   now.setHours(23, 59, 59, 999);
-                  const finalDays = Math.max(0, (now.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24));
-                  totalInterest += balance * rate * (finalDays / 365);
+                  const dueDate = d.DueDate ? new Date(d.DueDate) : null;
+                  dueDate?.setHours(23, 59, 59, 999);
+
+                  if (dueDate && dueDate < now) {
+                    if (dueDate > prevDate) {
+                      const termDays = (dueDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24);
+                      totalInterest += balance * rate * (termDays / 365);
+                      prevDate = dueDate;
+                    }
+                    if (balance > 0 && now > prevDate) {
+                      const overdueDays = (now.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24);
+                      totalInterest += balance * rate * (overdueDays / 365);
+                    }
+                  } else {
+                    if (now > prevDate) {
+                      const finalDays = (now.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24);
+                      totalInterest += balance * rate * (finalDays / 365);
+                    }
+                  }
                   return totalInterest;
                 };
                 const interestAmount = calcInterest(debt);
