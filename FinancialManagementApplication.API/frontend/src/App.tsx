@@ -83,31 +83,56 @@ function DateTimeEdit({ value, onSave }: { value: string; onSave: (iso: string) 
   const [date, setDate] = useState(d.toISOString().slice(0, 10));
   const [hour, setHour] = useState(String(d.getHours()).padStart(2, '0'));
   const [minute, setMinute] = useState(String(d.getMinutes()).padStart(2, '0'));
-  const inputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { inputRef.current?.focus(); }, []);
+  const dateRef = useRef(date);
+  const hourRef = useRef(hour);
+  const minuteRef = useRef(minute);
+  dateRef.current = date;
+  hourRef.current = hour;
+  minuteRef.current = minute;
 
-  const commit = () => {
-    const h = Math.min(23, Math.max(0, parseInt(hour) || 0));
-    const m = Math.min(59, Math.max(0, parseInt(minute) || 0));
-    const s = `${date}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
+  const commit = useCallback(() => {
+    const h = Math.min(23, Math.max(0, parseInt(hourRef.current) || 0));
+    const m = Math.min(59, Math.max(0, parseInt(minuteRef.current) || 0));
+    const s = `${dateRef.current}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
     onSave(s);
-  };
+  }, [onSave]);
 
-  const handleBlur = (e: React.FocusEvent) => {
-    if (!e.currentTarget.contains(e.relatedTarget as Node)) commit();
-  };
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const inputs = el.querySelectorAll('input');
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') { e.preventDefault(); commit(); }
+    };
+    inputs.forEach(inp => inp.addEventListener('keydown', handleKey));
+    return () => inputs.forEach(inp => inp.removeEventListener('keydown', handleKey));
+  }, [commit]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        commit();
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [commit]);
+
+  useEffect(() => {
+    const firstInput = containerRef.current?.querySelector('input');
+    firstInput?.focus();
+  }, []);
 
   return (
-    <div tabIndex={-1} onBlur={handleBlur} style={{ display: 'flex', gap: '4px', alignItems: 'center', outline: 'none' }} onClick={(e) => e.stopPropagation()}>
-      <input ref={inputRef} type="date" value={date} onChange={(e) => setDate(e.target.value)}
+    <div ref={containerRef} style={{ display: 'flex', gap: '4px', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
+      <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
         style={{ padding: '2px 4px', border: '1px solid var(--primary)', borderRadius: '4px', fontSize: '0.8rem', width: '95px' }} />
-      <input type="number" min={0} max={23} value={hour} onChange={(e) => setHour(e.target.value)}
-        onKeyDown={(e) => { if (e.key === 'Enter') commit(); }}
+      <input type="text" inputMode="numeric" maxLength={2} value={hour} onChange={(e) => setHour(e.target.value.replace(/\D/g, '').slice(0, 2))}
         style={{ padding: '2px 4px', border: '1px solid var(--primary)', borderRadius: '4px', fontSize: '0.8rem', width: '35px', textAlign: 'center' }} />
       <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>:</span>
-      <input type="number" min={0} max={59} value={minute} onChange={(e) => setMinute(e.target.value)}
-        onKeyDown={(e) => { if (e.key === 'Enter') commit(); }}
+      <input type="text" inputMode="numeric" maxLength={2} value={minute} onChange={(e) => setMinute(e.target.value.replace(/\D/g, '').slice(0, 2))}
         style={{ padding: '2px 4px', border: '1px solid var(--primary)', borderRadius: '4px', fontSize: '0.8rem', width: '35px', textAlign: 'center' }} />
     </div>
   );
