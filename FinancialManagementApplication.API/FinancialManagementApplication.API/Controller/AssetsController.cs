@@ -44,7 +44,8 @@ namespace FinancialManagementApplication.API.Controller
                 Name = dto.Name,
                 InitialValue = dto.InitialValue,
                 CurrentValue = dto.CurrentValue,
-                Type = dto.Type
+                Type = dto.Type,
+                CreatedAt = dto.CreatedAt ?? DateTime.Now
             };
             var result = await _assetsRepository.CreateAsync(asset);
             return CreatedAtAction(nameof(GetAsset), new { id = result.Id }, result);
@@ -75,6 +76,15 @@ namespace FinancialManagementApplication.API.Controller
             }
             await _assetsRepository.DeleteAsync(id);
             return NoContent();
+        }
+
+        [HttpPut("reorder")]
+        public async Task<IActionResult> ReorderAssets([FromBody] ReorderAssetDTO dto)
+        {
+            if (dto?.Items == null || dto.Items.Count == 0)
+                return BadRequest(new { message = "Invalid reorder data" });
+            await _assetsRepository.ReorderAsync(dto.Items);
+            return Ok(new { message = "Reorder successful" });
         }
     }
 }

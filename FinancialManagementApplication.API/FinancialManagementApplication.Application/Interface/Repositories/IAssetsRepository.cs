@@ -20,5 +20,6 @@ namespace FinancialManagementApplication.Application.Interface.Repositories
         Task<IEnumerable<SnapshotSummary>> GetSnapshotValuesAsync(Guid accountId);
         Task<decimal> GetCurrentTotalValueAsync(Guid accountId);
         Task<decimal> GetCurrentTotalInitialValueAsync(Guid accountId);
+        Task ReorderAsync(List<DTOs.Asset.AssetOrderItem> items);
     }
 }

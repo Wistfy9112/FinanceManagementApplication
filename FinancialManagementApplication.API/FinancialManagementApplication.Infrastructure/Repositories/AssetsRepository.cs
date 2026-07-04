@@ -1,4 +1,5 @@
-﻿using FinancialManagementApplication.Application.DTOs.Common;
+﻿using FinancialManagementApplication.Application.DTOs.Asset;
+using FinancialManagementApplication.Application.DTOs.Common;
 using FinancialManagementApplication.Application.DTOs.History;
 using FinancialManagementApplication.Application.Interface.Repositories;
 using FinancialManagementApplication.Domain.Entities;
@@ -18,6 +19,9 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
 
         public async Task<Assets> CreateAsync(Assets asset)
         {
+            asset.CreatedAt = DateTime.Now;
+            var maxOrder = await _context.Assets.Where(a => a.AccountID == asset.AccountID).MaxAsync(a => (int?)a.SortOrder) ?? 0;
+            asset.SortOrder = maxOrder + 1;
             await _context.AddAsync(asset);
             await _context.SaveChangesAsync();
             return asset;
@@ -49,7 +53,7 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
 
         public async Task<IEnumerable<Assets>> GetAllByAccountIdAsync(Guid accountID)
         {
-            return await _context.Assets.Where(x => x.AccountID == accountID).ToListAsync();
+            return await _context.Assets.Where(x => x.AccountID == accountID).OrderBy(x => x.SortOrder).ThenBy(x => x.CreatedAt).ToListAsync();
         }
 
         public async Task<Assets?> GetAsync(Guid id)
@@ -74,7 +78,7 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
             {
                 Id = Guid.NewGuid(),
                 AccountId = accountId,
-                RecordedAt = recordedAt ?? DateTime.UtcNow
+                RecordedAt = recordedAt ?? DateTime.Now
             };
 
             foreach (var a in assets)
@@ -178,6 +182,19 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
             _context.AssetHistories.Remove(history);
             await _context.SaveChangesAsync();
             return true;
+        }
+
+        public async Task ReorderAsync(List<AssetOrderItem> items)
+        {
+            var ids = items.Select(i => i.Id).ToList();
+            var assets = await _context.Assets.Where(a => ids.Contains(a.Id)).ToListAsync();
+            foreach (var item in items)
+            {
+                var asset = assets.FirstOrDefault(a => a.Id == item.Id);
+                if (asset != null)
+                    asset.SortOrder = item.SortOrder;
+            }
+            await _context.SaveChangesAsync();
         }
 
         public async Task<bool> RestoreFromHistoryAsync(Guid historyId)

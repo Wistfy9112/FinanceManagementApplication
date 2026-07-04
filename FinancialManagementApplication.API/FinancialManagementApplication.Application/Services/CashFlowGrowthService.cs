@@ -110,39 +110,18 @@ namespace FinancialManagementApplication.Application.Services
                     Value = g.OrderByDescending(s => s.RecordedAt).First().TotalValue,
                     InitialValue = g.OrderByDescending(s => s.RecordedAt).First().TotalInitialValue
                 })
-                .ToDictionary(m => m.Month, m => (m.Value, m.InitialValue));
-
-            var lastMonth = now.Year == year ? now.Month : 12;
-            int firstMonthWithData = grouped.Count > 0 ? grouped.Keys.Min() : 1;
+                .OrderBy(m => m.Month)
+                .ToList();
 
             var data = new List<CashFlowDataPoint>();
-            decimal? carryValue = null;
-            decimal? carryInitial = null;
-
-            for (int m = 1; m <= lastMonth; m++)
+            for (int i = 0; i < grouped.Count; i++)
             {
-                decimal val;
-                decimal initVal;
+                var m = grouped[i];
+                var dt = new DateTime(year, m.Month, 1);
+                var val = m.Value;
+                var initVal = m.InitialValue;
 
-                if (grouped.TryGetValue(m, out var v))
-                {
-                    val = v.Value;
-                    initVal = v.InitialValue;
-                    carryValue = val;
-                    carryInitial = initVal;
-                }
-                else if (carryValue.HasValue && m >= firstMonthWithData)
-                {
-                    val = carryValue.Value;
-                    initVal = carryInitial ?? 0;
-                }
-                else
-                {
-                    continue;
-                }
-
-                var dt = new DateTime(year, m, 1);
-                var isCurrentMonth = now.Year == year && m == now.Month;
+                var isCurrentMonth = now.Year == year && m.Month == now.Month;
                 if (isCurrentMonth)
                 {
                     val = currentTotal;

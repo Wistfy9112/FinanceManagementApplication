@@ -13,5 +13,6 @@ namespace FinancialManagementApplication.Application.DTOs.Asset
         public decimal InitialValue { get; set; }
         public decimal CurrentValue { get; set; }
         public AssetType Type { get; set; } = AssetType.Saving;
+        public DateTime? CreatedAt { get; set; }
     }
 }
