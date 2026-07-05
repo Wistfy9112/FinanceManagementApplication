@@ -34,7 +34,8 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
         {
             return await _context.Goals
                 .Where(x => x.AccountId == accountId)
-                .OrderBy(x => x.DueDate)
+                .OrderBy(x => x.Status == GoalStatus.Processing ? 0 : x.Status == GoalStatus.NotStarted ? 1 : 2)
+                .ThenByDescending(x => x.CreatedAt)
                 .ToListAsync();
         }
 

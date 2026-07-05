@@ -17,6 +17,7 @@ namespace FinancialManagementApplication.Domain.Entities
         public DateTime UpdateAt { get; set; }
         public AssetType AssetType { get; set; } = AssetType.Saving;
         public Guid? AssetId { get; set; }
+        public int SortOrder { get; set; }
         // Navigation properties
         public virtual Portfolio Portfolio { get; set; } = null!;
         public virtual Assets? Asset { get; set; }

@@ -1,4 +1,5 @@
 ﻿using FinancialManagementApplication.Application.DTOs.History;
+using FinancialManagementApplication.Application.DTOs.PortfolioAllocation;
 using FinancialManagementApplication.Application.Interface.Repositories;
 using FinancialManagementApplication.Domain.Entities;
 using FinancialManagementApplication.Infrastructure.Data;
@@ -15,6 +16,10 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
         }
         public async Task<PortfolioAllocation> CreateAsync(PortfolioAllocation portfolioAllocation)
         {
+            var maxOrder = await _context.PortfolioAllocations
+                .Where(a => a.PortfolioId == portfolioAllocation.PortfolioId)
+                .MaxAsync(a => (int?)a.SortOrder) ?? 0;
+            portfolioAllocation.SortOrder = maxOrder + 1;
             await _context.PortfolioAllocations.AddAsync(portfolioAllocation);
             await _context.SaveChangesAsync();
             return portfolioAllocation;
@@ -34,9 +39,25 @@ namespace FinancialManagementApplication.Infrastructure.Repositories
             return await _context.PortfolioAllocations
                 .Include(x => x.Asset)
                 .Where(x => x.PortfolioId == portfolioId)
-                .OrderBy(x => x.FinancialCategory)
+                .OrderBy(x => x.SortOrder)
+                .ThenBy(x => x.FinancialCategory)
                 .ThenBy(x => x.Name)
                 .ToListAsync();
+        }
+
+        public async Task ReorderAsync(List<PortfolioAllocationOrderItem> items)
+        {
+            var ids = items.Select(i => i.Id).ToList();
+            var allocations = await _context.PortfolioAllocations
+                .Where(a => ids.Contains(a.Id))
+                .ToListAsync();
+            foreach (var item in items)
+            {
+                var allocation = allocations.FirstOrDefault(a => a.Id == item.Id);
+                if (allocation != null)
+                    allocation.SortOrder = item.SortOrder;
+            }
+            await _context.SaveChangesAsync();
         }
 
         public async Task<PortfolioAllocation?> GetAsync(Guid id)
