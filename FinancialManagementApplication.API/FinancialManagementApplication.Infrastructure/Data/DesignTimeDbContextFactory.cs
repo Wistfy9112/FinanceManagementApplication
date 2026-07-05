@@ -10,12 +10,18 @@ public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<Applicatio
     {
         var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>();
 
-        var configuration = new ConfigurationBuilder()
-            .SetBasePath(Path.Combine(Directory.GetCurrentDirectory(), "..", "FinancialManagementApplication.API"))
-            .AddJsonFile("appsettings.json")
-            .Build();
+        var connStr = Environment.GetEnvironmentVariable("CONNECTIONSTRINGS__DEFAULTCONNECTION");
 
-        optionsBuilder.UseNpgsql(configuration.GetConnectionString("DefaultConnection"));
+        if (string.IsNullOrEmpty(connStr))
+        {
+            var config = new ConfigurationBuilder()
+                .SetBasePath(Directory.GetCurrentDirectory())
+                .AddJsonFile("appsettings.json", optional: true)
+                .Build();
+            connStr = config.GetConnectionString("DefaultConnection");
+        }
+
+        optionsBuilder.UseNpgsql(connStr!);
 
         return new ApplicationDbContext(optionsBuilder.Options);
     }
