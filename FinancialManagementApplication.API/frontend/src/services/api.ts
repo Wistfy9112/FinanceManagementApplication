@@ -91,7 +91,8 @@ const mapAllocationToFrontend = (al: any) => ({
   CurrentAmount: al.currentAmount !== undefined ? Number(al.currentAmount) : Number(al.CurrentAmount || 0),
   TargetPercentage: al.targetPercentage !== undefined ? Number(al.targetPercentage) : Number(al.TargetPercentage || 0),
   AssetId: al.assetId !== undefined ? al.assetId : al.AssetId || null,
-  AssetType: al.assetType || al.AssetType || al.FinancialCategory || al.financialCategory || 'Saving'
+  AssetType: al.assetType || al.AssetType || al.FinancialCategory || al.financialCategory || 'Saving',
+  SortOrder: al.sortOrder ?? al.SortOrder ?? 0
 });
 
 const mapAllocationHistoryToFrontend = (r: any) => ({
@@ -151,25 +152,25 @@ const DEFAULT_PORTFOLIO = {
 };
 
 const DEFAULT_ALLOCATIONS = [
-  { Id: 'al1', PortfolioId: 'p1', FinancialCategory: 'Expense', Name: 'Tiền trọ', TargetPercentage: 15.11170, CurrentAmount: 2892310 },
-  { Id: 'al2', PortfolioId: 'p1', FinancialCategory: 'Expense', Name: 'Chi phí sinh hoạt', TargetPercentage: 17.73982, CurrentAmount: 3395321 },
-  { Id: 'al3', PortfolioId: 'p1', FinancialCategory: 'Expense', Name: 'Xăng xe đi lại', TargetPercentage: 1.97109, CurrentAmount: 377258 },
-  { Id: 'al4', PortfolioId: 'p1', FinancialCategory: 'Expense', Name: 'Mua sắm', TargetPercentage: 2.95664, CurrentAmount: 565887 },
-  { Id: 'al5', PortfolioId: 'p1', FinancialCategory: 'Expense', Name: 'Dự phòng', TargetPercentage: 2.95664, CurrentAmount: 565887 },
-  { Id: 'al6', PortfolioId: 'p1', FinancialCategory: 'Expense', Name: 'Goal Fund', TargetPercentage: 0.65703, CurrentAmount: 125753 },
-  { Id: 'al7', PortfolioId: 'p1', FinancialCategory: 'Expense', Name: 'Skill Investment', TargetPercentage: 0.65703, CurrentAmount: 125753 },
-  { Id: 'al8', PortfolioId: 'p1', FinancialCategory: 'Expense', Name: 'Thiện nguyện', TargetPercentage: 0.65703, CurrentAmount: 125753 },
-  { Id: 'al9', PortfolioId: 'p1', FinancialCategory: 'Expense', Name: 'Du lịch', TargetPercentage: 0.65703, CurrentAmount: 125753 },
+  { Id: 'al1', PortfolioId: 'p1', FinancialCategory: 'Expense', Name: 'Tiền trọ', TargetPercentage: 15.11170, CurrentAmount: 2892310, SortOrder: 1 },
+  { Id: 'al2', PortfolioId: 'p1', FinancialCategory: 'Expense', Name: 'Chi phí sinh hoạt', TargetPercentage: 17.73982, CurrentAmount: 3395321, SortOrder: 2 },
+  { Id: 'al3', PortfolioId: 'p1', FinancialCategory: 'Expense', Name: 'Xăng xe đi lại', TargetPercentage: 1.97109, CurrentAmount: 377258, SortOrder: 3 },
+  { Id: 'al4', PortfolioId: 'p1', FinancialCategory: 'Expense', Name: 'Mua sắm', TargetPercentage: 2.95664, CurrentAmount: 565887, SortOrder: 4 },
+  { Id: 'al5', PortfolioId: 'p1', FinancialCategory: 'Expense', Name: 'Dự phòng', TargetPercentage: 2.95664, CurrentAmount: 565887, SortOrder: 5 },
+  { Id: 'al6', PortfolioId: 'p1', FinancialCategory: 'Expense', Name: 'Goal Fund', TargetPercentage: 0.65703, CurrentAmount: 125753, SortOrder: 6 },
+  { Id: 'al7', PortfolioId: 'p1', FinancialCategory: 'Expense', Name: 'Skill Investment', TargetPercentage: 0.65703, CurrentAmount: 125753, SortOrder: 7 },
+  { Id: 'al8', PortfolioId: 'p1', FinancialCategory: 'Expense', Name: 'Thiện nguyện', TargetPercentage: 0.65703, CurrentAmount: 125753, SortOrder: 8 },
+  { Id: 'al9', PortfolioId: 'p1', FinancialCategory: 'Expense', Name: 'Du lịch', TargetPercentage: 0.65703, CurrentAmount: 125753, SortOrder: 9 },
   
-  { Id: 'al10', PortfolioId: 'p1', FinancialCategory: 'Saving', Name: 'Saving', TargetPercentage: 0.65703, CurrentAmount: 125753 },
-  { Id: 'al11', PortfolioId: 'p1', FinancialCategory: 'Saving', Name: 'Emergency', TargetPercentage: 0.65703, CurrentAmount: 125753 },
-  { Id: 'al12', PortfolioId: 'p1', FinancialCategory: 'Saving', Name: 'Health', TargetPercentage: 11.16951, CurrentAmount: 2137795 },
-  { Id: 'al13', PortfolioId: 'p1', FinancialCategory: 'Saving', Name: 'Unemployment fund', TargetPercentage: 0.65703, CurrentAmount: 125753 },
-  { Id: 'al14', PortfolioId: 'p1', FinancialCategory: 'Investment', Name: 'Funds (Stock)', TargetPercentage: 20.49934, CurrentAmount: 3923482 },
-  { Id: 'al15', PortfolioId: 'p1', FinancialCategory: 'Investment', Name: 'ETF (Stock)', TargetPercentage: 9.85545, CurrentAmount: 1886289 },
-  { Id: 'al16', PortfolioId: 'p1', FinancialCategory: 'Investment', Name: 'Chứng chỉ quỹ', TargetPercentage: 9.85545, CurrentAmount: 1886289 },
-  { Id: 'al17', PortfolioId: 'p1', FinancialCategory: 'Investment', Name: 'Margin (Stock)', TargetPercentage: 0.00000, CurrentAmount: 0 },
-  { Id: 'al18', PortfolioId: 'p1', FinancialCategory: 'Investment', Name: 'Gold', TargetPercentage: 3.28515, CurrentAmount: 628763 }
+  { Id: 'al10', PortfolioId: 'p1', FinancialCategory: 'Saving', Name: 'Saving', TargetPercentage: 0.65703, CurrentAmount: 125753, SortOrder: 10 },
+  { Id: 'al11', PortfolioId: 'p1', FinancialCategory: 'Saving', Name: 'Emergency', TargetPercentage: 0.65703, CurrentAmount: 125753, SortOrder: 11 },
+  { Id: 'al12', PortfolioId: 'p1', FinancialCategory: 'Saving', Name: 'Health', TargetPercentage: 11.16951, CurrentAmount: 2137795, SortOrder: 12 },
+  { Id: 'al13', PortfolioId: 'p1', FinancialCategory: 'Saving', Name: 'Unemployment fund', TargetPercentage: 0.65703, CurrentAmount: 125753, SortOrder: 13 },
+  { Id: 'al14', PortfolioId: 'p1', FinancialCategory: 'Investment', Name: 'Funds (Stock)', TargetPercentage: 20.49934, CurrentAmount: 3923482, SortOrder: 14 },
+  { Id: 'al15', PortfolioId: 'p1', FinancialCategory: 'Investment', Name: 'ETF (Stock)', TargetPercentage: 9.85545, CurrentAmount: 1886289, SortOrder: 15 },
+  { Id: 'al16', PortfolioId: 'p1', FinancialCategory: 'Investment', Name: 'Chứng chỉ quỹ', TargetPercentage: 9.85545, CurrentAmount: 1886289, SortOrder: 16 },
+  { Id: 'al17', PortfolioId: 'p1', FinancialCategory: 'Investment', Name: 'Margin (Stock)', TargetPercentage: 0.00000, CurrentAmount: 0, SortOrder: 17 },
+  { Id: 'al18', PortfolioId: 'p1', FinancialCategory: 'Investment', Name: 'Gold', TargetPercentage: 3.28515, CurrentAmount: 628763, SortOrder: 18 }
 ];
 
 const getStorage = <T>(key: string, defaultValue: T): T => {
@@ -497,12 +498,7 @@ export const portfolioService = {
     await checkConnection();
     if (isDemoMode) {
       const p = getStorage('fm_portfolios', [DEFAULT_PORTFOLIO])[0];
-      const allocs = getStorage('fm_allocations', DEFAULT_ALLOCATIONS).sort((a: any, b: any) => {
-        const catOrder: Record<string, number> = { Expense: 0, Saving: 1, Investment: 2 };
-        const catDiff = (catOrder[a.FinancialCategory] ?? 0) - (catOrder[b.FinancialCategory] ?? 0);
-        if (catDiff !== 0) return catDiff;
-        return (a.Name || '').localeCompare(b.Name || '');
-      });
+      const allocs = getStorage('fm_allocations', DEFAULT_ALLOCATIONS).sort((a: any, b: any) => (a.SortOrder ?? 0) - (b.SortOrder ?? 0));
       return { portfolio: p, allocations: allocs };
     }
 
@@ -712,6 +708,30 @@ export const portfolioService = {
     setStorage('fm_income', config.income);
     setStorage('fm_target_reduction', config.targetReduction);
     setStorage('fm_exclusions', config.exclusions);
+  },
+
+  reorder: async (items: { id: string; sortOrder: number }[]): Promise<boolean> => {
+    await checkConnection();
+    if (isDemoMode) {
+      const list = getStorage('fm_allocations', DEFAULT_ALLOCATIONS);
+      for (const item of items) {
+        const al = list.find((a: any) => a.Id === item.id);
+        if (al) al.SortOrder = item.sortOrder;
+      }
+      setStorage('fm_allocations', list);
+      return true;
+    }
+    try {
+      const res = await fetch(`${API_URL}/portfolioAllocation/reorder`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+        body: JSON.stringify({ items })
+      });
+      return res.ok;
+    } catch (e) {
+      console.error('Error reordering allocations:', e);
+    }
+    return false;
   }
 };
 

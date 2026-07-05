@@ -77,5 +77,14 @@ namespace FinancialManagementApplication.API.Controller
             }
             return NoContent();
         }
+
+        [HttpPut("reorder")]
+        public async Task<IActionResult> Reorder([FromBody] ReorderPortfolioAllocationDTO dto)
+        {
+            if (dto?.Items == null || dto.Items.Count == 0)
+                return BadRequest(new { message = "Invalid reorder data" });
+            await _portfolioAllocationRepository.ReorderAsync(dto.Items);
+            return Ok(new { message = "Reorder successful" });
+        }
     }
 }

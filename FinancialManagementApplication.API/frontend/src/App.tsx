@@ -439,6 +439,13 @@ export default function App() {
     addToast({ title: t('Đã sắp xếp lại thứ tự!'), variant: 'success' });
   };
 
+  const handleReorderAllocations = async (orderedList: any[]) => {
+    const items = orderedList.map((a: any, i: number) => ({ id: a.Id, sortOrder: i + 1 }));
+    await portfolioService.reorder(items);
+    await loadData();
+    addToast({ title: t('Đã sắp xếp danh mục!'), variant: 'success' });
+  };
+
   // Budget Cut Handlers
   const handleUpdateIncome = (val: number) => {
     setIncome(val);
@@ -553,7 +560,7 @@ export default function App() {
   const handleSetupAddAllocation = () => {
     const totalAllocated = setupAllocations.reduce((sum, al) => sum + (al.setupAmount || 0), 0);
     if (totalAllocated >= setupAmount) {
-      setError(t('Không thể thêm danh mục mới vì đã đạt hoặc vượt quá phân bổ gốc.'));
+      setError(t('Không thể thêm danh mục mới vì đã đạt hoặc vượt quá phân bổ gốc. Hãy điều chỉnh hoặc gia tăng phân bổ gốc'));
       return;
     }
     const newId = 'al-' + Math.random().toString(36).substr(2, 9);
@@ -858,6 +865,7 @@ export default function App() {
         {activeTab === 'portfolio' && (
           <PortfolioPage 
             assets={assets}
+            allocations={allocations}
             income={income}
             targetReduction={targetReduction}
             calculatedExpenses={calculatedExpenses}
@@ -888,6 +896,7 @@ export default function App() {
             onRestoreAllocationHistory={handleRestoreAllocationHistory}
             onDeleteAllocationHistory={handleDeleteAllocationHistory}
             onUpdateAllocationTime={handleUpdateAllocationHistoryTime}
+            onReorderAllocations={handleReorderAllocations}
           />
         )}
 
@@ -2037,6 +2046,7 @@ function AssetsPage({
 // 4. PORTFOLIO & BUDGET CUT PLANNING COMPONENT
 function PortfolioPage({
   assets,
+  allocations,
   income,
   targetReduction,
   calculatedExpenses,
@@ -2066,9 +2076,11 @@ function PortfolioPage({
   allocationHistoryRecords,
   onRestoreAllocationHistory,
   onDeleteAllocationHistory,
-  onUpdateAllocationTime
+  onUpdateAllocationTime,
+  onReorderAllocations
 }: {
   assets: any[];
+  allocations: any[];
   income: number;
   targetReduction: number;
   calculatedExpenses: any[];
@@ -2099,6 +2111,7 @@ function PortfolioPage({
   onRestoreAllocationHistory: (historyId: string) => void;
   onDeleteAllocationHistory: (historyId: string) => void;
   onUpdateAllocationTime: (historyId: string, recordedAt: string) => Promise<any>;
+  onReorderAllocations: (orderedList: any[]) => Promise<void>;
 }) {
   const { t } = useLanguage();
 
@@ -2108,6 +2121,41 @@ function PortfolioPage({
   // Setup mode totals
   const setupTotalAmount = setupAllocations.reduce((sum, al) => sum + (al.setupAmount || 0), 0);
   const setupTotalPercent = setupAllocations.reduce((sum, al) => sum + al.TargetPercentage, 0);
+
+  // Reorder logic for allocations
+  const sortByOrder = (list: any[]) => [...list].sort((a, b) => (a.SortOrder ?? 0) - (b.SortOrder ?? 0));
+
+  const handleMoveUp = (id: string, categoryGroup: string) => {
+    const group = sortByOrder(allocations.filter(al => al.FinancialCategory === categoryGroup));
+    const idx = group.findIndex(al => al.Id === id);
+    if (idx <= 0) return;
+    [group[idx - 1], group[idx]] = [group[idx], group[idx - 1]];
+    const catOrder = ['Expense', 'Saving', 'Investment'];
+    const reordered: any[] = [];
+    for (const cat of catOrder) {
+      if (cat === categoryGroup) reordered.push(...group);
+      else reordered.push(...allocations.filter(al => al.FinancialCategory === cat));
+    }
+    onReorderAllocations(reordered);
+  };
+
+  const handleMoveDown = (id: string, categoryGroup: string) => {
+    const group = sortByOrder(allocations.filter(al => al.FinancialCategory === categoryGroup));
+    const idx = group.findIndex(al => al.Id === id);
+    if (idx < 0 || idx >= group.length - 1) return;
+    [group[idx], group[idx + 1]] = [group[idx + 1], group[idx]];
+    const catOrder = ['Expense', 'Saving', 'Investment'];
+    const reordered: any[] = [];
+    for (const cat of catOrder) {
+      if (cat === categoryGroup) reordered.push(...group);
+      else reordered.push(...allocations.filter(al => al.FinancialCategory === cat));
+    }
+    onReorderAllocations(reordered);
+  };
+
+  const sortedExpenses = sortByOrder(calculatedExpenses);
+  const sortedSavings = sortByOrder(calculatedSavings);
+  const sortedInvestments = sortByOrder(calculatedInvestments);
 
   if (showSetup) {
     return (
@@ -2344,6 +2392,7 @@ function PortfolioPage({
         <table className="custom-table" style={{ borderCollapse: 'separate', borderSpacing: '0' }}>
           <thead>
             <tr>
+              <th style={{ width: '40px' }}></th>
               <th style={{ width: '100px', borderRight: '1px solid var(--border-light)' }}>{t('Khối')}</th>
               <th>{t('Thông tin phân bổ (Allocations Info)')}</th>
               <th style={{ textAlign: 'right', width: '160px' }}>{t('Tỉ trọng (%)')}</th>
@@ -2357,12 +2406,25 @@ function PortfolioPage({
           <tbody>
             
             {/* 1. SINH HOẠT BLOCK */}
-            {calculatedExpenses.map((al, idx) => (
+            {sortedExpenses.map((al, idx) => (
               <tr key={al.Id}>
+                <td style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                    <button onClick={() => handleMoveUp(al.Id, 'Expense')} disabled={idx === 0} title={t('Di chuyển lên')}
+                      style={{ background: 'none', border: 'none', cursor: idx === 0 ? 'default' : 'pointer', padding: '0', lineHeight: '1', color: idx === 0 ? 'var(--text-muted)' : 'var(--text-secondary)', opacity: idx === 0 ? 0.3 : 1 }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5l-7 7h14l-7-7z"/></svg>
+                    </button>
+                    <span style={{ fontSize: '0.85rem' }}>{idx + 1}</span>
+                    <button onClick={() => handleMoveDown(al.Id, 'Expense')} disabled={idx === sortedExpenses.length - 1} title={t('Di chuyển xuống')}
+                      style={{ background: 'none', border: 'none', cursor: idx === sortedExpenses.length - 1 ? 'default' : 'pointer', padding: '0', lineHeight: '1', color: idx === sortedExpenses.length - 1 ? 'var(--text-muted)' : 'var(--text-secondary)', opacity: idx === sortedExpenses.length - 1 ? 0.3 : 1 }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 19l7-7H5l7 7z"/></svg>
+                    </button>
+                  </div>
+                </td>
                 {idx === 0 && (
                   <td 
                     className="span-col" 
-                    rowSpan={calculatedExpenses.length} 
+                    rowSpan={sortedExpenses.length} 
                     style={{ 
                       verticalAlign: 'middle', 
                       background: 'rgba(99,102,241,0.02)',
@@ -2416,6 +2478,7 @@ function PortfolioPage({
 
             {/* divider: Còn lại (Saving Base) */}
             <tr className="table-section-divider">
+              <td></td>
               <td style={{ borderRight: '1px solid var(--border-light)' }}></td>
               <td style={{ fontWeight: 700, paddingLeft: '16px' }}>{t('Còn lại (Saving Base)')}</td>
               <td style={{ textAlign: 'right' }}></td>
@@ -2429,12 +2492,25 @@ function PortfolioPage({
             </tr>
 
             {/* 2. TIẾT KIỆM BLOCK */}
-            {calculatedSavings.map((al, idx) => (
+            {sortedSavings.map((al, idx) => (
               <tr key={al.Id}>
+                <td style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                    <button onClick={() => handleMoveUp(al.Id, 'Saving')} disabled={idx === 0} title={t('Di chuyển lên')}
+                      style={{ background: 'none', border: 'none', cursor: idx === 0 ? 'default' : 'pointer', padding: '0', lineHeight: '1', color: idx === 0 ? 'var(--text-muted)' : 'var(--text-secondary)', opacity: idx === 0 ? 0.3 : 1 }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5l-7 7h14l-7-7z"/></svg>
+                    </button>
+                    <span style={{ fontSize: '0.85rem' }}>{idx + 1}</span>
+                    <button onClick={() => handleMoveDown(al.Id, 'Saving')} disabled={idx === sortedSavings.length - 1} title={t('Di chuyển xuống')}
+                      style={{ background: 'none', border: 'none', cursor: idx === sortedSavings.length - 1 ? 'default' : 'pointer', padding: '0', lineHeight: '1', color: idx === sortedSavings.length - 1 ? 'var(--text-muted)' : 'var(--text-secondary)', opacity: idx === sortedSavings.length - 1 ? 0.3 : 1 }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 19l7-7H5l7 7z"/></svg>
+                    </button>
+                  </div>
+                </td>
                 {idx === 0 && (
                   <td 
                     className="span-col" 
-                    rowSpan={calculatedSavings.length} 
+                    rowSpan={sortedSavings.length} 
                     style={{ 
                       verticalAlign: 'middle', 
                       background: 'rgba(217,70,239,0.02)',
@@ -2487,9 +2563,10 @@ function PortfolioPage({
             ))}
 
             {/* 3. ĐẦU TƯ BLOCK */}
-            {calculatedInvestments.length > 0 && (
+            {sortedInvestments.length > 0 && (
               <>
             <tr className="table-section-divider">
+              <td></td>
               <td style={{ borderRight: '1px solid var(--border-light)' }}></td>
               <td style={{ fontWeight: 700, paddingLeft: '16px' }}>{t('Đầu tư (Investment Base)')}</td>
               <td style={{ textAlign: 'right' }}></td>
@@ -2501,12 +2578,25 @@ function PortfolioPage({
               <td></td>
               <td></td>
             </tr>
-            {calculatedInvestments.map((al, idx) => (
+            {sortedInvestments.map((al, idx) => (
               <tr key={al.Id}>
+                <td style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                    <button onClick={() => handleMoveUp(al.Id, 'Investment')} disabled={idx === 0} title={t('Di chuyển lên')}
+                      style={{ background: 'none', border: 'none', cursor: idx === 0 ? 'default' : 'pointer', padding: '0', lineHeight: '1', color: idx === 0 ? 'var(--text-muted)' : 'var(--text-secondary)', opacity: idx === 0 ? 0.3 : 1 }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5l-7 7h14l-7-7z"/></svg>
+                    </button>
+                    <span style={{ fontSize: '0.85rem' }}>{idx + 1}</span>
+                    <button onClick={() => handleMoveDown(al.Id, 'Investment')} disabled={idx === sortedInvestments.length - 1} title={t('Di chuyển xuống')}
+                      style={{ background: 'none', border: 'none', cursor: idx === sortedInvestments.length - 1 ? 'default' : 'pointer', padding: '0', lineHeight: '1', color: idx === sortedInvestments.length - 1 ? 'var(--text-muted)' : 'var(--text-secondary)', opacity: idx === sortedInvestments.length - 1 ? 0.3 : 1 }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 19l7-7H5l7 7z"/></svg>
+                    </button>
+                  </div>
+                </td>
                 {idx === 0 && (
                   <td 
                     className="span-col" 
-                    rowSpan={calculatedInvestments.length} 
+                    rowSpan={sortedInvestments.length} 
                     style={{ 
                       verticalAlign: 'middle', 
                       background: 'rgba(16,185,129,0.02)',
@@ -2562,6 +2652,7 @@ function PortfolioPage({
 
             {/* Total Row */}
             <tr className="total-row">
+              <td></td>
               <td style={{ borderRight: '1px solid var(--border-light)' }}>{t('Tổng dòng')}</td>
               <td style={{ paddingLeft: '16px' }}>{t('Cân đối (Balanced)')}</td>
               <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', color: isPercentageBalanced ? 'var(--success)' : '#f59e0b' }}>
@@ -2718,13 +2809,13 @@ function GoalsPage({ goals, userId, totalCurrent, onRefresh }: {
     return `${days} ngày`;
   };
 
-  // Sort goals: processing first, then by due date
+  // Sort goals: processing first, not started second, completed last; then by newest created
   const sortedGoals = [...goals].sort((a, b) => {
     const statusOrder: Record<string, number> = { Processing: 0, NotStarted: 1, Successed: 2, Failed: 3, Cancelled: 4 };
     const aOrder = statusOrder[a.Status] ?? 99;
     const bOrder = statusOrder[b.Status] ?? 99;
     if (aOrder !== bOrder) return aOrder - bOrder;
-    return new Date(a.DueDate).getTime() - new Date(b.DueDate).getTime();
+    return new Date(b.CreatedAt).getTime() - new Date(a.CreatedAt).getTime();
   });
 
   return (
@@ -3197,18 +3288,18 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
           <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
             <thead>
               <tr style={{ background: 'var(--bg-secondary)' }}>
-                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600 }}>{t('Tên')}</th>
-                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600 }}>{t('Loại')}</th>
-                <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>{t('Tổng nợ')}</th>
-                <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>{t('Đã trả')}</th>
-                <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>{t('Còn lại')}</th>
-                <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>{t('Lãi suất')}</th>
-                <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>{t('Tiền lãi')}</th>
-                <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>{t('Ngày vay')}</th>
-                <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>{t('Hạn trả')}</th>
-                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600 }}>{t('Ghi chú')}</th>
-                <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>{t('Trạng thái')}</th>
-                <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>{t('Thao tác')}</th>
+                <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600 }}>{t('Tên')}</th>
+                <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600 }}>{t('Loại')}</th>
+                <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600 }}>{t('Tổng nợ')}</th>
+                <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600 }}>{t('Đã trả')}</th>
+                <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600 }}>{t('Còn lại')}</th>
+                <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{t('Lãi suất')}</th>
+                <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600 }}>{t('Tiền lãi')}</th>
+                <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{t('Ngày vay')}</th>
+                <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{t('Hạn trả')}</th>
+                <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600 }}>{t('Ghi chú')}</th>
+                <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{t('Trạng thái')}</th>
+                <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{t('Thao tác')}</th>
               </tr>
             </thead>
             <tbody>
@@ -3234,32 +3325,49 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
                   }
                   const now = new Date();
                   now.setHours(23, 59, 59, 999);
-                  const finalDays = Math.max(0, (now.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24));
-                  totalInterest += balance * rate * (finalDays / 365);
+                  const dueDate = d.DueDate ? new Date(d.DueDate) : null;
+                  dueDate?.setHours(23, 59, 59, 999);
+
+                  if (dueDate && dueDate < now) {
+                    if (dueDate > prevDate) {
+                      const termDays = (dueDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24);
+                      totalInterest += balance * rate * (termDays / 365);
+                      prevDate = dueDate;
+                    }
+                    if (balance > 0 && now > prevDate) {
+                      const overdueDays = (now.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24);
+                      totalInterest += balance * rate * (overdueDays / 365);
+                    }
+                  } else {
+                    if (now > prevDate) {
+                      const finalDays = (now.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24);
+                      totalInterest += balance * rate * (finalDays / 365);
+                    }
+                  }
                   return totalInterest;
                 };
                 const interestAmount = calcInterest(debt);
                 return (
                   <React.Fragment key={debt.Id}>
                     <tr id={`debt-row-${debt.Id}`} onClick={() => toggleExpand(debt.Id)} style={{ cursor: 'pointer', borderBottom: '1px solid var(--border)', background: isExpanded ? 'rgba(99,102,241,0.04)' : 'transparent' }}>
-                      <td style={{ padding: '10px 12px', fontWeight: 600 }}>{debt.Name}</td>
-                      <td style={{ padding: '10px 12px' }}>
-                        <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '10px', fontWeight: 600, background: typeBadge.bg, color: typeBadge.color }}>{typeBadge.text}</span>
+                      <td style={{ padding: '12px 16px', fontWeight: 600 }}>{debt.Name}</td>
+                      <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
+                        <span style={{ fontSize: '0.8rem', padding: '3px 10px', borderRadius: '10px', fontWeight: 600, background: typeBadge.bg, color: typeBadge.color }}>{typeBadge.text}</span>
                       </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-display)' }}>{formatInputNumber(debt.TotalDebt)}</td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-display)', color: '#10b981' }}>{formatInputNumber(debt.PaidAmount || 0)}</td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-display)', color: remaining > 0 ? '#ef4444' : '#10b981', fontWeight: 700 }}>{formatInputNumber(remaining)}</td>
-                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                      <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: 'var(--font-display)' }}>{formatInputNumber(debt.TotalDebt)}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: 'var(--font-display)', color: '#10b981' }}>{formatInputNumber(debt.PaidAmount || 0)}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: 'var(--font-display)', color: remaining > 0 ? '#ef4444' : '#10b981', fontWeight: 700 }}>{formatInputNumber(remaining)}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                         {debt.InterestRate != null ? <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{debt.InterestRate}%</span> : <span style={{ color: 'var(--text-muted)' }}>—</span>}
                       </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-display)', color: interestAmount > 0 ? '#f59e0b' : 'var(--text-muted)', fontWeight: 600 }}>{interestAmount > 0 ? formatInputNumber(Math.round(interestAmount)) : '—'}</td>
-                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>{formatDate(debt.BorrowDate)}</td>
-                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>{debt.DueDate ? formatDate(debt.DueDate) : <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
-                      <td style={{ padding: '10px 12px', maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: debt.Note ? 'inherit' : 'var(--text-muted)' }}>{debt.Note || '—'}</td>
-                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                      <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: 'var(--font-display)', color: interestAmount > 0 ? '#f59e0b' : 'var(--text-muted)', fontWeight: 600 }}>{interestAmount > 0 ? formatInputNumber(Math.round(interestAmount)) : '—'}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>{formatDate(debt.BorrowDate)}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>{debt.DueDate ? formatDate(debt.DueDate) : <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
+                      <td style={{ padding: '12px 16px', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: debt.Note ? 'inherit' : 'var(--text-muted)' }}>{debt.Note || '—'}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                         <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '10px', fontWeight: 600, background: statusBadge.bg, color: statusBadge.color }}>{statusBadge.text}</span>
                       </td>
-                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                         <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
                           {!debt.IsClosed && remaining > 0 && (
                             <button onClick={(e) => { e.stopPropagation(); openPaymentModal(debt); }} style={{ background: 'rgba(16,185,129,0.1)', border: 'none', borderRadius: '4px', padding: '4px 8px', cursor: 'pointer', fontSize: '0.75rem', color: '#10b981' }} title={t('Thanh toán')}>
