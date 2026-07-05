@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { decodeJwt, checkConnection, getLoggedUser, getLoggedUserId, getIsDemoMode } from '../services/api'
+import { decodeJwt, getLoggedUser, getLoggedUserId } from '../services/api'
 
 beforeEach(() => {
   localStorage.clear()
@@ -76,15 +76,6 @@ describe('decodeJwt', () => {
   })
 })
 
-describe('checkConnection', () => {
-  it('sets demo mode when API is unreachable', async () => {
-    const result = await checkConnection()
-
-    expect(result).toBe(false)
-    expect(getIsDemoMode()).toBe(true)
-  })
-})
-
 describe('getLoggedUser', () => {
   it('returns null when no user in storage', () => {
     const user = getLoggedUser()
@@ -115,12 +106,6 @@ describe('getLoggedUserId', () => {
     const id = getLoggedUserId()
 
     expect(id).toBe('custom-id')
-  })
-})
-
-describe('getIsDemoMode', () => {
-  it('returns initial demo mode state', () => {
-    expect(getIsDemoMode()).toBe(true)
   })
 })
 
