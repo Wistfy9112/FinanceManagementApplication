@@ -9,7 +9,7 @@ import {
   cashFlowService,
   goalService,
   debtService,
-  checkConnection, 
+  checkServerStatus,
   getLoggedUser
 } from './services/api';
 import { useLanguage } from './i18n';
@@ -141,7 +141,6 @@ function DateTimeEdit({ value, onSave }: { value: string; onSave: (iso: string) 
 export default function App() {
   const [user, setUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'assets' | 'portfolio' | 'goals' | 'debts' | 'profile'>('dashboard');
-  const [isDemo, setIsDemo] = useState<boolean>(true);
   const { t } = useLanguage();
   
   // App States
@@ -163,7 +162,8 @@ export default function App() {
   const [setupAmount, setSetupAmount] = useState<number>(portfolio?.Amount || 19139550);
   const [setupAllocations, setSetupAllocations] = useState<any[]>([]);
 
-  // Loading & Error States
+  // Connection & Loading States
+  const [serverOnline, setServerOnline] = useState<boolean | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [authLoading, setAuthLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -198,35 +198,44 @@ export default function App() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Check connection and fetch initial data on mount
+  // Check server status and fetch initial data on mount
   useEffect(() => {
     const initApp = async () => {
       setLoading(true);
-      const connected = await checkConnection();
-      setIsDemo(!connected);
-
-      const logged = getLoggedUser();
-      if (logged) {
-        setUser(logged);
-        await loadData();
+      const online = await checkServerStatus();
+      setServerOnline(online);
+      if (online) {
+        const logged = getLoggedUser();
+        if (logged) {
+          setUser(logged);
+          await loadData();
+        }
       }
       setLoading(false);
     };
 
     initApp();
+  }, []);
 
-    // Listen to network status changes
-    const handleStatusChange = (e: any) => {
-      setIsDemo(e.detail.isDemoMode);
-    };
-    window.addEventListener('api-status-changed', handleStatusChange);
-    return () => window.removeEventListener('api-status-changed', handleStatusChange);
+  // Retry connection
+  const handleRetry = useCallback(async () => {
+    setLoading(true);
+    setServerOnline(null);
+    const online = await checkServerStatus();
+    setServerOnline(online);
+    if (online) {
+      const logged = getLoggedUser();
+      if (logged) {
+        setUser(logged);
+        await loadData();
+      }
+    }
+    setLoading(false);
   }, []);
 
   // Reload data
   const loadData = async () => {
     try {
-      setError(null);
       if (!user) return;
       
       const assetList = await assetService.getAll(user.id);
@@ -250,7 +259,7 @@ export default function App() {
       const debtList = await debtService.getAll(user.id);
       setDebts(debtList);
     } catch (err: any) {
-      setError(err.message || t('Không thể tải dữ liệu.'));
+      addToast({ title: t('Lỗi tải dữ liệu'), description: err.message, variant: 'error' });
     }
   };
 
@@ -290,19 +299,6 @@ export default function App() {
     }
   };
 
-  const handleDemo = async () => {
-    try {
-      setAuthLoading(true);
-      setError(null);
-      const res = await authService.loginDemo();
-      setUser(res.user);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
   const handleLogout = () => {
     authService.logout();
     setUser(null);
@@ -316,7 +312,6 @@ export default function App() {
   const handleSaveAsset = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      setError(null);
       if (!user) return;
       
       if (assetModal.mode === 'add') {
@@ -327,7 +322,7 @@ export default function App() {
       setAssetModal({ ...assetModal, isOpen: false });
       await loadData();
     } catch (err: any) {
-      setError(err.message);
+      addToast({ title: t('Lỗi lưu tài sản'), description: err.message, variant: 'error' });
     }
   };
 
@@ -338,11 +333,10 @@ export default function App() {
   const confirmDeleteAsset = async () => {
     if (!deleteConfirmAsset) return;
     try {
-      setError(null);
       await assetService.delete(deleteConfirmAsset.id);
       await loadData();
     } catch (err: any) {
-      setError(err.message);
+      addToast({ title: t('Lỗi xóa tài sản'), description: err.message, variant: 'error' });
     } finally {
       setDeleteConfirmAsset(null);
     }
@@ -560,7 +554,7 @@ export default function App() {
   const handleSetupAddAllocation = () => {
     const totalAllocated = setupAllocations.reduce((sum, al) => sum + (al.setupAmount || 0), 0);
     if (totalAllocated >= setupAmount) {
-      setError(t('Không thể thêm danh mục mới vì đã đạt hoặc vượt quá phân bổ gốc. Hãy điều chỉnh hoặc gia tăng phân bổ gốc'));
+      addToast({ title: t('Không thể thêm danh mục'), description: t('Đã đạt hoặc vượt quá phân bổ gốc.'), variant: 'warning' });
       return;
     }
     const newId = 'al-' + Math.random().toString(36).substr(2, 9);
@@ -604,19 +598,18 @@ export default function App() {
 
   const handleSaveSetup = async () => {
     try {
-      setError(null);
       if (!user) return;
       if (setupAllocations.length === 0) {
-        setError(t('Vui lòng thêm ít nhất một danh mục.'));
+        addToast({ title: t('Lỗi'), description: t('Vui lòng thêm ít nhất một danh mục.'), variant: 'warning' });
         return;
       }
       if (setupAllocations.some(al => !al.Name.trim())) {
-        setError(t('Vui lòng nhập tên cho tất cả danh mục.'));
+        addToast({ title: t('Lỗi'), description: t('Vui lòng nhập tên cho tất cả danh mục.'), variant: 'warning' });
         return;
       }
       const totalAmount = setupAllocations.reduce((sum, al) => sum + (al.setupAmount || 0), 0);
       if (totalAmount > setupAmount) {
-        setError(t('Tổng số tiền danh mục vượt quá phân bổ gốc. Vui lòng điều chỉnh lại.'));
+        addToast({ title: t('Lỗi'), description: t('Tổng số tiền danh mục vượt quá phân bổ gốc.'), variant: 'warning' });
         return;
       }
 
@@ -657,7 +650,7 @@ export default function App() {
       await loadData();
       setSetupSuccessModal(true);
     } catch (err: any) {
-      setError(err.message || t('Lỗi khi lưu thiết lập.'));
+      addToast({ title: t('Lỗi lưu thiết lập'), description: err.message, variant: 'error' });
     }
   };
 
@@ -719,13 +712,14 @@ export default function App() {
   }
 
   if (!user) {
+    if (serverOnline === false) {
+      return <OfflinePage onRetry={handleRetry} t={t} />;
+    }
     return (
       <AuthPage 
         onLogin={handleLogin} 
         onRegister={handleRegister} 
-        onDemo={handleDemo}
         error={error} 
-        isDemo={isDemo}
         loading={authLoading}
       />
     );
@@ -778,18 +772,6 @@ export default function App() {
           </div>
 
           <div className="nav-right">
-            {isDemo ? (
-              <div className="status-badge demo">
-                <span style={{ width: '6px', height: '6px', background: '#f59e0b', borderRadius: '50%' }} />
-                {t('CHẾ ĐỘ DEMO')}
-              </div>
-            ) : (
-              <div className="status-badge connected">
-                <span style={{ width: '6px', height: '6px', background: '#10b981', borderRadius: '50%' }} />
-                {t('ĐÃ KẾT NỐI API')}
-              </div>
-            )}
-            
             <div className="user-profile" ref={profileDropdownRef} style={{ position: 'relative', cursor: 'pointer' }}>
               <div onClick={() => setProfileDropdownOpen(p => !p)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <div className="user-avatar">
@@ -823,12 +805,6 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="app-container">
-        {error && (
-          <div style={{ background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.2)', color: '#f43f5e', padding: '12px 16px', borderRadius: '8px', marginBottom: '20px', fontSize: '0.9rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>{error}</span>
-            <button style={{ background: 'transparent', border: 'none', color: '#f43f5e', cursor: 'pointer', fontWeight: 700 }} onClick={() => setError(null)}>✕</button>
-          </div>
-        )}
 
         {activeTab === 'dashboard' && (
           <DashboardPage 
@@ -1081,7 +1057,7 @@ export default function App() {
 // ======================== COMPONENTS ========================
 
 // 1. AUTH PAGE COMPONENT
-function AuthPage({ onLogin, onRegister, onDemo, error, isDemo, loading }: { onLogin: any; onRegister: any; onDemo: any; error: string | null; isDemo: boolean; loading?: boolean }) {
+function AuthPage({ onLogin, onRegister, error, loading }: { onLogin: any; onRegister: any; error: string | null; loading?: boolean }) {
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -1192,24 +1168,10 @@ function AuthPage({ onLogin, onRegister, onDemo, error, isDemo, loading }: { onL
               type="button" 
               className="btn btn-secondary" 
               style={{ width: '100%', fontSize: '0.85rem', padding: '10px 12px', background: 'rgba(99,102,241,0.1)', color: '#a5b4fc', border: '1px solid rgba(99,102,241,0.2)', marginBottom: '12px' }}
-              onClick={onDemo}
+              onClick={handleUseDemoAccount}
             >
-              {t('Trải nghiệm Chế độ Demo (Offline)')}
+              {t('Điền tài khoản Demo')}
             </button>
-
-            {isDemo && (
-              <>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '6px' }}>{t('Tài khoản Demo có sẵn (Mock Offline):')}</p>
-                <button 
-                  type="button" 
-                  className="btn btn-secondary" 
-                  style={{ width: '100%', fontSize: '0.8rem', padding: '6px 12px' }}
-                  onClick={handleUseDemoAccount}
-                >
-                  {t('Sử dụng tài khoản Demo nhanh')}
-                </button>
-              </>
-            )}
           </div>
         )}
 
@@ -1224,7 +1186,35 @@ function AuthPage({ onLogin, onRegister, onDemo, error, isDemo, loading }: { onL
   );
 }
 
-// 2. DASHBOARD COMPONENT
+// 2. OFFLINE PAGE COMPONENT
+function OfflinePage({ onRetry, t }: { onRetry: () => void; t: (key: string) => string }) {
+  return (
+    <div className="offline-page">
+      <div className="offline-card">
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: '#6366f1', marginBottom: '24px' }}>
+          <path d="M22 12h-4l-3 9L9 3l-3 9H2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+        <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '12px', color: 'var(--text-primary)' }}>
+          {t('Không thể kết nối server')}
+        </h2>
+        <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: '24px', textAlign: 'center', maxWidth: '400px' }}>
+          {t('Vui lòng kiểm tra kết nối mạng và đảm bảo server đang chạy.')}
+        </p>
+        <button className="btn btn-primary" onClick={onRetry}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ animation: 'spin 0s' }}>
+              <path d="M1 4v6h6M23 20v-6h-6" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            {t('Thử lại')}
+          </span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// 3. DASHBOARD COMPONENT
 function DashboardPage({ 
   totalCurrent, 
   totalInitial, 
