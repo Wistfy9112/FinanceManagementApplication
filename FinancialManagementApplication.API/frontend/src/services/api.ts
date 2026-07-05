@@ -381,7 +381,8 @@ export const assetService = {
       CurrentValue: asset.CurrentValue,
       Type: asset.Type || 'Saving',
       AccountID: userId,
-      CreatedAt: createdAt
+      CreatedAt: createdAt,
+      SortOrder: 0
     };
     
     if (isDemoMode) {

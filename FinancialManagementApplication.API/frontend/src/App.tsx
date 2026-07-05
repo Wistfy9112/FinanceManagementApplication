@@ -142,7 +142,7 @@ export default function App() {
   const [user, setUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'assets' | 'portfolio' | 'goals' | 'debts' | 'profile'>('dashboard');
   const [isDemo, setIsDemo] = useState<boolean>(true);
-  const { t, locale, setLocale } = useLanguage();
+  const { t } = useLanguage();
   
   // App States
   const [assets, setAssets] = useState<any[]>([]);
@@ -478,18 +478,6 @@ export default function App() {
     }
   };
 
-  const handleSaveAllocationSnapshot = async () => {
-    try {
-      setError(null);
-      if (!user) return;
-      await historyService.saveAllocationSetupSnapshot(user.id);
-      await loadData();
-      addToast({ title: t('Đã lưu lịch sử phân bổ!'), variant: 'success' });
-    } catch (err: any) {
-      addToast({ title: t('Lỗi lưu phân bổ'), description: err.message, variant: 'error' });
-    }
-  };
-
   const handleRestoreAllocationHistory = async (historyId: string) => {
     try {
       setError(null);
@@ -783,9 +771,6 @@ export default function App() {
           </div>
 
           <div className="nav-right">
-            <button className="lang-toggle" onClick={() => setLocale(locale === 'vi' ? 'en' : 'vi')} title={locale === 'vi' ? 'Switch to English' : 'Chuyển sang Tiếng Việt'}>
-              {locale === 'vi' ? 'EN' : 'VI'}
-            </button>
             {isDemo ? (
               <div className="status-badge demo">
                 <span style={{ width: '6px', height: '6px', background: '#f59e0b', borderRadius: '50%' }} />
