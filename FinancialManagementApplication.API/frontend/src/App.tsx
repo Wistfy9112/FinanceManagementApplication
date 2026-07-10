@@ -1074,11 +1074,6 @@ function AuthPage({ onLogin, onRegister, error, loading }: { onLogin: any; onReg
     }
   };
 
-  const handleUseDemoAccount = () => {
-    setUsername('demo');
-    setPassword('demo123');
-  };
-
   return (
     <div className="auth-wrapper">
       <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
@@ -1160,20 +1155,6 @@ function AuthPage({ onLogin, onRegister, error, loading }: { onLogin: any; onReg
             )}
           </button>
         </form>
-
-        {isLogin && (
-          <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border-light)', textAlign: 'center' }}>
-            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '8px' }}>{t('Trải nghiệm ứng dụng không cần tài khoản:')}</p>
-            <button 
-              type="button" 
-              className="btn btn-secondary" 
-              style={{ width: '100%', fontSize: '0.85rem', padding: '10px 12px', background: 'rgba(99,102,241,0.1)', color: '#a5b4fc', border: '1px solid rgba(99,102,241,0.2)', marginBottom: '12px' }}
-              onClick={handleUseDemoAccount}
-            >
-              {t('Điền tài khoản Demo')}
-            </button>
-          </div>
-        )}
 
         <div className="auth-switch">
           {isLogin ? t('Chưa có tài khoản?') : t('Đã có tài khoản?')}
