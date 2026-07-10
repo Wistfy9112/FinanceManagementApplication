@@ -35,20 +35,12 @@
     "vite": "npm:rolldown-vite@7.2.5"
   },
   "dependencies": {
-    "@tanstack/react-query": "^5.100.14",
-    "@tanstack/react-query-devtools": "^5.100.14",
-    "autoprefixer": "^10.5.0",
-    "canvas-confetti": "^1.9.4",
-    "clsx": "^2.1.1",
     "framer-motion": "^12.40.0",
     "lucide-react": "^1.16.0",
     "postcss": "^8.5.15",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.30.3",
     "recharts": "^3.8.1",
-    "tailwind-merge": "^3.6.0",
-    "tailwindcss": "^4.3.0",
-    "zustand": "^5.0.13"
+    "tailwindcss": "^4.3.0"
   }
 }
