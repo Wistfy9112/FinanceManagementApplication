@@ -807,11 +807,15 @@ export const debtService = {
         const data = await res.json();
         return mapDebtToFrontend(data);
       }
-    } catch (e) {
+      const errData = await res.json().catch(() => null);
+      throw new Error(errData?.Message || `Lỗi ${res.status}`);
+    } catch (e: any) {
       console.error('Error creating debt:', e);
+      if (e instanceof TypeError) {
+        throw new Error('Không thể tạo khoản nợ do mất kết nối server.');
+      }
+      throw e;
     }
-
-    throw new Error('Không thể tạo khoản nợ do mất kết nối server.');
   },
 
   update: async (id: string, debt: { Name: string; TotalDebt: number; BorrowDate: string; DueDate?: string; Note?: string; Description?: string; InterestRate?: number | null; Type?: string }, _userId: string = getLoggedUserId()): Promise<void> => {
@@ -830,12 +834,17 @@ export const debtService = {
           type: debt.Type || 'Borrowed'
         })
       });
-      if (res.ok) return;
-    } catch (e) {
+      if (!res.ok) {
+        const errData = await res.json().catch(() => null);
+        throw new Error(errData?.Message || `Lỗi ${res.status}`);
+      }
+    } catch (e: any) {
       console.error('Error updating debt:', e);
+      if (e instanceof TypeError) {
+        throw new Error('Không thể cập nhật khoản nợ do mất kết nối server.');
+      }
+      throw e;
     }
-
-    throw new Error('Không thể cập nhật khoản nợ do mất kết nối server.');
   },
 
   delete: async (id: string): Promise<void> => {

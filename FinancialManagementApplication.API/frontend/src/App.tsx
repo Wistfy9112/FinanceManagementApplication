@@ -3421,7 +3421,7 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
               </div>
               <div className="form-group" style={{ marginBottom: '12px' }}>
                 <label className="form-label" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '4px', color: 'var(--text-muted)' }}>{t('Tổng nợ')} *</label>
-                <input className="form-control" style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border)', fontSize: '0.85rem' }} value={formatInputNumber(parseFloat(formTotalDebt.replace(/,/g, '')) || 0)} onChange={(e) => setFormTotalDebt(e.target.value.replace(/,/g, ''))} required />
+                <input className="form-control" style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border)', fontSize: '0.85rem' }} value={formatInputNumber(parseFloat(formTotalDebt.replace(/,/g, '')) || 0)} onChange={(e) => setFormTotalDebt(e.target.value.replace(/,/g, ''))} required disabled={!!editingDebt?.IsClosed} title={editingDebt?.IsClosed ? t('Không thể thay đổi tổng nợ của khoản nợ đã đóng') : ''} />
               </div>
               <div className="form-group" style={{ marginBottom: '12px' }}>
                 <label className="form-label" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '4px', color: 'var(--text-muted)' }}>{t('Ngày vay')} *</label>
@@ -3437,7 +3437,7 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
               </div>
               <div className="form-group" style={{ marginBottom: '12px' }}>
                 <label className="form-label" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '4px', color: 'var(--text-muted)' }}>{t('Lãi suất (%/năm)')}</label>
-                <input className="form-control" type="number" step="0.01" min="0" style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border)', fontSize: '0.85rem' }} value={formInterestRate} onChange={(e) => setFormInterestRate(e.target.value)} placeholder={t('VD: 12.5')} />
+                <input className="form-control" type="number" step="0.01" min="0" style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border)', fontSize: '0.85rem' }} value={formInterestRate} onChange={(e) => setFormInterestRate(e.target.value)} placeholder={t('VD: 12.5')} disabled={!!editingDebt?.IsClosed} title={editingDebt?.IsClosed ? t('Không thể thay đổi lãi suất của khoản nợ đã đóng') : ''} />
               </div>
               <div className="form-group" style={{ marginBottom: '12px' }}>
                 <label className="form-label" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '4px', color: 'var(--text-muted)' }}>{t('Ghi chú')}</label>
@@ -3474,7 +3474,7 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
           <div className="modal" style={{ background: 'var(--bg-card)', borderRadius: '12px', padding: '24px', width: '90%', maxWidth: '400px', textAlign: 'center' }}>
             <h3 style={{ margin: '0 0 12px' }}>{t('Đóng sổ nợ')}</h3>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6, margin: '0 0 20px' }}>
-              {t('Bạn có chắc chắn muốn đóng sổ nợ này? Sau khi đóng sẽ không thể thay đổi.')}
+              {t('Bạn có chắc chắn muốn đóng sổ nợ này?')}
             </p>
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
               <button className="btn btn-secondary" onClick={() => setCloseConfirmId(null)} style={{ padding: '8px 20px', fontSize: '0.85rem' }}>{t('Hủy')}</button>
