@@ -61,17 +61,17 @@ namespace FinancialManagementApplication.API.Controller
         {
             var debt = await _debtRepository.GetAsync(id);
             if (debt == null) return NotFound();
-            if (debt.IsClosed)
-                return BadRequest(new { Message = "Cannot update a closed debt." });
-
             debt.Name = dto.Name;
-            debt.TotalDebt = dto.TotalDebt;
-            debt.RemainingAmount = dto.TotalDebt - debt.PaidAmount;
+            if (!debt.IsClosed)
+            {
+                debt.TotalDebt = dto.TotalDebt;
+                debt.RemainingAmount = dto.TotalDebt - debt.PaidAmount;
+                debt.InterestRate = dto.InterestRate;
+            }
             debt.BorrowDate = dto.BorrowDate;
             debt.DueDate = dto.DueDate;
             debt.Note = dto.Note;
             debt.Description = dto.Description;
-            debt.InterestRate = dto.InterestRate;
             debt.Type = dto.Type;
             debt.UpdatedAt = DateTime.UtcNow;
 
