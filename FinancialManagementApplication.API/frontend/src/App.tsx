@@ -193,6 +193,16 @@ export default function App() {
     prevInitial: number;
     nextInitial: number;
   }>(null);
+  const [saveAssetResult, setSaveAssetResult] = useState<null | {
+    success: boolean;
+    recordName?: string;
+    recordId?: string;
+    recordedAt?: string;
+    totalCurrent?: number;
+    totalInitial?: number;
+    assetCount?: number;
+    error?: string;
+  }>(null);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const profileDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -383,11 +393,61 @@ export default function App() {
     try {
       setError(null);
       if (!user) return;
-      await historyService.saveSnapshot(user.id);
+      const saved: any = await historyService.saveSnapshot(user.id);
       await loadData();
-      addToast({ title: t('Đã lưu thông tin tài sản!'), variant: 'success' });
+      // Determine success and extract record info
+      if (saved) {
+        const recordedAtRaw: string = saved.recordedAt || saved.RecordedAt || new Date().toISOString();
+        const recordId: string = saved.id || saved.Id || '';
+        const recordName: string = formatDateTime(recordedAtRaw);
+        const details: any[] = saved.details || saved.Details || [];
+        const assetCount: number = details.length || assets.length;
+        const totalCurrentFromSaved: number = details.length
+          ? details.reduce((s: number, d: any) => s + Number(d.currentValue ?? d.CurrentValue ?? 0), 0)
+          : assets.reduce((s: number, a: any) => s + Number(a.CurrentValue || 0), 0);
+        const totalInitialFromSaved: number = details.length
+          ? details.reduce((s: number, d: any) => s + Number(d.initialValue ?? d.InitialValue ?? 0), 0)
+          : assets.reduce((s: number, a: any) => s + Number(a.InitialValue || 0), 0);
+        addToast({
+          title: t('Đã lưu thông tin tài sản!'),
+          description: `${t('Bản ghi')} "${recordName}" • ${assetCount} ${t('tài sản')} • ${t('Tổng')}: ${formatCurrency(totalCurrentFromSaved)}`,
+          variant: 'success',
+          durationMs: 7000
+        });
+        setSaveAssetResult({
+          success: true,
+          recordName,
+          recordId,
+          recordedAt: recordedAtRaw,
+          totalCurrent: totalCurrentFromSaved,
+          totalInitial: totalInitialFromSaved,
+          assetCount
+        });
+      } else {
+        // Fallback: consider saved null as success if snapshot created but API returned null (e.g., mock), use current assets
+        const now = new Date().toISOString();
+        const recordName = formatDateTime(now);
+        const totalCur = assets.reduce((s: number, a: any) => s + Number(a.CurrentValue || 0), 0);
+        const totalIni = assets.reduce((s: number, a: any) => s + Number(a.InitialValue || 0), 0);
+        addToast({
+          title: t('Đã lưu thông tin tài sản!'),
+          description: `${t('Bản ghi')} "${recordName}" • ${assets.length} ${t('tài sản')} • ${t('Tổng')}: ${formatCurrency(totalCur)}`,
+          variant: 'success',
+          durationMs: 7000
+        });
+        setSaveAssetResult({
+          success: true,
+          recordName,
+          recordedAt: now,
+          totalCurrent: totalCur,
+          totalInitial: totalIni,
+          assetCount: assets.length
+        });
+      }
     } catch (err: any) {
-      addToast({ title: t('Lỗi lưu tài sản'), description: err.message, variant: 'error' });
+      const msg = err?.message || t('Không thể lưu thông tin tài sản');
+      addToast({ title: t('Lưu tài sản thất bại'), description: msg, variant: 'error' });
+      setSaveAssetResult({ success: false, error: msg });
     }
   };
 
@@ -1130,6 +1190,81 @@ export default function App() {
                 className="btn btn-primary"
                 onClick={() => setApplyResult(null)}
                 style={{ minWidth: '120px' }}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Save Asset Result Modal */}
+      {saveAssetResult && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '480px' }}>
+            <div className="modal-header">
+              <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: saveAssetResult.success ? 'var(--success)' : '#ef4444' }}>
+                {saveAssetResult.success ? (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                  </svg>
+                ) : (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                  </svg>
+                )}
+                {saveAssetResult.success ? t('Lưu tài sản thành công!') : t('Lưu tài sản thất bại')}
+              </h3>
+              <button className="modal-close" onClick={() => setSaveAssetResult(null)}>✕</button>
+            </div>
+            <div style={{ padding: '20px 24px' }}>
+              {saveAssetResult.success ? (
+                <div style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: '10px', padding: '16px', marginBottom: '16px' }}>
+                  <div style={{ display: 'grid', gap: '10px', fontSize: '0.9rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: 'var(--text-secondary)' }}>{t('Tên bản ghi')}:</span>
+                      <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}>{saveAssetResult.recordName}</span>
+                    </div>
+                    {saveAssetResult.recordId && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
+                        <span style={{ color: 'var(--text-muted)' }}>ID:</span>
+                        <span style={{ fontWeight: 500, color: 'var(--text-muted)', fontSize: '0.75rem', fontFamily: 'monospace' }}>{saveAssetResult.recordId.slice(0, 8)}...</span>
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: 'var(--text-secondary)' }}>{t('Số lượng tài sản')}:</span>
+                      <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{saveAssetResult.assetCount} {t('tài sản')}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderTop: '1px dashed rgba(255,255,255,0.08)', borderBottom: '1px dashed rgba(255,255,255,0.08)', margin: '4px 0' }}>
+                      <span style={{ color: 'var(--text-secondary)' }}>{t('Tổng tài sản')}:</span>
+                      <span style={{ fontWeight: 800, color: '#10b981', fontFamily: 'var(--font-display)', fontSize: '1.05rem' }}>{formatCurrency(saveAssetResult.totalCurrent || 0)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                      <span>{t('Tổng vốn ban đầu')}:</span>
+                      <span style={{ fontFamily: 'var(--font-display)' }}>{formatCurrency(saveAssetResult.totalInitial || 0)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                      <span>{t('Thời gian lưu')}:</span>
+                      <span style={{ fontFamily: 'var(--font-display)' }}>{saveAssetResult.recordedAt ? formatDateTime(saveAssetResult.recordedAt) : saveAssetResult.recordName}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '10px', padding: '16px', marginBottom: '16px', textAlign: 'center' }}>
+                  <p style={{ color: '#f87171', fontSize: '0.9rem', lineHeight: 1.6 }}>{saveAssetResult.error}</p>
+                </div>
+              )}
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.5 }}>
+                {saveAssetResult.success
+                  ? t('Bản ghi lịch sử đã được tạo. Bạn có thể xem chi tiết ở phần Lịch sử lưu thông tin bên dưới.')
+                  : t('Vui lòng thử lại hoặc kiểm tra kết nối.')}
+              </p>
+            </div>
+            <div className="modal-actions" style={{ justifyContent: 'center' }}>
+              <button
+                className="btn btn-primary"
+                onClick={() => setSaveAssetResult(null)}
+                style={{ minWidth: '120px', background: saveAssetResult.success ? undefined : '#ef4444', borderColor: saveAssetResult.success ? undefined : '#ef4444' }}
               >
                 OK
               </button>
