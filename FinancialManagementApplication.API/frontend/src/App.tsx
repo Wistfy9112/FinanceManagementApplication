@@ -815,14 +815,14 @@ export default function App() {
 
   return (
     <div className="app">
-      {/* Navigation */}
+      {/* Navigation — premium compact */}
       <nav className="navbar">
         <div className="navbar-content">
           <div className="logo">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            <span className="logo-text">FINANCE FLOW</span>
+            <span className="logo-mark">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            </span>
+            <span className="logo-text"><span className="logo-finance">FINANCE</span> <span className="logo-flow">FLOW</span></span>
           </div>
           
           <div className="nav-links">
@@ -860,12 +860,16 @@ export default function App() {
           </div>
 
           <div className="nav-right">
+            <div className="nav-last-updated" title={t('Dữ liệu được đồng bộ từ máy chủ')}>
+              <span className="nav-dot" />
+              <span>{t('Cập nhật')} 26/05/2026</span>
+            </div>
             <div className="user-profile" ref={profileDropdownRef} style={{ position: 'relative', cursor: 'pointer' }}>
               <div onClick={() => setProfileDropdownOpen(p => !p)} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <div className="user-avatar">
                   {user.displayName ? user.displayName[0].toUpperCase() : 'U'}
                 </div>
-                <span style={{ fontWeight: 600 }}>{user.displayName}</span>
+                <span style={{ fontWeight: 650, fontSize: '13px', letterSpacing: '-0.01em' }}>{user.displayName}</span>
                 <svg className={`profile-dropdown-arrow ${profileDropdownOpen ? 'open' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
@@ -904,6 +908,7 @@ export default function App() {
             assets={assets}
             totalInvestmentAssets={totalInvestmentAssets}
             goals={goals}
+            debts={debts}
           />
         )}
 
@@ -1417,7 +1422,7 @@ function OfflinePage({ onRetry, t }: { onRetry: () => void; t: (key: string) => 
   );
 }
 
-// 3. DASHBOARD COMPONENT
+// 3. DASHBOARD COMPONENT — Premium Fintech Command Center
 function DashboardPage({ 
   totalCurrent, 
   totalInitial, 
@@ -1427,6 +1432,7 @@ function DashboardPage({
   totalInvestmentAssets,
   assets,
   goals,
+  debts,
 }: { 
   totalCurrent: number; 
   totalInitial: number; 
@@ -1436,223 +1442,408 @@ function DashboardPage({
   totalInvestmentAssets: number;
   assets: any[];
   goals: any[];
+  debts?: any[];
 }) {
   const { t } = useLanguage();
   const [chartMode, setChartMode] = useState<'overview' | 'detail'>('overview');
   const [showAmounts, setShowAmounts] = useState(true);
 
-  // Dynamic values for Donut Allocation Chart
-  const colors = ['#6366f1', '#10b981', '#f59e0b', '#d946ef', '#64748b'];
+  // Goal derived
+  const activeGoal = goals.find(g => g.Status === 'Processing');
+  const upcomingGoal = goals.find(g => g.Status === 'NotStarted');
+  const displayGoal = activeGoal || upcomingGoal || goals[0] || null;
+  const goalPct = displayGoal && displayGoal.TargetAmount > 0 ? Math.min(100, Math.round((totalCurrent / displayGoal.TargetAmount) * 100)) : 0;
+  const goalDue = displayGoal ? new Date(displayGoal.DueDate) : null;
+  const now = new Date();
+  const daysLeft = goalDue ? Math.max(0, Math.ceil((goalDue.getTime() - now.getTime()) / (1000*60*60*24))) : 0;
+  const cashAndSavings = totalSavingAssets;
+  const invested = totalInvestmentAssets;
+  const isPositive = totalInterest >= 0;
 
+  // Health strip derived — only from available data
+  const totalAssets = totalCurrent || 1;
+  const investmentRatio = totalAssets > 0 ? (invested / totalAssets) * 100 : 0;
+  const savingsRatio = totalAssets > 0 ? (cashAndSavings / totalAssets) * 100 : 0;
+  const roi = totalInterestRatio;
+  const outstandingDebt = (debts || []).reduce((s, d) => s + (d.RemainingAmount ?? (d.TotalDebt - (d.PaidAmount || 0))), 0);
+  const debtRatio = totalCurrent > 0 ? (outstandingDebt / totalCurrent) * 100 : 0;
+  const hasDebtData = (debts || []).length > 0;
+
+  // Donut - spec: Investment #18C995, Savings #7C5CFF, Cash/blue #4D8DFF, Other #667085
+  const getDonutColor = (nameOrType: string, idx: number) => {
+    if (nameOrType === t('Đầu tư') || nameOrType === 'Investment' || nameOrType === t('Tiết kiệm') && false) return '#18C995';
+    // overview mapping: Tiết kiệm violet, Đầu tư green
+    // detail mapping by Type
+    const typeMap: Record<string,string> = { Investment: '#18C995', Saving: '#7C5CFF', Expense: '#4D8DFF', Cash: '#4D8DFF' };
+    if (typeMap[nameOrType]) return typeMap[nameOrType];
+    const fallback = ['#7C5CFF', '#18C995', '#4D8DFF', '#9B7CFF', '#667085'];
+    return fallback[idx % fallback.length];
+  };
   const donutData = chartMode === 'overview'
     ? [
-        { name: 'Tiết kiệm', value: totalSavingAssets },
-        { name: 'Đầu tư', value: totalInvestmentAssets }
+        { name: t('Tiết kiệm'), value: totalSavingAssets, _type: 'Saving' },
+        { name: t('Đầu tư'), value: totalInvestmentAssets, _type: 'Investment' }
       ]
     : (() => {
         const sortedAssets = [...assets].sort((a,b) => b.CurrentValue - a.CurrentValue);
         const topAssets = sortedAssets.slice(0, 4);
         const otherSum = sortedAssets.slice(4).reduce((sum, a) => sum + a.CurrentValue, 0);
-        const data = topAssets.map(a => ({ name: a.Name, value: a.CurrentValue }));
-        if (otherSum > 0) data.push({ name: 'Khác', value: otherSum });
-        return data;
+        const data = topAssets.map(a => ({ name: a.Name, value: a.CurrentValue, _type: a.Type || 'Saving' }));
+        if (otherSum > 0) data.push({ name: t('Khác'), value: otherSum, _type: 'Other' });
+        return data.filter(d=>d.value>0);
       })();
-
-  const totalDonutValue = donutData.reduce((sum, d) => sum + d.value, 0) || 1;
-
-  // Calculate donut segments stroke-dasharray
+  const filteredDonutData = donutData.filter(d=>d.value>0);
+  const effectiveDonutData = filteredDonutData.length ? filteredDonutData : [{ name: t('Chưa có dữ liệu'), value: 1, _type: 'Other' }];
+  const totalDonutValue = effectiveDonutData.reduce((sum, d) => sum + d.value, 0) || 1;
   let accumulatedPercent = 0;
-  const segments = donutData.map((d, idx) => {
+  const segments = effectiveDonutData.map((d: any, idx: number) => {
     const percent = d.value / totalDonutValue;
     const strokeDash = `${percent * 314.16} 314.16`;
     const strokeOffset = -accumulatedPercent * 314.16;
     accumulatedPercent += percent;
-    return {
-      ...d,
-      strokeDash,
-      strokeOffset,
-      color: colors[idx % colors.length]
-    };
+    const col = d._type ? getDonutColor(d._type, idx) : getDonutColor(d.name, idx);
+    // overview hard mapping
+    const overviewColor = chartMode==='overview' ? (d.name===t('Tiết kiệm') ? '#7C5CFF' : '#18C995') : col;
+    return { ...d, strokeDash, strokeOffset, color: overviewColor, pct: percent*100 };
   });
 
+  // Sparkline path: simple trend indication - spec positive #18C995, negative #FF4D67
+  const sparkPathPositive = "M2 28 L14 22 L26 24 L38 18 L50 16 L62 10 L80 8 L98 6";
+  const sparkPathNegative = "M2 8 L14 10 L26 14 L38 20 L50 22 L62 26 L80 28 L98 30";
+  const sparkColor = isPositive ? "#18C995" : "#FF4D67";
+
   return (
-    <div>
-      <div className="tab-header">
-        <h2 className="section-title">{t('Bảng Tổng Quan Tài Chính')}</h2>
-        <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{t('Cập nhật lần cuối: 26/05/2026')}</span>
-      </div>
-
-      {/* Metrics Row */}
-      <div className="grid-3">
-        <div className="card">
-          <div className="metric-header">
-            <span className="metric-title">{t('Tổng Giá Trị Tài Sản Gốc (Original Value)')}</span>
-            <button onClick={(e) => { e.stopPropagation(); setShowAmounts(!showAmounts); }}
-              title={showAmounts ? t('Ẩn số tiền') : t('Hiện số tiền')}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '2px', display: 'inline-flex', borderRadius: '4px', transition: 'all 0.2s', verticalAlign: 'middle', marginTop: '-2px', marginLeft: '10px', marginRight: '8px' }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--bg-tertiary)'; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'none'; }}>
-              {showAmounts ? <EyeOff size={14} /> : <Eye size={14} />}
-            </button>
-            <span className="metric-icon" style={{ color: 'var(--primary)' }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
-              </svg>
-            </span>
-          </div>
-          <div className="metric-value">
-            {showAmounts ? formatCurrency(totalInitial) : '**********'}
-          </div>
-          <div className="metric-change" style={{ color: 'var(--text-secondary)' }}>
-            {t('Tổng vốn gốc đã đầu tư')}
-          </div>
+    <div className="dash-ambient">
+      {/* Header */}
+      <div className="dash-title-row">
+        <div>
+          <h1 className="dash-title">{t('Bảng Tổng Quan Tài Chính')}</h1>
+          <p className="dash-subtitle">{t('Trung tâm chỉ huy tài sản — theo dõi tài sản ròng, dòng tiền và mục tiêu trong một cái nhìn.')}</p>
         </div>
-
-        <div className="card">
-          <div className="metric-header">
-            <span className="metric-title">{t('Tổng Giá Trị Tài Sản (Net Worth)')}</span>
-            <span className="metric-icon" style={{ color: 'var(--success)' }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M23 6l-9.5 9.5-5-5L1 18M17 6h6v6" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </span>
-          </div>
-          {showAmounts ? (
-            <>
-              <div className="metric-value">{formatCurrency(totalCurrent)}</div>
-              <div className={`metric-change ${totalInterest >= 0 ? 'positive' : 'negative'}`}>
-                <span>{totalInterest >= 0 ? '▲' : '▼'}</span>
-                <span>{formatCurrency(totalInterest)} ({totalInterestRatio.toFixed(2)}%)</span>
-              </div>
-            </>
-          ) : (
-            <div className="metric-value">**********</div>
-          )}
-        </div>
-
-        <div className="card">
-          <div className="metric-header">
-            <span className="metric-title">{t('Tiến độ mục tiêu')}</span>
-            <span className="metric-icon" style={{ color: 'var(--warning)' }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-              </svg>
-            </span>
-          </div>
-          {(() => {
-            const active = goals.find(g => g.Status === 'Processing');
-            const upcoming = goals.find(g => g.Status === 'NotStarted');
-            const goal = active || upcoming;
-            if (!goal) {
-              return (
-                <>
-                  <div className="metric-value" style={{ fontSize: '1.2rem', color: 'var(--text-muted)' }}>{t('Chưa có mục tiêu')}</div>
-                  <div className="metric-change" style={{ color: 'var(--text-secondary)' }}>{t('Thêm mục tiêu để bắt đầu')}</div>
-                </>
-              );
-            }
-            const pct = goal.TargetAmount > 0 ? Math.min(100, Math.round((totalCurrent / goal.TargetAmount) * 100)) : 0;
-            const due = new Date(goal.DueDate);
-            const now = new Date();
-            const diff = due.getTime() - now.getTime();
-            const daysLeft = diff > 0 ? Math.ceil(diff / (1000 * 60 * 60 * 24)) : 0;
-            return (
-              <>
-                <div className="metric-value" style={{ fontSize: '1.5rem' }}>{goal.Name}</div>
-                <div style={{ margin: '8px 0', height: '8px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px', overflow: 'hidden' }}>
-                  <div style={{
-                    width: `${pct}%`, height: '100%', borderRadius: '4px', transition: 'width 0.5s ease',
-                    background: pct >= 100 ? '#10b981' : pct >= 50 ? '#6366f1' : '#f59e0b'
-                  }} />
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
-                  <span style={{ color: 'var(--success)', fontWeight: 600 }}>{formatCurrency(totalCurrent)} / {formatCurrency(goal.TargetAmount)}</span>
-                  <span style={{ color: 'var(--text-muted)' }}>{pct}%</span>
-                </div>
-                <div className="metric-change" style={{ color: 'var(--text-secondary)', marginTop: '4px' }}>
-                  {daysLeft > 0 ? `${daysLeft} ${t('ngày còn lại')}` : t('Đã hết hạn')}
-                </div>
-              </>
-            );
-          })()}
+        <div className="dash-header-actions">
+          <button onClick={() => setShowAmounts(!showAmounts)} className="hero-eye" title={showAmounts ? t('Ẩn số tiền') : t('Hiện số tiền')} aria-label={showAmounts ? t('Ẩn số tiền') : t('Hiện số tiền')}>
+            {showAmounts ? <EyeOff size={15} /> : <Eye size={15} />}
+          </button>
         </div>
       </div>
 
-      {/* Charts Row */}
-      <div className="grid-2-1">
-        {/* Cash Flow Growth Chart */}
-        <CashFlowGrowthChart userId={getLoggedUser()?.id || 'u1'} />
-
-        {/* SVG Donut Allocation Chart */}
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+      {/* HERO */}
+      <div className="hero-grid">
+        {/* Net Worth Hero */}
+        <div className="hero-card">
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-              <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>{t('Phân Bổ Tài Sản')}</h3>
-              <div style={{ display: 'flex', gap: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '6px', padding: '2px' }}>
-                <button
-                  onClick={() => setChartMode('overview')}
-                  style={{
-                    padding: '4px 12px', fontSize: '0.75rem', borderRadius: '4px', border: 'none', cursor: 'pointer',
-                    background: chartMode === 'overview' ? '#6366f1' : 'transparent',
-                    color: chartMode === 'overview' ? '#fff' : 'var(--text-secondary)',
-                    fontWeight: chartMode === 'overview' ? 600 : 400
-                  }}
-                >{t('Tổng quan')}</button>
-                <button
-                  onClick={() => setChartMode('detail')}
-                  style={{
-                    padding: '4px 12px', fontSize: '0.75rem', borderRadius: '4px', border: 'none', cursor: 'pointer',
-                    background: chartMode === 'detail' ? '#6366f1' : 'transparent',
-                    color: chartMode === 'detail' ? '#fff' : 'var(--text-secondary)',
-                    fontWeight: chartMode === 'detail' ? 600 : 400
-                  }}
-                >{t('Chi tiết')}</button>
+            <div className="hero-top">
+              <div className="hero-label"><span className="hero-label-dot" />{t('Tài sản ròng')} • Net Worth</div>
+              <span style={{ fontSize:'11px', color:'var(--text-muted)', fontWeight:600, letterSpacing:'0.02em' }}>{t('Cập nhật')} 26/05/2026</span>
+            </div>
+            <div className="hero-value" style={{ fontVariantNumeric:'tabular-nums' }}>
+              {showAmounts ? `${formatCurrency(totalCurrent)} ₫` : '•••••••••• ₫'}
+            </div>
+            <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+              <span className={`hero-delta ${isPositive ? 'positive' : 'negative'}`}>
+                <span style={{ fontSize:'10px' }}>{isPositive ? '▲' : '▼'}</span>
+                {showAmounts ? `${totalInterest >=0 ? '+' : ''}${formatCurrency(totalInterest)} ₫` : '•••••'}
+                <span style={{ opacity:0.9, fontWeight:600 }}>({isPositive ? '+' : ''}{totalInterestRatio.toFixed(2)}%)</span>
+              </span>
+              <span style={{ fontSize:'11px', color:'var(--text-muted)', fontWeight:500 }}>
+                {isPositive ? t('Tăng trưởng so với vốn gốc') : t('Giảm so với vốn gốc')}
+              </span>
+            </div>
+
+            <div className="hero-stats">
+              <div className="hero-stat">
+                <div className="hero-stat-label">{t('Vốn gốc')}</div>
+                <div className="hero-stat-value">{showAmounts ? `${formatCurrency(totalInitial)} ₫` : '•••••••'}</div>
+                <div className="hero-stat-sub">{t('Đã đầu tư ban đầu')}</div>
+              </div>
+              <div className="hero-stat">
+                <div className="hero-stat-label">{t('Đã đầu tư')}</div>
+                <div className="hero-stat-value" style={{ color:'#9B7CFF' }}>{showAmounts ? `${formatCompactValue(invested)} ₫` : '••••'}</div>
+                <div className="hero-stat-sub">{investmentRatio.toFixed(1)}% {t('tài sản')}</div>
+              </div>
+              <div className="hero-stat">
+                <div className="hero-stat-label">{t('Tiền mặt & Tiết kiệm')}</div>
+                <div className="hero-stat-value" style={{ color:'var(--success)' }}>{showAmounts ? `${formatCompactValue(cashAndSavings)} ₫` : '••••'}</div>
+                <div className="hero-stat-sub">{savingsRatio.toFixed(1)}% {t('tài sản')}</div>
               </div>
             </div>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
-              {chartMode === 'overview' ? t('Tổng giá trị Tiết kiệm và Đầu tư') : t('Chi tiết từng tài sản trong danh mục')}
-            </p>
           </div>
 
-          <div style={{ position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-            <svg className="donut-svg" viewBox="0 0 120 120">
-              <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(255,255,255,0.03)" strokeWidth="18" />
-              {segments.map((seg, idx) => (
-                <circle 
-                  key={idx}
-                  cx="60" 
-                  cy="60" 
-                  r="50" 
-                  className="donut-segment"
-                  stroke={seg.color}
-                  strokeDasharray={seg.strokeDash}
-                  strokeDashoffset={seg.strokeOffset}
-                  transform="rotate(-90 60 60)"
-                />
-              ))}
-              <text x="60" y="60" className="donut-text">
-                {showAmounts ? formatCompactValue(totalCurrent) : '********'}
-              </text>
-              <text x="60" y="74" className="donut-label">
-                {t('Tài sản ròng')}
-              </text>
+          <div className="hero-sparkline" aria-hidden>
+            <div className="hero-sparkline-head">
+              <span className="hero-sparkline-title">{t('Xu hướng tài sản')}</span>
+              <span style={{ color: sparkColor, fontWeight:700, fontFamily:'var(--font-mono)', fontSize:'11px' }}>{isPositive ? t('Tăng') : t('Giảm')} • {totalInterestRatio.toFixed(2)}%</span>
+            </div>
+            <svg viewBox="0 0 100 32" className="hero-trend-line" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="heroGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={sparkColor} stopOpacity={0.22} />
+                  <stop offset="100%" stopColor={sparkColor} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <path d={`${isPositive ? sparkPathPositive : sparkPathNegative} L98 32 L2 32 Z`} fill="url(#heroGrad)" />
+              <path d={isPositive ? sparkPathPositive : sparkPathNegative} fill="none" stroke={sparkColor} strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" />
+              <circle cx="98" cy={isPositive ? 6 : 30} r="3.2" fill={sparkColor} stroke="#080B14" strokeWidth={1.6} />
             </svg>
           </div>
+        </div>
 
-          <div className="chart-legend">
-            {segments.map((seg, idx) => (
-              <div key={idx} className="legend-item">
-                <span className="legend-color" style={{ backgroundColor: seg.color }} />
-                <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                  {seg.name} ({((seg.value / totalDonutValue) * 100).toFixed(1)}%)
-                </span>
-              </div>
-            ))}
+        {/* Right mini — Goal quick + summary */}
+        <div className="hero-right-mini">
+          <div className="hero-mini-card" style={{ background: 'linear-gradient(180deg, #101522 0%, #0F1320 100%)' }}>
+            <div className="mini-label" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+              <span>{t('Mục tiêu gần nhất')}</span>
+              {displayGoal && <span style={{ fontSize:'10px', padding:'3px 7px', borderRadius:999, background: displayGoal.Status==='Processing' ? 'rgba(124,92,255,0.14)' : 'rgba(255,255,255,0.06)', color: displayGoal.Status==='Processing' ? '#C4B5FD' : 'var(--text-muted)', border:'1px solid var(--border-subtle)', letterSpacing:'0.02em' }}>{displayGoal.Status==='Processing' ? t('Đang thực hiện') : displayGoal.Status==='NotStarted' ? t('Sắp tới') : displayGoal.Status}</span>}
+            </div>
+            {!displayGoal ? (
+              <>
+                <div className="mini-value" style={{ fontSize:'16px', color:'var(--text-muted)' }}>{t('Chưa có mục tiêu')}</div>
+                <div style={{ fontSize:'11px', color:'var(--text-muted)', marginTop:6 }}>{t('Tạo mục tiêu để theo dõi tiến độ')}</div>
+              </>
+            ) : (
+              <>
+                <div className="mini-value" style={{ fontSize:'15px', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{displayGoal.Name}</div>
+                <div style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', color:'var(--text-muted)', marginTop:8, fontFamily:'var(--font-mono)' }}>
+                  <span>{showAmounts ? formatCompactValue(totalCurrent) : '•••'} / {showAmounts ? formatCompactValue(displayGoal.TargetAmount) : '•••'}</span>
+                  <span style={{ color: goalPct>=100 ? 'var(--success)' : goalPct>=50 ? '#9B7CFF' : 'var(--warning)', fontWeight:700 }}>{goalPct}%</span>
+                </div>
+                <div className="kpi-progress-track" style={{ marginTop:8 }}>
+                  <div className="kpi-progress-fill" style={{ width:`${goalPct}%`, background: goalPct>=100 ? 'var(--success)' : goalPct>=50 ? 'linear-gradient(90deg,#7C5CFF,#9B7CFF)' : 'var(--warning)' }} />
+                </div>
+                <div style={{ display:'flex', justifyContent:'space-between', marginTop:8, fontSize:'11px', color:'var(--text-muted)' }}>
+                  <span>{daysLeft>0 ? `${daysLeft} ${t('ngày còn lại')}` : t('Đã hết hạn')}</span>
+                  <span style={{ fontFamily:'var(--font-mono)', fontWeight:600 }}>{showAmounts ? formatCurrency(displayGoal.TargetAmount) + ' ₫' : '•••••'}</span>
+                </div>
+              </>
+            )}
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+            <div className="hero-mini-card" style={{ minHeight: 88 }}>
+              <div className="mini-label">{t('Tài sản')}</div>
+              <div className="mini-value" style={{ fontSize:'16px' }}>{assets.length}</div>
+              <div style={{ fontSize:'11px', color:'var(--text-muted)', marginTop:2 }}>{t('danh mục')}</div>
+            </div>
+            <div className="hero-mini-card" style={{ minHeight: 88 }}>
+              <div className="mini-label">{t('Hiệu suất')}</div>
+              <div className="mini-value" style={{ fontSize:'16px', color: isPositive ? 'var(--success)' : 'var(--danger)' }}>{isPositive ? '+' : ''}{totalInterestRatio.toFixed(2)}%</div>
+              <div style={{ fontSize:'11px', color:'var(--text-muted)', marginTop:2 }}>{t('so với vốn gốc')}</div>
+            </div>
           </div>
         </div>
       </div>
 
+      {/* KPI 4 cards */}
+      <div className="kpi-grid">
+        <div className="kpi-card">
+          <div className="kpi-head">
+            <span className="kpi-label">{t('Vốn gốc')}</span>
+            <span className="kpi-icon primary">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+            </span>
+          </div>
+          <div className="kpi-value">{showAmounts ? `${formatCurrency(totalInitial)} ₫` : '••••••••'}</div>
+          <div className="kpi-sub"><span style={{ width:6, height:6, borderRadius:'50%', background:'#6366F1', display:'inline-block' }} />{t('Tổng vốn đã đầu tư')}</div>
+        </div>
 
+        <div className="kpi-card">
+          <div className="kpi-head">
+            <span className="kpi-label">{t('Đã đầu tư')}</span>
+            <span className="kpi-icon violet">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3v18h18"/><path d="M7 16l4-4 4 4 6-8"/></svg>
+            </span>
+          </div>
+          <div className="kpi-value" style={{ color:'#9B7CFF' }}>{showAmounts ? `${formatCompactValue(invested)} ₫` : '••••'}</div>
+          <div className="kpi-sub">
+            <span className="kpi-badge neu">{investmentRatio.toFixed(1)}%</span> {t('của tài sản ròng')}
+          </div>
+        </div>
+
+        <div className="kpi-card">
+          <div className="kpi-head">
+            <span className="kpi-label">{t('Tiền mặt & Tiết kiệm')}</span>
+            <span className="kpi-icon success">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+            </span>
+          </div>
+          <div className="kpi-value" style={{ color:'var(--success)' }}>{showAmounts ? `${formatCompactValue(cashAndSavings)} ₫` : '••••'}</div>
+          <div className="kpi-sub">
+            <span className="kpi-badge neu">{savingsRatio.toFixed(1)}%</span> {t('của tài sản ròng')}
+          </div>
+        </div>
+
+        <div className="kpi-card" style={{ borderColor: displayGoal && goalPct>=50 ? 'rgba(124,92,255,0.18)' : undefined }}>
+          <div className="kpi-head">
+            <span className="kpi-label">{t('Mục tiêu')}</span>
+            <span className="kpi-icon warning">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22 12 18.5 7 22l1.523-9.11"/></svg>
+            </span>
+          </div>
+          {!displayGoal ? (
+            <>
+              <div className="kpi-value" style={{ fontSize:'16px', color:'var(--text-muted)' }}>{t('Chưa thiết lập')}</div>
+              <div className="kpi-sub">{t('Tạo mục tiêu để theo dõi')}</div>
+            </>
+          ) : (
+            <>
+              <div className="kpi-value" style={{ fontSize:'18px' }}>{goalPct}%</div>
+              <div className="kpi-progress-track"><div className="kpi-progress-fill" style={{ width:`${goalPct}%`, background: goalPct>=100 ? 'var(--success)' : goalPct>=50 ? 'var(--primary)' : 'var(--warning)' }} /></div>
+              <div className="kpi-progress-meta"><span>{displayGoal.Name}</span><span>{daysLeft>0 ? `${daysLeft}d` : '—'}</span></div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Health strip - derived metrics, gracefully omit if unavailable */}
+      <div className="health-strip">
+        <div className="health-item">
+          <div className="health-top"><span className="health-label">ROI</span><span className="health-icon" style={{ color: isPositive ? 'var(--success)' : 'var(--danger)' }}>{isPositive ? '↗' : '↘'}</span></div>
+          <div className="health-value" style={{ color: isPositive ? 'var(--success)' : 'var(--danger)' }}>{isPositive ? '+' : ''}{roi.toFixed(2)}%</div>
+          <div className="health-delta pos" style={{ color: isPositive ? 'var(--success)' : 'var(--danger)' }}>{isPositive ? t('Tăng trưởng') : t('Sụt giảm')} • {showAmounts ? `${formatCurrency(totalInterest)} ₫` : '••••'}</div>
+          <div className="health-desc">{t('Lợi nhuận so với vốn gốc')}</div>
+        </div>
+        <div className="health-item">
+          <div className="health-top"><span className="health-label">{t('Tiết kiệm')}</span><span className="health-icon">◐</span></div>
+          <div className="health-value">{savingsRatio.toFixed(1)}%</div>
+          <div className="health-delta neu">{showAmounts ? formatCompactValue(cashAndSavings) : '••••'} ₫ • {t('của tài sản')}</div>
+          <div className="health-desc">{t('Tỷ trọng tiền mặt & tiết kiệm')}</div>
+        </div>
+        <div className="health-item">
+          <div className="health-top"><span className="health-label">{t('Đầu tư')}</span><span className="health-icon">⬢</span></div>
+          <div className="health-value" style={{ color:'var(--primary-light)' }}>{investmentRatio.toFixed(1)}%</div>
+          <div className="health-delta neu">{showAmounts ? formatCompactValue(invested) : '••••'} ₫ • {t('của tài sản')}</div>
+          <div className="health-desc">{t('Tỷ trọng danh mục đầu tư')}</div>
+        </div>
+        <div className="health-item">
+          <div className="health-top"><span className="health-label">{t('Nợ / Tài sản')}</span><span className="health-icon" style={{ color: hasDebtData && debtRatio>30 ? 'var(--warning)' : 'var(--text-muted)' }}>◎</span></div>
+          {hasDebtData ? (
+            <>
+              <div className="health-value" style={{ color: debtRatio>30 ? 'var(--warning)' : 'var(--text-primary)' }}>{debtRatio.toFixed(1)}%</div>
+              <div className={`health-delta ${debtRatio>30 ? 'neg' : 'pos'}`}>{debtRatio<=18 ? t('Lành mạnh') : debtRatio<=35 ? t('Cần chú ý') : t('Cao')} • {showAmounts ? formatCompactValue(outstandingDebt) : '••••'} ₫</div>
+              <div className="health-desc">{debtRatio<=18 ? t('Mức nợ an toàn') : t('Theo dõi khả năng trả nợ')}</div>
+            </>
+          ) : (
+            <>
+              <div className="health-value" style={{ color:'var(--text-muted)' }}>—</div>
+              <div className="health-delta neu">{t('Chưa có dữ liệu nợ')}</div>
+              <div className="health-desc">{t('Thêm khoản nợ để theo dõi')}</div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Analytics 8/4 — Growth (premium) + Allocation */}
+      <div className="analytics-grid">
+        <CashFlowGrowthChart userId={getLoggedUser()?.id || 'u1'} />
+
+        {/* Allocation */}
+        <div className="chart-card">
+          <div className="chart-card-head">
+            <div>
+              <div className="chart-card-title">{t('Phân bổ tài sản')}</div>
+              <div className="chart-card-sub">{chartMode==='overview' ? t('Tổng quan theo nhóm') : t('Chi tiết từng tài sản')}</div>
+            </div>
+            <div className="chart-controls" role="tablist" aria-label={t('Chế độ phân bổ')}>
+              <button role="tab" aria-selected={chartMode==='overview'} onClick={() => setChartMode('overview')} className={`chart-ctrl-btn ${chartMode==='overview'?'active':''}`}>{t('Tổng quan')}</button>
+              <button role="tab" aria-selected={chartMode==='detail'} onClick={() => setChartMode('detail')} className={`chart-ctrl-btn ${chartMode==='detail'?'active':''}`}>{t('Chi tiết')}</button>
+            </div>
+          </div>
+
+          <div className="alloc-body">
+            <div className="alloc-center">
+              <svg className="donut-svg" viewBox="0 0 120 120" role="img" aria-label={t('Biểu đồ phân bổ tài sản')}>
+                <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="17" />
+                {segments.map((seg, idx) => (
+                  <circle 
+                    key={idx}
+                    cx="60" 
+                    cy="60" 
+                    r="50" 
+                    className="donut-segment"
+                    stroke={seg.color}
+                    strokeDasharray={seg.strokeDash}
+                    strokeDashoffset={seg.strokeOffset}
+                    transform="rotate(-90 60 60)"
+                  >
+                    <title>{`${seg.name}: ${seg.pct.toFixed(1)}%`}</title>
+                  </circle>
+                ))}
+                <text x="60" y="58" className="donut-text">
+                  {showAmounts ? formatCompactValue(totalCurrent) : '••••'}
+                </text>
+                <text x="60" y="72" className="donut-label">
+                  {t('Tài sản ròng')}
+                </text>
+              </svg>
+            </div>
+            <div className="alloc-legend">
+              {segments.map((seg, idx) => (
+                <div key={idx} className="alloc-legend-item">
+                  <span className="alloc-legend-dot" style={{ backgroundColor: seg.color, boxShadow: `0 0 0 4px ${seg.color}18` }} />
+                  <span className="alloc-legend-name">{seg.name}</span>
+                  <span className="alloc-legend-pct">{seg.pct.toFixed(1)}%</span>
+                  <span className="alloc-legend-val">{showAmounts ? formatCompactValue(seg.value) : '•••'} ₫</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div style={{ marginTop:12, display:'flex', justifyContent:'space-between', fontSize:'11px', color:'var(--text-muted)', borderTop:'1px solid var(--border)', paddingTop:12 }}>
+            <span>{t('Tổng')}: <strong style={{ color:'var(--text-primary)', fontFamily:'var(--font-mono)' }}>{showAmounts ? formatCurrency(totalCurrent) : '••••'} ₫</strong></span>
+            <span>{effectiveDonutData.length} {t('nhóm')}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Goal detailed */}
+      <div className="goal-card">
+        <div className="goal-head">
+          <span className="goal-title">{t('Mục tiêu')} {displayGoal ? `• ${displayGoal.Name}` : ''}</span>
+          {displayGoal && <span className="goal-badge">{goalPct}% {t('hoàn thành')}</span>}
+        </div>
+        {!displayGoal ? (
+          <div className="goal-empty">
+            <div style={{ fontSize:28, marginBottom:8, opacity:0.9 }}>🎯</div>
+            <div style={{ fontWeight:700, color:'var(--text-primary)', marginBottom:4 }}>{t('Chưa có mục tiêu nào')}</div>
+            <div>{t('Tạo mục tiêu tài chính để hệ thống tính toán tiến độ và lộ trình hàng tháng cho bạn.')}</div>
+          </div>
+        ) : (
+          <>
+            <div className="goal-grid">
+              <div>
+                <div className="goal-metric-label">{t('Mục tiêu')}</div>
+                <div className="goal-metric-value">{showAmounts ? formatCurrency(displayGoal.TargetAmount) : '••••••'} ₫</div>
+                <div style={{ fontSize:'11px', color:'var(--text-muted)', marginTop:2 }}>{displayGoal.DueDate ? `${t('Hạn')} ${new Date(displayGoal.DueDate).toLocaleDateString('vi-VN')}` : ''}</div>
+              </div>
+              <div>
+                <div className="goal-metric-label">{t('Hiện tại')}</div>
+                <div className="goal-metric-value" style={{ color: goalPct>=100 ? 'var(--success)' : 'var(--text-primary)' }}>{showAmounts ? formatCurrency(totalCurrent) : '••••••'} ₫</div>
+                <div style={{ fontSize:'11px', color: isPositive ? 'var(--success)' : 'var(--danger)', marginTop:2, fontWeight:600 }}>{isPositive ? '+' : ''}{formatCurrency(totalInterest)} ₫ {t('so với vốn gốc')}</div>
+              </div>
+            </div>
+            <div className="goal-progress">
+              <div className="goal-progress-head"><span>{t('Tiến độ')}</span><span style={{ fontFamily:'var(--font-mono)', fontVariantNumeric:'tabular-nums', fontWeight:750, color: goalPct>=100 ? 'var(--success)' : 'var(--primary-light)' }}>{goalPct}%</span></div>
+              <div className="goal-progress-track"><div className="goal-progress-fill" style={{ width:`${goalPct}%` }} /></div>
+            </div>
+            <div className="goal-meta-row">
+              <span className="goal-meta-chip">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                {daysLeft>0 ? `${daysLeft} ${t('ngày còn lại')}` : goalDue && goalDue < now ? t('Đã hết hạn') : '—'}
+              </span>
+              <span className="goal-meta-chip">
+                {(() => {
+                  if (!goalDue || goalPct>=100) return <span>✓ {t('Đã đạt hoặc vượt mục tiêu')}</span>;
+                  const monthsLeft = Math.max(1, Math.ceil(daysLeft/30));
+                  const remaining = Math.max(0, displayGoal.TargetAmount - totalCurrent);
+                  const perMonth = remaining / monthsLeft;
+                  return <span>{t('Cần')} ~{showAmounts ? formatCompactValue(perMonth) : '•••'} ₫/{t('tháng')}</span>;
+                })()}
+              </span>
+              <span className="goal-meta-chip" style={{ color: displayGoal.Status==='Processing' ? 'var(--primary-light)' : 'var(--text-muted)' }}>
+                {displayGoal.Status==='Processing' ? `● ${t('Đang thực hiện')}` : displayGoal.Status==='NotStarted' ? `○ ${t('Chưa bắt đầu')}` : displayGoal.Status}
+              </span>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -1742,29 +1933,22 @@ function CashFlowGrowthChart({ userId }: { userId: string }) {
   const gradientId = 'cashFlowGradient';
 
   return (
-    <div className="card">
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
-        <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>Cash Flow Growth</h3>
-        <div style={{ display: 'flex', gap: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '6px', padding: '2px', alignItems: 'center', flexWrap: 'wrap' }}>
+    <div className="chart-card">
+      <div className="chart-card-head">
+        <div>
+          <div className="chart-card-title">{t('Tăng trưởng tài sản')}</div>
+          <div className="chart-card-sub">{t('Theo dõi giá trị tài sản theo thời gian')} • {mode === 'yearly' ? t('Tổng giá trị qua các năm') : mode === 'monthly' ? `${t('Theo tháng')} ${selectedYear}` : t('12 tháng gần nhất')}</div>
+        </div>
+        <div className="chart-controls" role="tablist" aria-label={t('Chế độ thời gian')}>
           {([['yearly', t('Theo năm')], ['monthly', t('Theo tháng')], ['last12months', t('12 tháng')]] as const).map(([key, label]) => (
-            <button key={key} onClick={() => handleModeChange(key)}
-              style={{
-                padding: '3px 10px', fontSize: '0.7rem', borderRadius: '4px', border: 'none', cursor: 'pointer',
-                background: mode === key ? '#6366f1' : 'transparent',
-                color: mode === key ? '#fff' : 'var(--text-secondary)',
-                fontWeight: mode === key ? 600 : 400
-              }}
-            >{label}</button>
+            <button key={key} role="tab" aria-selected={mode===key} onClick={() => handleModeChange(key as any)} className={`chart-ctrl-btn ${mode===key ? 'active' : ''}`}>{label}</button>
           ))}
           {mode === 'monthly' && (
             <select
               value={selectedYear}
               onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-              style={{
-                marginLeft: '4px', padding: '2px 6px', fontSize: '0.7rem', borderRadius: '4px',
-                border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)',
-                color: 'var(--text-primary)', cursor: 'pointer'
-              }}
+              className="chart-select"
+              aria-label={t('Chọn năm')}
             >
               {availableYears.length > 0 ? availableYears.map(y => (
                 <option key={y} value={y}>{y}</option>
@@ -1775,82 +1959,82 @@ function CashFlowGrowthChart({ userId }: { userId: string }) {
           )}
         </div>
       </div>
-      <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
-        {mode === 'yearly' ? t('Tổng giá trị tài sản qua các năm') : 
-         mode === 'monthly' ? `${t('Tổng giá trị tài sản từng tháng năm')} ${selectedYear}` : 
-         t('Tổng giá trị tài sản 12 tháng gần nhất')}
-      </p>
+
       {loading ? (
-        <div style={{ height: '280px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ border: '3px solid rgba(99,102,241,0.1)', borderTop: '3px solid #6366f1', borderRadius: '50%', width: '30px', height: '30px', animation: 'spin 1s linear infinite' }} />
+        <div style={{ height: '320px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ border: '3px solid rgba(124,92,255,0.12)', borderTop: '3px solid #7C5CFF', borderRadius: '50%', width: '32px', height: '32px', animation: 'spin 1s linear infinite' }} />
         </div>
       ) : chartData.length === 0 ? (
-        <div style={{ height: '280px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-          {t('Chưa có dữ liệu lịch sử. Hãy lưu snapshot tài sản để bắt đầu theo dõi.')}
+        <div style={{ height: '320px', display: 'flex', flexDirection:'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '13px', gap:10, textAlign:'center', padding:20 }}>
+          <div style={{ width:44, height:44, borderRadius:12, background:'rgba(124,92,255,0.10)', border:'1px solid rgba(124,92,255,0.16)', display:'flex', alignItems:'center', justifyContent:'center', color:'#A78BFA' }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 3v18h18"/><path d="M7 16l4-4 4 4 6-8"/></svg>
+          </div>
+          <div>{t('Chưa có dữ liệu lịch sử. Hãy lưu snapshot tài sản để bắt đầu theo dõi.')}</div>
         </div>
       ) : (
-        <div className="chart-container">
+        <div className="chart-container" style={{ height: 320 }}>
           <svg style={{ position: 'absolute', width: 0, height: 0 }}>
             <defs>
               <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                <stop offset="5%" stopColor="#7C5CFF" stopOpacity={0.28} />
+                <stop offset="95%" stopColor="#7C5CFF" stopOpacity={0} />
               </linearGradient>
             </defs>
           </svg>
-          <ResponsiveContainer width="100%" height={280}>
-            <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+          <ResponsiveContainer width="100%" height={320}>
+            <AreaChart data={chartData} margin={{ top: 12, right: 10, left: 4, bottom: 0 }}>
               <defs>
                 <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                  <stop offset="5%" stopColor="#7C5CFF" stopOpacity={0.28} />
+                  <stop offset="95%" stopColor="#7C5CFF" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
               <XAxis 
                 dataKey="period" 
-                tick={{ fill: '#64748b', fontSize: 10 }}
+                tick={{ fill: '#667085', fontSize: 11, fontWeight: 500 }}
                 axisLine={{ stroke: 'rgba(255,255,255,0.06)' }}
                 tickLine={false}
+                dy={8}
               />
               <YAxis 
                 tickFormatter={formatValue}
-                tick={{ fill: '#64748b', fontSize: 10 }}
+                tick={{ fill: '#667085', fontSize: 11, fontWeight: 500 }}
                 axisLine={false}
                 tickLine={false}
-                width={50}
+                width={54}
               />
-              <RechartsTooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(99,102,241,0.3)', strokeDasharray: '3 3' }} />
+              <RechartsTooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(124,92,255,0.26)', strokeDasharray: '4 4' }} />
               <Area 
                 type="monotone" 
                 dataKey="initialValue" 
-                stroke="#f59e0b" 
-                strokeWidth={1.5}
-                strokeDasharray="4 3"
+                stroke="#F5A623" 
+                strokeWidth={1.6}
+                strokeDasharray="5 4"
                 fill="none"
                 dot={false}
-                activeDot={{ r: 4, fill: '#f59e0b', stroke: '#11131c', strokeWidth: 2 }}
-                animationDuration={800}
+                activeDot={{ r: 4, fill: '#F5A623', stroke: '#080B14', strokeWidth: 2 }}
+                animationDuration={700}
               />
               <Area 
                 type="monotone" 
                 dataKey="value" 
-                stroke="#6366f1" 
-                strokeWidth={2.5}
+                stroke="#7C5CFF" 
+                strokeWidth={2.6}
                 fill={`url(#${gradientId})`}
-                dot={{ r: 4, fill: '#6366f1', stroke: '#11131c', strokeWidth: 2 }}
-                activeDot={{ r: 6, fill: '#6366f1', stroke: '#fff', strokeWidth: 2 }}
-                animationDuration={800}
+                dot={{ r: 3.5, fill: '#7C5CFF', stroke: '#080B14', strokeWidth: 2 }}
+                activeDot={{ r: 6, fill: '#7C5CFF', stroke: '#fff', strokeWidth: 2 }}
+                animationDuration={700}
               />
             </AreaChart>
           </ResponsiveContainer>
-          <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', marginTop: '8px', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ width: '16px', height: '3px', borderRadius: '2px', background: '#6366f1', display: 'inline-block' }} />
+          <div className="chart-legend-row">
+            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span className="chart-legend-dot" style={{ background: '#7C5CFF' }} />
               {t('Giá trị hiện tại')}
             </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ width: '16px', height: '0', borderTop: '2px dashed #f59e0b', display: 'inline-block' }} />
+            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ width: '14px', height: '0', borderTop: '2px dashed #F5A623', display: 'inline-block' }} />
               {t('Giá trị gốc')}
             </span>
           </div>
