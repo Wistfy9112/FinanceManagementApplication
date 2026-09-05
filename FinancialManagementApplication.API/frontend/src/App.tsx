@@ -184,6 +184,15 @@ export default function App() {
   });
 
   const [setupSuccessModal, setSetupSuccessModal] = useState<boolean>(false);
+  const [applyResult, setApplyResult] = useState<null | {
+    allocationName: string;
+    assetName: string;
+    amount: number;
+    prevCurrent: number;
+    nextCurrent: number;
+    prevInitial: number;
+    nextInitial: number;
+  }>(null);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const profileDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -463,17 +472,36 @@ export default function App() {
     if (!allocation.AssetId) return;
     const asset = assets.find(a => a.Id === allocation.AssetId);
     if (!asset) return;
+    const transferAmount = allocation.CurrentAmount;
+    const prevCurrent = asset.CurrentValue;
+    const nextCurrent = prevCurrent + transferAmount;
+    const prevInitial = asset.InitialValue;
+    const nextInitial = prevInitial + transferAmount;
     try {
       setError(null);
       await assetService.update(asset.Id, {
         Id: asset.Id,
         Name: asset.Name,
-        InitialValue: asset.InitialValue + allocation.CurrentAmount,
-        CurrentValue: asset.CurrentValue + allocation.CurrentAmount,
+        InitialValue: nextInitial,
+        CurrentValue: nextCurrent,
         Type: asset.Type
       });
       await loadData();
-      addToast({ title: t('Đã cập nhật giá trị tài sản!'), variant: 'success' });
+      addToast({
+        title: t('Đã áp dụng sang tài sản!'),
+        description: `${t('Danh mục')} "${allocation.Name}" → ${t('Tài sản')} "${asset.Name}": +${formatCurrency(transferAmount)} • ${formatCurrency(prevCurrent)} → ${formatCurrency(nextCurrent)}`,
+        variant: 'success',
+        durationMs: 7000
+      });
+      setApplyResult({
+        allocationName: allocation.Name,
+        assetName: asset.Name,
+        amount: transferAmount,
+        prevCurrent,
+        nextCurrent,
+        prevInitial,
+        nextInitial
+      });
     } catch (err: any) {
       addToast({ title: t('Lỗi cập nhật tài sản'), description: err.message, variant: 'error' });
     }
@@ -1045,6 +1073,65 @@ export default function App() {
                 onClick={confirmDeleteHistory}
               >
                 {t('Xóa')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Apply To Asset Result Modal */}
+      {applyResult && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '480px' }}>
+            <div className="modal-header">
+              <h3 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--success)' }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+                {t('Đã áp dụng sang tài sản!')}
+              </h3>
+              <button className="modal-close" onClick={() => setApplyResult(null)}>✕</button>
+            </div>
+            <div style={{ padding: '20px 24px' }}>
+              <div style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: '10px', padding: '16px', marginBottom: '16px' }}>
+                <div style={{ display: 'grid', gap: '10px', fontSize: '0.9rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>{t('Danh mục')}:</span>
+                    <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{applyResult.allocationName}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>{t('Tài sản')}:</span>
+                    <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{applyResult.assetName}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderTop: '1px dashed rgba(255,255,255,0.08)', borderBottom: '1px dashed rgba(255,255,255,0.08)', margin: '4px 0' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>{t('Số tiền chuyển')}:</span>
+                    <span style={{ fontWeight: 800, color: '#10b981', fontFamily: 'var(--font-display)', fontSize: '1.05rem' }}>+{formatCurrency(applyResult.amount)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>{t('Biến động')}:</span>
+                    <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ color: 'var(--text-muted)' }}>{formatCurrency(applyResult.prevCurrent)}</span>
+                      <span style={{ color: 'var(--primary)' }}>→</span>
+                      <span style={{ color: '#10b981' }}>{formatCurrency(applyResult.nextCurrent)}</span>
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    <span>{t('Vốn ban đầu')}:</span>
+                    <span style={{ fontFamily: 'var(--font-display)' }}>{formatCurrency(applyResult.prevInitial)} → {formatCurrency(applyResult.nextInitial)}</span>
+                  </div>
+                </div>
+              </div>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.5 }}>
+                {t('Giá trị tài sản đã được cập nhật. Vui lòng kiểm tra tab Quản lý Tài sản để xem chi tiết.')}
+              </p>
+            </div>
+            <div className="modal-actions" style={{ justifyContent: 'center' }}>
+              <button
+                className="btn btn-primary"
+                onClick={() => setApplyResult(null)}
+                style={{ minWidth: '120px' }}
+              >
+                OK
               </button>
             </div>
           </div>
