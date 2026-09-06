@@ -2044,7 +2044,7 @@ function CashFlowGrowthChart({ userId }: { userId: string }) {
   );
 }
 
-// 3. ASSETS LIST COMPONENT
+// 3. ASSETS LIST COMPONENT — Premium Personal Wealth Command Center
 function AssetsPage({ 
   assets, 
   historyRecords,
@@ -2079,6 +2079,68 @@ function AssetsPage({
   const { t } = useLanguage();
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
   const [editingTimeId, setEditingTimeId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'Saving' | 'Investment' | 'Expense'>('all');
+  const [sortColumn, setSortColumn] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  const sortByOrder = (list: any[]) => [...list].sort((a, b) => (a.SortOrder ?? 0) - (b.SortOrder ?? 0));
+  const allSaving = sortByOrder(assets.filter(a => a.Type === 'Saving'));
+  const allInvestment = sortByOrder(assets.filter(a => a.Type === 'Investment'));
+  const allExpense = sortByOrder(assets.filter(a => a.Type === 'Expense'));
+
+  // Health insight derived safely
+  const increasing = assets.filter(a => (a.CurrentValue - a.InitialValue) > 0).length;
+  const decreasing = assets.filter(a => (a.CurrentValue - a.InitialValue) < 0).length;
+  const unchanged = assets.length - increasing - decreasing;
+
+  // Group totals
+  const sumCurrent = (list: any[]) => list.reduce((s, a) => s + Number(a.CurrentValue || 0), 0);
+  const savingTotal = sumCurrent(allSaving);
+  const investmentTotal = sumCurrent(allInvestment);
+  const expenseTotal = sumCurrent(allExpense);
+  const grandTotal = totalCurrent || 1;
+  const pct = (v: number) => grandTotal > 0 ? (v / grandTotal) * 100 : 0;
+
+  const handleSort = (col: string) => {
+    if (sortColumn === col) setSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortColumn(col); setSortDirection('asc'); }
+  };
+
+  const applySearchAndSort = (list: any[]) => {
+    let filtered = list;
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      filtered = filtered.filter(a => String(a.Name || '').toLowerCase().includes(q));
+    }
+    if (!sortColumn) return filtered;
+    const dir = sortDirection === 'asc' ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      const interestA = a.CurrentValue - a.InitialValue;
+      const interestB = b.CurrentValue - b.InitialValue;
+      const roiA = a.InitialValue > 0 ? interestA / a.InitialValue : 0;
+      const roiB = b.InitialValue > 0 ? interestB / b.InitialValue : 0;
+      switch (sortColumn) {
+        case 'name': return dir * String(a.Name).localeCompare(String(b.Name), 'vi');
+        case 'initial': return dir * (a.InitialValue - b.InitialValue);
+        case 'current': return dir * (a.CurrentValue - b.CurrentValue);
+        case 'profit': return dir * (interestA - interestB);
+        case 'roi': return dir * (roiA - roiB);
+        case 'updated': return dir * (new Date(a.CreatedAt || 0).getTime() - new Date(b.CreatedAt || 0).getTime());
+        default: return 0;
+      }
+    });
+  };
+
+  const shouldShowSaving = activeFilter === 'all' || activeFilter === 'Saving';
+  const shouldShowInvestment = activeFilter === 'all' || activeFilter === 'Investment';
+  const shouldShowExpense = activeFilter === 'all' || activeFilter === 'Expense';
+
+  const visibleSaving = shouldShowSaving ? applySearchAndSort(allSaving) : [];
+  const visibleInvestment = shouldShowInvestment ? applySearchAndSort(allInvestment) : [];
+  const visibleExpense = shouldShowExpense ? applySearchAndSort(allExpense) : [];
+
+  const filteredCount = visibleSaving.length + visibleInvestment.length + visibleExpense.length;
 
   const handleMoveUp = (id: string, typeGroup: string) => {
     const group = sortByOrder(assets.filter(a => a.Type === typeGroup));
@@ -2108,67 +2170,71 @@ function AssetsPage({
     onReorder(reordered);
   };
 
-  const sortByOrder = (list: any[]) => [...list].sort((a, b) => (a.SortOrder ?? 0) - (b.SortOrder ?? 0));
-  const expenseAssets = sortByOrder(assets.filter(a => a.Type === 'Expense'));
-  const savingAssets = sortByOrder(assets.filter(a => a.Type === 'Saving'));
-  const investmentAssets = sortByOrder(assets.filter(a => a.Type === 'Investment'));
+  // Helpers for rendering
+  const getIcon = (type: string) => {
+    if (type === 'Saving') return (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+    );
+    if (type === 'Investment') return (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+    );
+    return (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+    );
+  };
 
   const renderAssetRows = (list: any[], startIdx: number, typeGroup: string) =>
     list.map((asset, idx) => {
-      const interest = asset.CurrentValue - asset.InitialValue;
+      const interest = Number(asset.CurrentValue) - Number(asset.InitialValue);
       const ratio = asset.InitialValue > 0 ? (interest / asset.InitialValue) * 100 : 0;
+      const profitState = interest > 0 ? 'pos' : interest < 0 ? 'neg' : 'neu';
+      const iconType = asset.Type === 'Saving' ? 'saving' : asset.Type === 'Investment' ? 'investment' : 'expense';
+      const typeLabel = asset.Type === 'Saving' ? t('Tiết kiệm') : asset.Type === 'Investment' ? t('Đầu tư') : t('Sinh hoạt');
       return (
         <tr key={asset.Id}>
-          <td style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-              <button onClick={() => handleMoveUp(asset.Id, typeGroup)} disabled={idx === 0} title={t('Di chuyển lên')}
-                style={{ background: 'none', border: 'none', cursor: idx === 0 ? 'default' : 'pointer', padding: '0', lineHeight: '1', color: idx === 0 ? 'var(--text-muted)' : 'var(--text-secondary)', opacity: idx === 0 ? 0.3 : 1 }}>
+          <td style={{ textAlign: 'center', width: 56 }}>
+            <div className="asset-reorder">
+              <button onClick={() => handleMoveUp(asset.Id, typeGroup)} disabled={idx === 0} title={t('Di chuyển lên')}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5l-7 7h14l-7-7z"/></svg>
               </button>
-              <span style={{ fontSize: '0.85rem' }}>{startIdx + idx + 1}</span>
-              <button onClick={() => handleMoveDown(asset.Id, typeGroup)} disabled={idx === list.length - 1} title={t('Di chuyển xuống')}
-                style={{ background: 'none', border: 'none', cursor: idx === list.length - 1 ? 'default' : 'pointer', padding: '0', lineHeight: '1', color: idx === list.length - 1 ? 'var(--text-muted)' : 'var(--text-secondary)', opacity: idx === list.length - 1 ? 0.3 : 1 }}>
+              <span style={{ fontSize:'11px', fontFamily:'var(--font-mono)', color:'var(--text-muted)', fontWeight:600 }}>{String(startIdx + idx + 1).padStart(2,'0')}</span>
+              <button onClick={() => handleMoveDown(asset.Id, typeGroup)} disabled={idx === list.length - 1} title={t('Di chuyển xuống')}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 19l7-7H5l7 7z"/></svg>
               </button>
             </div>
           </td>
-          <td style={{ fontWeight: 600 }}>{asset.Name}</td>
-          <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 500 }}>
-            {formatCurrency(asset.InitialValue)}
+          <td>
+            <div className="asset-name-cell">
+              <div className={`asset-icon ${iconType}`}>{getIcon(asset.Type)}</div>
+              <div className="asset-name-main">
+                <div className="asset-name-title" title={asset.Name}>{asset.Name}</div>
+                <div className="asset-name-sub">{typeLabel}</div>
+              </div>
+            </div>
           </td>
-          <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 500 }}>
-            {formatCurrency(asset.CurrentValue)}
+          <td className="num" style={{ color:'var(--text-secondary)', fontWeight:500 }}>{formatCurrency(asset.InitialValue)} ₫</td>
+          <td className="num" style={{ color:'var(--text-primary)', fontWeight:650 }}>{formatCurrency(asset.CurrentValue)} ₫</td>
+          <td className="num">
+            <span className={`asset-profit ${profitState}`}>
+              <span className="asset-profit-icon">{interest > 0 ? '▲' : interest < 0 ? '▼' : '—'}</span>
+              {interest === 0 ? '0' : `${interest > 0 ? '+' : ''}${formatCurrency(interest)}`} ₫
+            </span>
           </td>
-          <td style={{ 
-            textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 600,
-            color: interest > 0 ? 'var(--success)' : interest < 0 ? 'var(--danger)' : 'var(--text-muted)'
-          }}>
-            {interest > 0 ? '+' : ''}{formatCurrency(interest)}
+          <td className="num">
+            <span className={`asset-profit ${profitState}`} style={{ fontSize:'12px' }}>
+              {asset.InitialValue > 0 ? `${interest > 0 ? '+' : ''}${ratio.toFixed(2)}%` : '0.00%'}
+            </span>
           </td>
-          <td style={{ 
-            textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 600,
-            color: interest > 0 ? 'var(--success)' : interest < 0 ? 'var(--danger)' : 'var(--text-muted)'
-          }}>
-            {asset.InitialValue > 0 ? (
-              <>{interest > 0 ? '+' : ''}{ratio.toFixed(2)}%</>
-            ) : (
-              <>0.00%</>
-            )}
+          <td style={{ textAlign:'center', color:'var(--text-secondary)', fontSize:'12px', fontFamily:'var(--font-mono)', fontVariantNumeric:'tabular-nums' }}>
+            {asset.CreatedAt ? formatDateShort(asset.CreatedAt) : '—'}
           </td>
-          <td style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-            {asset.CreatedAt ? formatDateShort(asset.CreatedAt) : ''}
-          </td>
-          <td style={{ textAlign: 'center' }}>
-            <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-              <button className="btn-icon edit" onClick={() => onEdit(asset)} title={t('Sửa tài sản')}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
-                </svg>
+          <td>
+            <div className="asset-actions">
+              <button className="asset-action-btn edit" onClick={() => onEdit(asset)} title={t('Sửa tài sản')} aria-label={t('Sửa tài sản')}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
               </button>
-              <button className="btn-icon delete" onClick={() => onDelete(asset.Id, asset.Name)} title={t('Xóa tài sản')}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                </svg>
+              <button className="asset-action-btn delete" onClick={() => onDelete(asset.Id, asset.Name)} title={t('Xóa tài sản')} aria-label={t('Xóa tài sản')}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
               </button>
             </div>
           </td>
@@ -2176,241 +2242,460 @@ function AssetsPage({
       );
     });
 
-  return (
-    <div>
-      <div className="tab-header">
-        <div>
-          <h2 className="section-title">{t('Bảng Quản Lý Tài Sản Chi Tiết')}</h2>
-          <p className="section-desc">{t('Theo dõi giá trị ban đầu, giá trị thực tế hiện tại và mức độ sinh trưởng của từng tài sản')}</p>
+  const renderMobileCard = (asset: any, typeGroup: string, idx: number, startIdx: number) => {
+    const interest = Number(asset.CurrentValue) - Number(asset.InitialValue);
+    const ratio = asset.InitialValue > 0 ? (interest / asset.InitialValue) * 100 : 0;
+    const profitState = interest > 0 ? 'pos' : interest < 0 ? 'neg' : 'neu';
+    const iconType = asset.Type === 'Saving' ? 'saving' : asset.Type === 'Investment' ? 'investment' : 'expense';
+    return (
+      <div key={asset.Id} className="asset-mobile-card">
+        <div className="asset-mobile-top">
+          <div className="asset-name-cell" style={{ minWidth:0 }}>
+            <div className={`asset-icon ${iconType}`}>{getIcon(asset.Type)}</div>
+            <div className="asset-name-main">
+              <div className="asset-name-title">{asset.Name}</div>
+              <div className="asset-name-sub">{asset.Type === 'Saving' ? t('Tiết kiệm') : asset.Type === 'Investment' ? t('Đầu tư') : t('Sinh hoạt')} • #{String(startIdx+idx+1).padStart(2,'0')}</div>
+            </div>
+          </div>
+          <div className="asset-actions">
+            <button className="asset-action-btn edit" onClick={() => onEdit(asset)}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+            <button className="asset-action-btn delete" onClick={() => onDelete(asset.Id, asset.Name)}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button className="btn btn-primary" onClick={onAdd}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            {t('Thêm Tài Sản')}
-          </button>
-          <button className="btn" onClick={onSave} style={{
-            background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)',
-            color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '6px'
-          }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-              <polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
-            </svg>
+        <div className="asset-mobile-grid">
+          <div className="asset-mobile-item">
+            <span className="asset-mobile-label">{t('Giá trị hiện tại')}</span>
+            <span className="asset-mobile-value">{formatCurrency(asset.CurrentValue)} ₫</span>
+          </div>
+          <div className="asset-mobile-item">
+            <span className="asset-mobile-label">{t('Vốn gốc')}</span>
+            <span className="asset-mobile-value" style={{ color:'var(--text-secondary)' }}>{formatCurrency(asset.InitialValue)} ₫</span>
+          </div>
+          <div className="asset-mobile-item">
+            <span className="asset-mobile-label">{t('Lợi nhuận')}</span>
+            <span className={`asset-profit ${profitState}`} style={{ fontSize:'13px' }}>
+              <span className="asset-profit-icon">{interest > 0 ? '▲' : interest < 0 ? '▼' : '—'}</span>
+              {interest === 0 ? '0' : `${interest > 0 ? '+' : ''}${formatCurrency(interest)}`} ₫
+            </span>
+          </div>
+          <div className="asset-mobile-item">
+            <span className="asset-mobile-label">ROI</span>
+            <span className={`asset-profit ${profitState}`} style={{ fontSize:'13px' }}>{asset.InitialValue > 0 ? `${interest > 0 ? '+' : ''}${ratio.toFixed(2)}%` : '0.00%'}</span>
+          </div>
+        </div>
+        <div style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', color:'var(--text-muted)', fontFamily:'var(--font-mono)' }}>
+          <span>{asset.CreatedAt ? formatDateShort(asset.CreatedAt) : ''}</span>
+          <span style={{ display:'flex', gap:4, alignItems:'center' }}>
+            <button onClick={() => handleMoveUp(asset.Id, typeGroup)} disabled={idx===0} style={{ background:'none', border:'none', color: idx===0?'var(--text-muted)':'var(--text-secondary)', opacity: idx===0?0.35:1, cursor: idx===0?'default':'pointer' }}>▲</button>
+            <button onClick={() => handleMoveDown(asset.Id, typeGroup)} disabled={idx===listFilteredLength(typeGroup)-1} style={{ background:'none', border:'none', color: idx===listFilteredLength(typeGroup)-1?'var(--text-muted)':'var(--text-secondary)', opacity: idx===listFilteredLength(typeGroup)-1?0.35:1, cursor: idx===listFilteredLength(typeGroup)-1?'default':'pointer' }}>▼</button>
+          </span>
+        </div>
+      </div>
+    );
+  };
+
+  const listFilteredLength = (type: string) => {
+    if (type === 'Saving') return visibleSaving.length;
+    if (type === 'Investment') return visibleInvestment.length;
+    return visibleExpense.length;
+  };
+
+  const renderSortIcon = (active: boolean, dir: 'asc'|'desc') => (
+    <span className="sort-icon" style={{ display:'inline-flex', flexDirection:'column', lineHeight:0, gap:1 }}>
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" style={{ opacity: active && dir==='asc'?1:0.35 }}><path d="M18 15l-6-6-6 6"/></svg>
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" style={{ opacity: active && dir==='desc'?1:0.35, marginTop:-2 }}><path d="M6 9l6 6 6-6"/></svg>
+    </span>
+  );
+
+  const selectedRecord = selectedHistoryId ? historyRecords.find((r: any) => r.Id === selectedHistoryId) : null;
+  const selectedDetails: any[] = selectedRecord?.Details || [];
+  const selTotalCurrent = selectedDetails.reduce((s: number, d: any) => s + Number(d.CurrentValue || 0), 0);
+  const selTotalInitial = selectedDetails.reduce((s: number, d: any) => s + Number(d.InitialValue || 0), 0);
+  const selDiff = selTotalCurrent - selTotalInitial;
+  const selDiffPct = selTotalInitial > 0 ? (selDiff / selTotalInitial) * 100 : 0;
+
+  return (
+    <div className="asset-page">
+      {/* HEADER */}
+      <div className="asset-header">
+        <div className="asset-header-left">
+          <h1 className="asset-title">{t('Bảng Quản Lý Tài Sản')}</h1>
+          <p className="asset-subtitle">{t('Theo dõi giá trị, hiệu suất và phân bổ tài sản của bạn')}</p>
+        </div>
+        <div className="asset-header-actions">
+          <button className="asset-btn asset-btn-secondary" onClick={onSave}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
             {t('Lưu thông tin')}
+          </button>
+          <button className="asset-btn asset-btn-primary" onClick={onAdd}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            {t('Thêm Tài Sản')}
           </button>
         </div>
       </div>
 
-      <div className="table-container">
-        <table className="custom-table">
-          <thead>
-            <tr>
-              <th style={{ width: '40px', textAlign: 'center' }}>{t('STT')}</th>
-              <th>{t('Tên tài sản (Assets Name)')}</th>
-              <th style={{ textAlign: 'right' }}>{t('Vốn ban đầu (Funds)')}</th>
-              <th style={{ textAlign: 'right' }}>{t('Giá trị hiện tại (Current)')}</th>
-              <th style={{ textAlign: 'right' }}>{t('Lợi nhuận (Interest)')}</th>
-              <th style={{ textAlign: 'right' }}>{t('Tỷ suất (Interest ratio)')}</th>
-              <th style={{ textAlign: 'center' }}>{t('Ngày cập nhật')}</th>
-              <th style={{ textAlign: 'center', width: '100px' }}>{t('Hành động')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {assets.length === 0 ? (
+      {/* SUMMARY */}
+      <div className="asset-summary-grid">
+        <div className="asset-summary-card primary">
+          <div className="asset-summary-label"><span style={{ width:6, height:6, borderRadius:'50%', background:'#7C5CFF', boxShadow:'0 0 10px rgba(124,92,255,0.35)', display:'inline-block' }} />{t('Tổng tài sản hiện tại')}</div>
+          <div className="asset-summary-value" style={{ fontVariantNumeric:'tabular-nums' }}>{formatCurrency(totalCurrent)} ₫</div>
+          <div className="asset-summary-sub">{assets.length} {t('tài sản')} • {totalCurrent > 0 ? `${pct(totalCurrent).toFixed(1)}%` : '0%'} {t('tài sản')}</div>
+        </div>
+        <div className="asset-summary-card">
+          <div className="asset-summary-label">{t('Vốn ban đầu')}</div>
+          <div className="asset-summary-value" style={{ fontSize:22, color:'var(--text-secondary)' }}>{formatCurrency(totalInitial)} ₫</div>
+          <div className="asset-summary-sub">{t('Đã đầu tư ban đầu')}</div>
+        </div>
+        <div className="asset-summary-card" style={{ borderColor: totalInterest >=0 ? 'rgba(24,201,149,0.14)' : 'rgba(255,77,103,0.14)' }}>
+          <div className="asset-summary-label">{t('Lợi nhuận')}</div>
+          <div className="asset-summary-value" style={{ fontSize:22, color: totalInterest > 0 ? '#18C995' : totalInterest < 0 ? '#FF4D67' : 'var(--text-muted)' }}>
+            {totalInterest > 0 ? '+' : ''}{formatCurrency(totalInterest)} ₫
+          </div>
+          <div className="asset-summary-sub">
+            <span className={`asset-summary-delta ${totalInterest > 0 ? 'pos' : totalInterest < 0 ? 'neg' : 'neu'}`}>
+              {totalInterest > 0 ? '▲' : totalInterest < 0 ? '▼' : '—'} {totalInterestRatio > 0 ? '+' : ''}{totalInterestRatio.toFixed(2)}%
+            </span>
+            <span>{totalInterest >=0 ? t('Tăng trưởng') : t('Sụt giảm')}</span>
+          </div>
+        </div>
+        <div className="asset-summary-card" style={{ textAlign:'center', justifyContent:'center' }}>
+          <div className="asset-summary-label" style={{ justifyContent:'center' }}>{t('Số lượng tài sản')}</div>
+          <div className="asset-summary-value" style={{ fontSize:28, textAlign:'center' }}>{assets.length}</div>
+          <div className="asset-summary-sub" style={{ justifyContent:'center' }}>{t('danh mục')}</div>
+        </div>
+      </div>
+
+      {/* HEALTH STRIP — only if calculable */}
+      {assets.length > 0 && (
+        <div className="asset-health-strip">
+          <span><b>{assets.length}</b> {t('tài sản')}</span>
+          <span style={{ width:1, height:14, background:'rgba(255,255,255,0.08)', display:'inline-block' }} />
+          <span style={{ display:'inline-flex', alignItems:'center', gap:6 }}><span className="asset-health-dot up" /> <b style={{ color:'#18C995' }}>{increasing}</b> {t('đang tăng')}</span>
+          <span style={{ display:'inline-flex', alignItems:'center', gap:6 }}><span className="asset-health-dot down" /> <b style={{ color:'#FF4D67' }}>{decreasing}</b> {t('đang giảm')}</span>
+          <span style={{ display:'inline-flex', alignItems:'center', gap:6 }}><span className="asset-health-dot flat" /> <b>{unchanged}</b> {t('không đổi')}</span>
+          {searchQuery || activeFilter !== 'all' ? (
+            <>
+              <span style={{ width:1, height:14, background:'rgba(255,255,255,0.08)', display:'inline-block' }} />
+              <span style={{ color:'var(--text-muted)', fontSize:12 }}>{t('Hiển thị')} <b style={{ color:'var(--text-primary)' }}>{filteredCount}</b> / {assets.length}</span>
+            </>
+          ) : null}
+        </div>
+      )}
+
+      {/* ASSET GROUPS */}
+      <div className="asset-groups-grid">
+        <div className="asset-group-summary saving">
+          <div className="asset-group-head saving"><span className="asset-group-dot saving" />{t('Tiết kiệm')}</div>
+          <div className="asset-group-main">
+            <div className="asset-group-value">{formatCompactValue(savingTotal)} ₫</div>
+            <span className="asset-group-pct">{pct(savingTotal).toFixed(1)}% {t('tài sản')}</span>
+          </div>
+          <div className="asset-group-meta">{allSaving.length} {t('tài sản')}</div>
+          <div className="asset-group-bar"><div className="asset-group-bar-fill saving" style={{ width:`${pct(savingTotal)}%` }} /></div>
+        </div>
+        <div className="asset-group-summary investment">
+          <div className="asset-group-head investment"><span className="asset-group-dot investment" />{t('Đầu tư')}</div>
+          <div className="asset-group-main">
+            <div className="asset-group-value">{formatCompactValue(investmentTotal)} ₫</div>
+            <span className="asset-group-pct">{pct(investmentTotal).toFixed(1)}% {t('tài sản')}</span>
+          </div>
+          <div className="asset-group-meta">{allInvestment.length} {t('tài sản')}</div>
+          <div className="asset-group-bar"><div className="asset-group-bar-fill investment" style={{ width:`${pct(investmentTotal)}%` }} /></div>
+        </div>
+        {allExpense.length > 0 && (
+          <div className="asset-group-summary expense">
+            <div className="asset-group-head expense"><span className="asset-group-dot expense" />{t('Sinh hoạt')}</div>
+            <div className="asset-group-main">
+              <div className="asset-group-value">{formatCompactValue(expenseTotal)} ₫</div>
+              <span className="asset-group-pct">{pct(expenseTotal).toFixed(1)}% {t('tài sản')}</span>
+            </div>
+            <div className="asset-group-meta">{allExpense.length} {t('tài sản')}</div>
+            <div className="asset-group-bar"><div className="asset-group-bar-fill expense" style={{ width:`${pct(expenseTotal)}%` }} /></div>
+          </div>
+        )}
+      </div>
+
+      {/* TOOLBAR */}
+      <div className="asset-toolbar">
+        <div className="asset-search-wrap">
+          <svg className="asset-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input
+            className="asset-search-input"
+            placeholder={t('Tìm kiếm tài sản...')}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+        <div className="asset-filter-pills">
+          <button className={`asset-pill ${activeFilter==='all'?'active':''}`} onClick={() => setActiveFilter('all')}>{t('Tất cả')}</button>
+          <button className={`asset-pill ${activeFilter==='Saving'?'active':''}`} onClick={() => setActiveFilter('Saving')}>{t('Tiết kiệm')}</button>
+          <button className={`asset-pill ${activeFilter==='Investment'?'active investment':''}`} onClick={() => setActiveFilter('Investment')}>{t('Đầu tư')}</button>
+          {allExpense.length > 0 && <button className={`asset-pill ${activeFilter==='Expense'?'active expense':''}`} onClick={() => setActiveFilter('Expense')}>{t('Sinh hoạt')}</button>}
+        </div>
+        <div className="asset-sort-hint">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 5h10M11 12h7M11 19h4M4 10l3 3 3-3M6 13V4"/></svg>
+          {t('Nhấn tiêu đề cột để sắp xếp')}
+        </div>
+      </div>
+
+      {/* TABLE */}
+      <div className="asset-table-card">
+        <div className="asset-table-wrap">
+          <table className="asset-table">
+            <thead>
               <tr>
-                <td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '30px' }}>
-                  {t('Chưa có dữ liệu tài sản. Bấm nút "Thêm Tài Sản" để khởi tạo.')}
-                </td>
+                <th style={{ width:56, textAlign:'center' }}>{t('STT')}</th>
+                <th className={`sortable ${sortColumn==='name'?'active':''}`} onClick={() => handleSort('name')}>
+                  <span className="th-sort">{t('Tài sản')} {renderSortIcon(sortColumn==='name', sortDirection)}</span>
+                </th>
+                <th className={`num sortable ${sortColumn==='initial'?'active':''}`} onClick={() => handleSort('initial')}>
+                  <span className="th-sort" style={{ justifyContent:'flex-end' }}>{t('Vốn gốc')} {renderSortIcon(sortColumn==='initial', sortDirection)}</span>
+                </th>
+                <th className={`num sortable ${sortColumn==='current'?'active':''}`} onClick={() => handleSort('current')}>
+                  <span className="th-sort" style={{ justifyContent:'flex-end' }}>{t('Giá trị hiện tại')} {renderSortIcon(sortColumn==='current', sortDirection)}</span>
+                </th>
+                <th className={`num sortable ${sortColumn==='profit'?'active':''}`} onClick={() => handleSort('profit')}>
+                  <span className="th-sort" style={{ justifyContent:'flex-end' }}>{t('Lợi nhuận')} {renderSortIcon(sortColumn==='profit', sortDirection)}</span>
+                </th>
+                <th className={`num sortable ${sortColumn==='roi'?'active':''}`} onClick={() => handleSort('roi')}>
+                  <span className="th-sort" style={{ justifyContent:'flex-end' }}>ROI {renderSortIcon(sortColumn==='roi', sortDirection)}</span>
+                </th>
+                <th className={`sortable ${sortColumn==='updated'?'active':''}`} onClick={() => handleSort('updated')} style={{ textAlign:'center' }}>
+                  <span className="th-sort">{t('Cập nhật')} {renderSortIcon(sortColumn==='updated', sortDirection)}</span>
+                </th>
+                <th style={{ textAlign:'center', width:84 }}>{t('Hành động')}</th>
               </tr>
-            ) : (
-              <>
-                {/* SINH HOẠT SECTION */}
-                {expenseAssets.length > 0 && (
-                  <>
-                    <tr className="table-section-divider">
-                      <td colSpan={8} style={{ fontWeight: 700, padding: '10px 16px', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '1px', color: '#f59e0b' }}>
-                        {t('💳 Sinh hoạt')}
-                      </td>
-                    </tr>
-                    {renderAssetRows(expenseAssets, 0, 'Expense')}
-                  </>
-                )}
-
-                {/* TIẾT KIỆM SECTION */}
-                {savingAssets.length > 0 && (
-                  <>
-                    <tr className="table-section-divider">
-                      <td colSpan={8} style={{ fontWeight: 700, padding: '10px 16px', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--primary)' }}>
-                        {t('🏦 Tiết kiệm')}
-                      </td>
-                    </tr>
-                    {renderAssetRows(savingAssets, expenseAssets.length, 'Saving')}
-                  </>
-                )}
-
-                {/* ĐẦU TƯ SECTION */}
-                {investmentAssets.length > 0 && (
-                  <>
-                    <tr className="table-section-divider">
-                      <td colSpan={8} style={{ fontWeight: 700, padding: '10px 16px', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '1px', color: '#10b981' }}>
-                        {t('📈 Đầu tư')}
-                      </td>
-                    </tr>
-                    {renderAssetRows(investmentAssets, expenseAssets.length + savingAssets.length, 'Investment')}
-                  </>
-                )}
-
-                {/* GRAND TOTAL */}
-                {assets.length > 0 && (
-                  <tr className="total-row" style={{ borderTop: '2px solid var(--border-light)' }}>
-                    <td colSpan={2} style={{ paddingLeft: '16px', fontWeight: 800 }}>{t('Tổng tài sản')}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 700 }}>{formatCurrency(totalInitial)}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 700 }}>{formatCurrency(totalCurrent)}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 700, color: totalInterest > 0 ? 'var(--success)' : totalInterest < 0 ? 'var(--danger)' : 'var(--text-muted)' }}>
-                      {totalInterest > 0 ? '+' : ''}{formatCurrency(totalInterest)}
+            </thead>
+            <tbody>
+              {assets.length === 0 ? (
+                <tr><td colSpan={8}><div className="asset-empty">{t('Chưa có dữ liệu tài sản. Bấm nút "Thêm Tài Sản" để khởi tạo.')}</div></td></tr>
+              ) : filteredCount === 0 ? (
+                <tr><td colSpan={8}><div className="asset-empty">{t('Không tìm thấy tài sản phù hợp.')}<br/><span style={{ fontSize:12, color:'var(--text-muted)' }}>{t('Thử thay đổi bộ lọc hoặc từ khóa tìm kiếm.')}</span></div></td></tr>
+              ) : (
+                <>
+                  {visibleExpense.length > 0 && (
+                    <>
+                      <tr className="asset-group-row expense">
+                        <td colSpan={8}>
+                          <div className="asset-group-row-inner">
+                            <span className="asset-group-row-title expense"><span style={{ width:8, height:8, borderRadius:'50%', background:'#F5A623', display:'inline-block' }} />{t('Sinh hoạt')}</span>
+                            <span className="asset-group-row-meta">
+                              <span><strong>{formatCurrency(expenseTotal)} ₫</strong> • {pct(expenseTotal).toFixed(1)}%</span>
+                              <span>{visibleExpense.length} / {allExpense.length} {t('tài sản')}</span>
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                      {renderAssetRows(visibleExpense, 0, 'Expense')}
+                    </>
+                  )}
+                  {visibleSaving.length > 0 && (
+                    <>
+                      <tr className="asset-group-row saving">
+                        <td colSpan={8}>
+                          <div className="asset-group-row-inner">
+                            <span className="asset-group-row-title saving"><span style={{ width:8, height:8, borderRadius:'50%', background:'#7C5CFF', display:'inline-block' }} />{t('Tiết kiệm')}</span>
+                            <span className="asset-group-row-meta">
+                              <span><strong>{formatCurrency(savingTotal)} ₫</strong> • {pct(savingTotal).toFixed(1)}%</span>
+                              <span>{visibleSaving.length} / {allSaving.length} {t('tài sản')}</span>
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                      {renderAssetRows(visibleSaving, visibleExpense.length, 'Saving')}
+                    </>
+                  )}
+                  {visibleInvestment.length > 0 && (
+                    <>
+                      <tr className="asset-group-row investment">
+                        <td colSpan={8}>
+                          <div className="asset-group-row-inner">
+                            <span className="asset-group-row-title investment"><span style={{ width:8, height:8, borderRadius:'50%', background:'#18C995', display:'inline-block' }} />{t('Đầu tư')}</span>
+                            <span className="asset-group-row-meta">
+                              <span><strong>{formatCurrency(investmentTotal)} ₫</strong> • {pct(investmentTotal).toFixed(1)}%</span>
+                              <span>{visibleInvestment.length} / {allInvestment.length} {t('tài sản')}</span>
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                      {renderAssetRows(visibleInvestment, visibleExpense.length + visibleSaving.length, 'Investment')}
+                    </>
+                  )}
+                  <tr className="asset-total-row">
+                    <td colSpan={2}><div className="asset-total-label">{t('Tổng tài sản')}<span>{assets.length} {t('tài sản')}</span></div></td>
+                    <td className="num" style={{ color:'var(--text-secondary)' }}>{formatCurrency(totalInitial)} ₫<div style={{ fontSize:10, color:'var(--text-muted)', fontWeight:400 }}>Vốn gốc</div></td>
+                    <td className="num" style={{ color:'var(--text-primary)' }}>{formatCurrency(totalCurrent)} ₫<div style={{ fontSize:10, color:'var(--text-muted)', fontWeight:400 }}>Hiện tại</div></td>
+                    <td className="num" style={{ color: totalInterest >0 ? '#18C995' : totalInterest <0 ? '#FF4D67' : '#8A94A6' }}>
+                      {totalInterest >0 ? '+' : ''}{formatCurrency(totalInterest)} ₫
+                      <div style={{ fontSize:10, fontWeight:400, color: totalInterest >0 ? '#18C995' : totalInterest <0 ? '#FF4D67' : '#8A94A6' }}>{totalInterest >=0 ? t('Lời') : t('Lỗ')}</div>
                     </td>
-                    <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 700, color: totalInterest > 0 ? 'var(--success)' : totalInterest < 0 ? 'var(--danger)' : 'var(--text-muted)' }}>
-                      {totalInterestRatio.toFixed(2)}%
+                    <td className="num" style={{ color: totalInterest >0 ? '#18C995' : totalInterest <0 ? '#FF4D67' : '#8A94A6' }}>
+                      {totalInterestRatio >0 ? '+' : ''}{totalInterestRatio.toFixed(2)}%
                     </td>
                     <td></td>
                     <td></td>
                   </tr>
-                )}
-              </>
-            )}
-          </tbody>
-        </table>
+                </>
+              )}
+            </tbody>
+          </table>
+        </div>
+        {/* Mobile cards */}
+        <div className="asset-mobile-list" style={{ padding: assets.length===0?0:12 }}>
+          {assets.length === 0 ? (
+            <div className="asset-empty">{t('Chưa có dữ liệu tài sản. Bấm nút "Thêm Tài Sản" để khởi tạo.')}</div>
+          ) : filteredCount === 0 ? (
+            <div className="asset-empty">{t('Không tìm thấy tài sản phù hợp.')}</div>
+          ) : (
+            <>
+              {visibleExpense.map((a,i) => renderMobileCard(a,'Expense',i,0))}
+              {visibleSaving.map((a,i) => renderMobileCard(a,'Saving',i,visibleExpense.length))}
+              {visibleInvestment.map((a,i) => renderMobileCard(a,'Investment',i,visibleExpense.length+visibleSaving.length))}
+              <div className="asset-mobile-card" style={{ background:'rgba(16,21,34,0.92)', borderColor:'rgba(124,92,255,0.20)' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                  <span style={{ fontSize:12, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase' }}>{t('Tổng tài sản')}</span>
+                  <span style={{ fontFamily:'var(--font-mono)', fontWeight:700, fontSize:13, color: totalInterest>0?'#18C995': totalInterest<0?'#FF4D67':'var(--text-muted)' }}>{totalInterest>0?'+':''}{formatCurrency(totalInterest)} ₫ • {totalInterestRatio.toFixed(2)}%</span>
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, fontFamily:'var(--font-mono)', fontSize:12 }}>
+                  <span style={{ color:'var(--text-muted)' }}>{t('Vốn gốc')}: <b style={{ color:'var(--text-primary)' }}>{formatCurrency(totalInitial)} ₫</b></span>
+                  <span style={{ color:'var(--text-muted)' }}>{t('Hiện tại')}: <b style={{ color:'var(--text-primary)' }}>{formatCurrency(totalCurrent)} ₫</b></span>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
-      {/* Lịch sử tài sản */}
-      <div className="card" style={{ marginTop: '24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+      {/* HISTORY */}
+      <div className="asset-history-card">
+        <div className="asset-history-header">
           <div>
-            <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>{t('Lịch sử lưu thông tin')}</h3>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{t('Chọn một bản ghi để xem chi tiết danh mục tài sản tại thời điểm đó')}</p>
+            <div className="asset-history-title">{t('Lịch sử tài sản')}</div>
+            <div className="asset-history-subtitle">{t('Chọn một mốc thời gian để xem chi tiết tài sản tại thời điểm đó')}</div>
+          </div>
+          <div style={{ fontSize:12, color:'var(--text-muted)', fontFamily:'var(--font-mono)', background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.06)', padding:'6px 10px', borderRadius:999 }}>
+            {historyRecords.length} {t('bản ghi')}
           </div>
         </div>
-
         {historyRecords.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-            {t('Chưa có dữ liệu lịch sử. Nhấn "Lưu thông tin" để tạo bản ghi.')}
+          <div className="asset-history-empty" style={{ minHeight:220 }}>
+            <div className="asset-history-empty-icon">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </div>
+            <div className="asset-history-empty-title">{t('Chưa có lịch sử')}</div>
+            <div className="asset-history-empty-desc">{t('Nhấn "Lưu thông tin" để tạo bản ghi lịch sử đầu tiên. Mỗi bản ghi lưu lại toàn bộ danh mục tài sản tại thời điểm đó.')}</div>
           </div>
         ) : (
-          <div style={{ display: 'flex', gap: '16px' }}>
-            <div style={{ flex: '0 0 280px', maxHeight: '360px', overflowY: 'auto' }}>
-              {historyRecords.map((r: any) => (
-                <div key={r.Id} style={{
-                  display: 'flex', alignItems: 'center', gap: '4px',
-                  padding: '8px 10px', borderRadius: '6px', cursor: 'pointer', marginBottom: '4px',
-                  background: selectedHistoryId === r.Id ? 'rgba(99,102,241,0.1)' : 'transparent',
-                  border: selectedHistoryId === r.Id ? '1px solid rgba(99,102,241,0.3)' : '1px solid transparent',
-                  transition: 'all 0.15s'
-                }}>
-                  <div onClick={() => setSelectedHistoryId(r.Id)}
-                    style={{ flex: 1, minWidth: 0 }}>
-                    {editingTimeId === r.Id ? (
-                      <DateTimeEdit value={r.RecordedAt} onSave={async (newIso) => {
-                        const oldTime = new Date(r.RecordedAt).getTime();
-                        const newTime = new Date(newIso).getTime();
-                        if (Math.abs(newTime - oldTime) > 60000) {
-                          await onUpdateTime(r.Id, newIso);
-                        }
-                        setEditingTimeId(null);
-                      }} />
-                    ) : (
-                      <div style={{ fontWeight: 500, fontSize: '0.85rem', cursor: 'pointer' }}
-                        onClick={(e) => { e.stopPropagation(); setSelectedHistoryId(r.Id); if (selectedHistoryId === r.Id) setEditingTimeId(r.Id); }}
-                        title={t('Nhấn để sửa thời gian')}>
-                        {formatDateTime(r.RecordedAt)}
-                      </div>
-                    )}
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                      {r.Details?.length || 0} {t('tài sản · tổng')} {formatCurrency((r.Details || []).reduce((s: number, d: any) => s + d.CurrentValue, 0))}
-                    </div>
-                  </div>
-                  <button onClick={(e) => { e.stopPropagation(); onDeleteHistory(r.Id); }} style={{
-                    background: 'transparent', border: 'none', color: '#6b7280', cursor: 'pointer',
-                    padding: '4px', borderRadius: '4px', fontSize: '0.8rem', flexShrink: 0
-                  }}
-                    onMouseOver={(e) => (e.currentTarget.style.color = '#f43f5e')}
-                    onMouseOut={(e) => (e.currentTarget.style.color = '#6b7280')}
-                    title={t('Xóa lịch sử')}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                    </svg>
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            <div style={{ flex: 1 }}>
-              {selectedHistoryId ? (
-                (() => {
-                  const record = historyRecords.find((r: any) => r.Id === selectedHistoryId);
-                  if (!record) return null;
+          <div className="asset-history-body">
+            <div className="asset-history-left">
+              <div className="asset-timeline">
+                {historyRecords.map((r: any) => {
+                  const isActive = selectedHistoryId === r.Id;
+                  const total = (r.Details || []).reduce((s: number, d: any) => s + Number(d.CurrentValue || 0), 0);
                   return (
-                    <div style={{ overflowX: 'auto' }}>
-                      <table className="custom-table" style={{ minWidth: '450px' }}>
-                        <thead>
-                          <tr>
-                            <th>{t('Tên tài sản')}</th>
-                            <th style={{ textAlign: 'right' }}>{t('Vốn ban đầu')}</th>
-                            <th style={{ textAlign: 'right' }}>{t('Giá trị hiện tại')}</th>
-                            <th style={{ textAlign: 'center' }}>{t('Loại')}</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(record.Details || []).map((d: any) => (
-                            <tr key={d.Id}>
-                              <td style={{ fontWeight: 600 }}>{d.Name}</td>
-                              <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)' }}>{formatCurrency(d.InitialValue)}</td>
-                              <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', color: d.CurrentValue >= d.InitialValue ? 'var(--success)' : 'var(--danger)' }}>
-                                {formatCurrency(d.CurrentValue)}
-                              </td>
-                              <td style={{ textAlign: 'center' }}>
-                                <span style={{
-                                  fontSize: '0.75rem', padding: '2px 8px', borderRadius: '10px', fontWeight: 600,
-                                  background: d.Type === 'Saving' ? 'rgba(99,102,241,0.15)' : 'rgba(16,185,129,0.15)',
-                                  color: d.Type === 'Saving' ? 'var(--primary)' : '#10b981'
-                                }}>
-                                  {d.Type === 'Saving' ? t('Tiết kiệm') : d.Type === 'Investment' ? t('Đầu tư') : d.Type}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      <div style={{ marginTop: '12px', textAlign: 'right', display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                        <button onClick={() => onDeleteHistory(record.Id)} style={{
-                          background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.3)',
-                          color: '#f43f5e', borderRadius: '6px', padding: '8px 20px', cursor: 'pointer',
-                          fontSize: '0.85rem', fontWeight: 600
-                        }}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px', verticalAlign: 'middle' }}>
-                            <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                          </svg>
-                          {t('Xóa')}
-                        </button>
-                        <button onClick={() => onRestore(record.Id)} style={{
-                          background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)',
-                          color: 'var(--primary)', borderRadius: '6px', padding: '8px 20px', cursor: 'pointer',
-                          fontSize: '0.85rem', fontWeight: 600
-                        }}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px', verticalAlign: 'middle' }}>
-                            <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-                          </svg>
-                          {t('Khôi phục')}
+                    <div key={r.Id} className={`asset-timeline-item ${isActive?'active':''}`} onClick={() => setSelectedHistoryId(r.Id)}>
+                      <div className="asset-timeline-dot" />
+                      <div className="asset-timeline-main">
+                        {editingTimeId === r.Id ? (
+                          <DateTimeEdit value={r.RecordedAt} onSave={async (newIso) => {
+                            const oldTime = new Date(r.RecordedAt).getTime();
+                            const newTime = new Date(newIso).getTime();
+                            if (Math.abs(newTime - oldTime) > 60000) await onUpdateTime(r.Id, newIso);
+                            setEditingTimeId(null);
+                          }} />
+                        ) : (
+                          <div className="asset-timeline-time" onClick={(e) => { e.stopPropagation(); setSelectedHistoryId(r.Id); if (isActive) setEditingTimeId(r.Id); }} title={t('Nhấn để sửa thời gian')}>
+                            {formatDateTime(r.RecordedAt)}
+                          </div>
+                        )}
+                        <div className="asset-timeline-meta">
+                          {r.Details?.length || 0} {t('tài sản')} • {formatCompactValue(total)} ₫
+                        </div>
+                      </div>
+                      <div className="asset-timeline-actions">
+                        <button className="asset-timeline-del" onClick={(e) => { e.stopPropagation(); onDeleteHistory(r.Id); }} title={t('Xóa lịch sử')}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                         </button>
                       </div>
                     </div>
                   );
-                })()
-              ) : (
-                <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                  {t('Chọn một bản ghi từ danh sách bên trái để xem chi tiết')}
+                })}
+              </div>
+            </div>
+            <div className="asset-history-right">
+              {!selectedRecord ? (
+                <div className="asset-history-empty">
+                  <div className="asset-history-empty-icon">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                  </div>
+                  <div className="asset-history-empty-title">{t('Chọn một mốc thời gian')}</div>
+                  <div className="asset-history-empty-desc">{t('Chọn bản ghi bên trái để xem chi tiết tài sản tại thời điểm đó.')}</div>
                 </div>
+              ) : (
+                <>
+                  <div className="asset-snapshot-header">
+                    <div>
+                      <div className="asset-snapshot-title">Snapshot</div>
+                      <div className="asset-snapshot-time">{formatDateTime(selectedRecord.RecordedAt)}</div>
+                    </div>
+                    <div className="asset-snapshot-actions" style={{ marginTop:0 }}>
+                      <button className="asset-btn asset-btn-secondary" style={{ height:34, padding:'0 12px', fontSize:12 }} onClick={() => onDeleteHistory(selectedRecord.Id)}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                        {t('Xóa')}
+                      </button>
+                      <button className="asset-btn asset-btn-primary" style={{ height:34, padding:'0 14px', fontSize:12 }} onClick={() => onRestore(selectedRecord.Id)}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                        {t('Khôi phục')}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="asset-snapshot-grid">
+                    <div className="asset-snapshot-stat">
+                      <div className="asset-snapshot-label">{t('Tổng tài sản')}</div>
+                      <div className="asset-snapshot-value">{formatCurrency(selTotalCurrent)} ₫</div>
+                      <div className="asset-snapshot-sub">{selectedDetails.length} {t('tài sản')}</div>
+                    </div>
+                    <div className="asset-snapshot-stat">
+                      <div className="asset-snapshot-label">{t('Vốn gốc')}</div>
+                      <div className="asset-snapshot-value" style={{ color:'var(--text-secondary)' }}>{formatCurrency(selTotalInitial)} ₫</div>
+                      <div className="asset-snapshot-sub">{t('Ban đầu')}</div>
+                    </div>
+                    <div className="asset-snapshot-stat" style={{ borderColor: selDiff >=0 ? 'rgba(24,201,149,0.18)' : 'rgba(255,77,103,0.18)', background: selDiff >=0 ? 'rgba(24,201,149,0.06)' : 'rgba(255,77,103,0.06)' }}>
+                      <div className="asset-snapshot-label">{t('Chênh lệch')}</div>
+                      <div className="asset-snapshot-value" style={{ color: selDiff >=0 ? '#18C995' : '#FF4D67' }}>{selDiff >0?'+':''}{formatCurrency(selDiff)} ₫</div>
+                      <div className="asset-snapshot-sub" style={{ color: selDiff >=0 ? '#18C995' : '#FF4D67' }}>{selDiffPct >0?'+':''}{selDiffPct.toFixed(2)}%</div>
+                    </div>
+                  </div>
+                  <div style={{ overflowX:'auto', border:'1px solid rgba(255,255,255,0.06)', borderRadius:12, overflow:'hidden' }}>
+                    <table className="asset-snapshot-table">
+                      <thead>
+                        <tr>
+                          <th>{t('Tài sản')}</th>
+                          <th style={{ textAlign:'right' }}>{t('Vốn gốc')}</th>
+                          <th style={{ textAlign:'right' }}>{t('Giá trị hiện tại')}</th>
+                          <th style={{ textAlign:'center' }}>{t('Loại')}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedDetails.map((d: any) => (
+                          <tr key={d.Id}>
+                            <td style={{ fontWeight:600, display:'flex', alignItems:'center', gap:8 }}>
+                              <span className={`asset-icon ${d.Type==='Saving'?'saving': d.Type==='Investment'?'investment':'expense'}`} style={{ width:28, height:28, borderRadius:8 }}>{getIcon(d.Type)}</span>
+                              {d.Name}
+                            </td>
+                            <td style={{ textAlign:'right', fontFamily:'var(--font-mono)', fontVariantNumeric:'tabular-nums' }}>{formatCurrency(d.InitialValue)} ₫</td>
+                            <td style={{ textAlign:'right', fontFamily:'var(--font-mono)', fontVariantNumeric:'tabular-nums', color: Number(d.CurrentValue) >= Number(d.InitialValue) ? '#18C995' : '#FF4D67', fontWeight:600 }}>{formatCurrency(d.CurrentValue)} ₫</td>
+                            <td style={{ textAlign:'center' }}>
+                              <span style={{ fontSize:11, padding:'3px 8px', borderRadius:999, fontWeight:600, border:'1px solid', background: d.Type==='Saving' ? 'rgba(124,92,255,0.10)' : d.Type==='Investment' ? 'rgba(24,201,149,0.10)' : 'rgba(245,166,35,0.10)', color: d.Type==='Saving' ? '#9B7CFF' : d.Type==='Investment' ? '#18C995' : '#F5A623', borderColor: d.Type==='Saving' ? 'rgba(124,92,255,0.16)' : d.Type==='Investment' ? 'rgba(24,201,149,0.14)' : 'rgba(245,166,35,0.14)' }}>
+                                {d.Type === 'Saving' ? t('Tiết kiệm') : d.Type === 'Investment' ? t('Đầu tư') : t('Sinh hoạt')}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </div>
           </div>
