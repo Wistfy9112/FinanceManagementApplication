@@ -53,6 +53,18 @@ const mapType = (v: any): string => {
   return 'Saving';
 };
 
+const GROUP_VALUES: Record<string, number> = { BaoVe: 1, OnDinh: 2, CanBang: 3, TangTruong: 4, RuiRoCao: 5, 'Bảo vệ': 1, 'Ổn định': 2, 'Cân bằng': 3, 'Tăng trưởng': 4, 'Rủi ro cao': 5 };
+const mapGroup = (v: any): number | null => {
+  if (v == null) return null;
+  if (typeof v === 'number') return v >= 1 && v <= 5 ? v : null;
+  if (typeof v === 'string') {
+    const n = parseInt(v);
+    if (!isNaN(n) && n >= 1 && n <= 5) return n;
+    return GROUP_VALUES[v] ?? null;
+  }
+  return null;
+};
+
 const mapAssetToFrontend = (a: any) => ({
   Id: a.id || a.Id,
   Name: a.name || a.Name,
@@ -60,6 +72,7 @@ const mapAssetToFrontend = (a: any) => ({
   CurrentValue: a.currentValue !== undefined ? Number(a.currentValue) : Number(a.CurrentValue || 0),
   AccountID: a.accountId || a.accountID || a.AccountID,
   Type: mapType(a.type !== undefined ? a.type : a.Type),
+  Group: mapGroup(a.group ?? a.Group),
   CreatedAt: a.createdAt || a.CreatedAt,
   SortOrder: a.sortOrder ?? a.SortOrder ?? 0
 });
@@ -230,7 +243,7 @@ export const assetService = {
     return [];
   },
 
-  create: async (asset: { Name: string; InitialValue: number; CurrentValue: number; Type: string; CreatedAt?: string }, userId: string = getLoggedUserId()): Promise<any> => {
+  create: async (asset: { Name: string; InitialValue: number; CurrentValue: number; Type: string; Group?: number | null; CreatedAt?: string }, userId: string = getLoggedUserId()): Promise<any> => {
     const now = new Date().toISOString();
     const createdAt = asset.CreatedAt || now;
     try {
@@ -243,6 +256,7 @@ export const assetService = {
           initialValue: asset.InitialValue,
           currentValue: asset.CurrentValue,
           type: asset.Type,
+          group: asset.Group ?? null,
           createdAt: createdAt
         })
       });
@@ -257,7 +271,7 @@ export const assetService = {
     throw new Error('Không thể tạo tài sản do mất kết nối server.');
   },
 
-  update: async (id: string, asset: { Id: string; Name: string; InitialValue: number; CurrentValue: number; Type: string }, _userId: string = getLoggedUserId()): Promise<void> => {
+  update: async (id: string, asset: { Id: string; Name: string; InitialValue: number; CurrentValue: number; Type: string; Group?: number | null }, _userId: string = getLoggedUserId()): Promise<void> => {
     try {
       const res = await fetch(`${API_URL}/assets/${id}`, {
         method: 'PUT',
@@ -266,7 +280,8 @@ export const assetService = {
           name: asset.Name,
           initialValue: asset.InitialValue,
           currentValue: asset.CurrentValue,
-          type: asset.Type
+          type: asset.Type,
+          group: asset.Group ?? null
         })
       });
       if (res.ok) return;

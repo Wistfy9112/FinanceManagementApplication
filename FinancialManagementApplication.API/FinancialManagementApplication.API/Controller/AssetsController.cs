@@ -45,6 +45,7 @@ namespace FinancialManagementApplication.API.Controller
                 InitialValue = dto.InitialValue,
                 CurrentValue = dto.CurrentValue,
                 Type = dto.Type,
+                Group = dto.Group,
                 CreatedAt = dto.CreatedAt ?? DateTime.Now
             };
             var result = await _assetsRepository.CreateAsync(asset);
@@ -61,6 +62,7 @@ namespace FinancialManagementApplication.API.Controller
             asset.InitialValue = dto.InitialValue;
             asset.CurrentValue = dto.CurrentValue;
             asset.Type = dto.Type;
+            asset.Group = dto.Group;
 
             await _assetsRepository.UpdateAsync(asset);
             return NoContent();

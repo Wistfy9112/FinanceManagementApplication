@@ -172,15 +172,15 @@ export default function App() {
   const [deleteConfirmAsset, setDeleteConfirmAsset] = useState<{ id: string; name: string } | null>(null);
   const [deleteConfirmHistory, setDeleteConfirmHistory] = useState<{ id: string; type: 'asset' | 'allocation' } | null>(null);
 
-  // Modal State
+  // Modal State - Nhóm tài sản 5 tầng
   const [assetModal, setAssetModal] = useState<{
     isOpen: boolean;
     mode: 'add' | 'edit';
-    data: { Id?: string; Name: string; InitialValue: number; CurrentValue: number; Type: string };
+    data: { Id?: string; Name: string; InitialValue: number; CurrentValue: number; Type: string; Group: number | null };
   }>({
     isOpen: false,
     mode: 'add',
-    data: { Name: '', InitialValue: 0, CurrentValue: 0, Type: 'Saving' }
+    data: { Name: '', InitialValue: 0, CurrentValue: 0, Type: 'Saving', Group: 2 }
   });
 
   const [setupSuccessModal, setSetupSuccessModal] = useState<boolean>(false);
@@ -332,11 +332,17 @@ export default function App() {
     e.preventDefault();
     try {
       if (!user) return;
-      
+      // Đồng bộ Type cũ theo Nhóm mới để tương thích dữ liệu cũ
+      const groupToType = (g: number | null): string => {
+        if (g == null) return assetModal.data.Type;
+        if (g === 1 || g === 2) return 'Saving';
+        return 'Investment';
+      };
+      const payload = { ...assetModal.data, Type: groupToType(assetModal.data.Group) };
       if (assetModal.mode === 'add') {
-        await assetService.create(assetModal.data, user.id);
+        await assetService.create(payload as any, user.id);
       } else if (assetModal.mode === 'edit' && assetModal.data.Id) {
-        await assetService.update(assetModal.data.Id, assetModal.data as any, user.id);
+        await assetService.update(assetModal.data.Id, payload as any, user.id);
       }
       setAssetModal({ ...assetModal, isOpen: false });
       await loadData();
@@ -920,8 +926,8 @@ export default function App() {
             totalCurrent={totalCurrent}
             totalInterest={totalInterest}
             totalInterestRatio={totalInterestRatio}
-            onAdd={() => setAssetModal({ isOpen: true, mode: 'add', data: { Name: '', InitialValue: 0, CurrentValue: 0, Type: 'Saving' } })}
-            onEdit={(a: any) => setAssetModal({ isOpen: true, mode: 'edit', data: { Id: a.Id, Name: a.Name, InitialValue: a.InitialValue, CurrentValue: a.CurrentValue, Type: a.Type } })}
+            onAdd={() => setAssetModal({ isOpen: true, mode: 'add', data: { Name: '', InitialValue: 0, CurrentValue: 0, Type: 'Saving', Group: 2 } })}
+            onEdit={(a: any) => setAssetModal({ isOpen: true, mode: 'edit', data: { Id: a.Id, Name: a.Name, InitialValue: a.InitialValue, CurrentValue: a.CurrentValue, Type: a.Type, Group: (a.Group ?? getAssetRiskLevel(a) ?? 2) } })}
             onDelete={handleDeleteAsset}
             onSave={handleSaveAllAssets}
             onRestore={handleRestoreFromHistory}
@@ -1030,16 +1036,20 @@ export default function App() {
                 />
               </div>
               <div className="form-group">
-                <label className="form-label">{t('Phân loại')}</label>
+                <label className="form-label">{t('Nhóm tài sản')}</label>
                 <select
                   className="form-control"
-                  value={assetModal.data.Type}
-                  onChange={(e) => setAssetModal({ ...assetModal, data: { ...assetModal.data, Type: e.target.value } })}
-                  style={{ padding: '8px 12px', height: '40px' }}
+                  value={assetModal.data.Group ?? 2}
+                  onChange={(e) => setAssetModal({ ...assetModal, data: { ...assetModal.data, Group: parseInt(e.target.value) } })}
+                  style={{ padding: '8px 12px', height: '42px', fontWeight: 600 }}
                 >
-                  <option value="Saving">{t('Tiết kiệm')}</option>
-                  <option value="Investment">{t('Đầu tư')}</option>
+                  <option value={1}>🟢 {t('Bảo vệ')} — {t('Tiền mặt, quỹ khẩn cấp')}</option>
+                  <option value={2}>🔵 {t('Ổn định')} — {t('Tiết kiệm, tiền gửi')}</option>
+                  <option value={3}>🟣 {t('Cân bằng')} — {t('Vàng, chứng chỉ quỹ')}</option>
+                  <option value={4}>🟠 {t('Tăng trưởng')} — {t('Cổ phiếu, BĐS đầu tư')}</option>
+                  <option value={5}>🔴 {t('Rủi ro cao')} — {t('Đầu cơ, biến động mạnh')}</option>
                 </select>
+                <div style={{ fontSize:11, color:'var(--text-muted)', marginTop:6, lineHeight:1.4 }}>{t('Hệ thống tự đưa tài sản vào đúng tầng tháp theo nhóm bạn chọn.')}</div>
               </div>
               <div className="modal-actions">
                 <button type="button" className="btn btn-secondary" onClick={() => setAssetModal({ ...assetModal, isOpen: false })}>{t('Hủy')}</button>
@@ -1422,6 +1432,374 @@ function OfflinePage({ onRetry, t }: { onRetry: () => void; t: (key: string) => 
   );
 }
 
+// 2.5 ASSET RISK PYRAMID — Tháp Tài Sản
+type RiskLevelId = 1 | 2 | 3 | 4 | 5;
+
+const RISK_LEVEL_META: Record<RiskLevelId, { label: string; riskText: string; short: string; color: string; bg: string; scoreMid: number; desc: string; icon: string }> = {
+  1: { label: 'BẢO VỆ', riskText: 'Rất thấp', short: 'Rất thấp', color: '#18C995', bg: 'rgba(24,201,149,0.18)', scoreMid: 90, desc: 'Bảo vệ — tiền mặt, quỹ khẩn cấp', icon: '🛡️' },
+  2: { label: 'ỔN ĐỊNH', riskText: 'Thấp', short: 'Thấp', color: '#4D8DFF', bg: 'rgba(77,141,255,0.18)', scoreMid: 72, desc: 'Ổn định — tiết kiệm, tiền gửi', icon: '🏦' },
+  3: { label: 'CÂN BẰNG', riskText: 'Trung bình', short: 'Trung bình', color: '#7C5CFF', bg: 'rgba(124,92,255,0.20)', scoreMid: 55, desc: 'Cân bằng — vàng, chứng chỉ quỹ', icon: '⚖️' },
+  4: { label: 'TĂNG TRƯỞNG', riskText: 'Cao', short: 'Cao', color: '#F5A623', bg: 'rgba(245,166,35,0.18)', scoreMid: 35, desc: 'Tăng trưởng — cổ phiếu, BĐS đầu tư', icon: '🚀' },
+  5: { label: 'RỦI RO CAO', riskText: 'Rất cao', short: 'Rất cao', color: '#FF4D67', bg: 'rgba(255,77,103,0.18)', scoreMid: 12, desc: 'Rủi ro cao — đầu cơ, biến động mạnh', icon: '⚠️' },
+};
+
+function getAssetRiskLevel(asset: any): RiskLevelId | null {
+  if (!asset) return null;
+  // 1 - Ưu tiên Nhóm tài sản mới (single source of truth)
+  const grp = asset.Group ?? asset.group ?? asset.AssetGroup ?? asset.assetGroup;
+  if (typeof grp === 'number' && grp >= 1 && grp <= 5) return grp as RiskLevelId;
+  if (typeof grp === 'string') {
+    const g = grp.toLowerCase();
+    const map: Record<string, RiskLevelId> = {
+      'bao ve': 1, 'bảo vệ': 1, '1': 1,
+      'on dinh': 2, 'ổn định': 2, '2': 2,
+      'can bang': 3, 'cân bằng': 3, '3': 3,
+      'tang truong': 4, 'tăng trưởng': 4, '4': 4,
+      'rui ro cao': 5, 'rủi ro cao': 5, 'mao hiem': 5, 'mạo hiểm': 5, '5': 5,
+    };
+    if (map[g] != null) return map[g];
+  }
+  // 2 - Fallback explicit risk field cũ
+  const explicit = asset.RiskLevel ?? asset.riskLevel ?? asset.Risk ?? asset.risk ?? asset.SafetyScore ?? asset.safetyScore;
+  if (typeof explicit === 'number' && explicit >= 1 && explicit <= 5) return explicit as RiskLevelId;
+  if (typeof explicit === 'string') {
+    const s = explicit.toLowerCase();
+    if (['an toàn','safe','1'].includes(s)) return 1;
+    if (['ổn định','on dinh','stable','2'].includes(s)) return 2;
+    if (['cân bằng','can bang','balanced','3'].includes(s)) return 3;
+    if (['tăng trưởng','tang truong','growth','4'].includes(s)) return 4;
+    if (['mạo hiểm','mao hiem','risk','high','5'].includes(s)) return 5;
+  }
+  const nameRaw = String(asset.Name || asset.name || '').trim();
+  const name = nameRaw.toLowerCase();
+  const typeRaw = asset.Type ?? asset.type ?? '';
+  const typeStr = typeof typeRaw === 'string' ? typeRaw : typeRaw === 0 ? 'Expense' : typeRaw === 1 ? 'Saving' : typeRaw === 2 ? 'Investment' : String(typeRaw);
+  const type = String(typeStr).toLowerCase();
+  // Normalize vietnamese without diacritics for matching
+  const norm = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  // Level 1 keywords — highest priority defensive
+  const l1kw = ['emergency','khan cap','du phong','that nghiep','unemployment','health','suc khoe','y te','bao ve','an toan','quy khan'];
+  if (l1kw.some(k => norm.includes(k) || name.includes(k))) return 1;
+  // Level 5 keywords
+  const l5kw = ['mao hiem','speculative','crypto','coin','volatile','bien dong','rui ro cao','high risk'];
+  if (l5kw.some(k => norm.includes(k) || name.includes(k))) return 5;
+  // Level 3 — gold, balanced, certificates, bonds
+  const l3kw = ['gold','vang','chung chi','certificate','can bang','balanced','trai phieu','bond','vang'];
+  if (l3kw.some(k => norm.includes(k) || name.includes(k))) return 3;
+  // Level 2 — saving, deposit, cash
+  const l2kw = ['saving','tiet kiem','deposit','tien gui','cash','tien mat','on dinh','stable'];
+  // Need to be careful: "investment certificate" should be l3 not l2, already handled; "skill investment" should be l4
+  // Check l2 but exclude if name contains investment+skill? we let l4 handle later
+  const isSavingName = l2kw.some(k => norm.includes(k) || name.includes(k));
+  if (isSavingName) return 2;
+  // Level 4 — stocks, equity, funds, growth, investment generic, BĐS
+  const l4kw = ['stock','co phieu','equity','fund','quy dau tu','etf','tang truong','growth','dau tu','investment','skill','bds','bđs','bat dong san','bất động sản','nha dat','dat nen','real estate'];
+  if (l4kw.some(k => norm.includes(k) || name.includes(k))) return 4;
+  // Fallback by Type if no keyword matched
+  if (type.includes('saving')) return 2;
+  if (type.includes('investment')) return 4;
+  if (type.includes('expense')) return 2;
+  // If type missing and no keyword, insufficient data -> neutral
+  if (!nameRaw) return null;
+  // Neutral fallback: balanced
+  return 3;
+}
+
+function getAssetSafetyScore(level: RiskLevelId | null): number | null {
+  if (level == null) return null;
+  return RISK_LEVEL_META[level].scoreMid;
+}
+
+function AssetRiskChip({ asset, level, showAmounts, onHover }: { asset: any; level: RiskLevelId; showAmounts: boolean; onHover: (e: React.MouseEvent, a: any, lvl: RiskLevelId) => void }) {
+  const name = asset.Name || asset.name || '—';
+  const val = Number(asset.CurrentValue ?? asset.currentValue ?? 0);
+  return (
+    <div className={`pyramid-asset-chip l${level}`} onMouseEnter={(e)=>onHover(e, asset, level)} onMouseLeave={(e)=>onHover(e as any, null as any, level)} tabIndex={0} role="button" aria-label={`${name} ${showAmounts ? formatCurrency(val) : '•••'} ${RISK_LEVEL_META[level].label}`}>
+      <span className="pyramid-asset-chip-icon">
+        {level===1 ? <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        : level===2 ? <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+        : level===3 ? <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>
+        : level===4 ? <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+        : <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>}
+      </span>
+      <span className="pyramid-asset-chip-name" title={name}>{name}</span>
+      <span className="pyramid-asset-chip-value">{showAmounts ? `${formatCompactValue(val)} ₫` : '•••'}</span>
+    </div>
+  );
+}
+
+function AssetRiskPyramid({ assets, showAmounts }: { assets: any[]; showAmounts: boolean }) {
+  const { t } = useLanguage();
+  const [activeLevel, setActiveLevel] = useState<RiskLevelId | null>(null);
+  const [hoveredAsset, setHoveredAsset] = useState<{ asset: any; level: RiskLevelId; x: number; y: number } | null>(null);
+  const [modalLevel, setModalLevel] = useState<RiskLevelId | null>(null);
+
+  // Classify
+  const groups = React.useMemo(() => {
+    const g: Record<string, any[]> = { '1': [], '2': [], '3': [], '4': [], '5': [], unclassified: [] };
+    (assets || []).forEach(a => {
+      const lvl = getAssetRiskLevel(a);
+      if (lvl == null) g.unclassified.push(a);
+      else g[String(lvl)].push(a);
+    });
+    return g;
+  }, [assets]);
+
+  const grand = assets.reduce((s, a) => s + Number(a.CurrentValue ?? a.currentValue ?? 0), 0) || 0;
+  const levelTotals: Record<number, number> = {};
+  const levelCounts: Record<number, number> = {};
+  for (let i=1;i<=5;i++){
+    const list = groups[String(i)] || [];
+    levelTotals[i] = list.reduce((s,a)=>s+Number(a.CurrentValue ?? a.currentValue ?? 0),0);
+    levelCounts[i] = list.length;
+  }
+  const unclassifiedCount = groups.unclassified.length;
+  const hasData = assets.length > 0 && grand > 0;
+  const weightedSafety = hasData ? Math.round(( [1,2,3,4,5].reduce((sum,lvl)=> sum + (levelTotals[lvl]||0) * (RISK_LEVEL_META[lvl as RiskLevelId].scoreMid),0) / grand )) : null;
+  const safetyLabel = weightedSafety==null ? null : weightedSafety>=80 ? t('Rất an toàn') : weightedSafety>=65 ? t('Khá an toàn') : weightedSafety>=45 ? t('Cân bằng') : weightedSafety>=25 ? t('Rủi ro cao') : t('Rủi ro rất cao');
+
+  // Interpretation - neutral
+  let interpretation = '';
+  if (hasData) {
+    const maxLvl = [1,2,3,4,5].reduce((a,b)=> levelTotals[a] > levelTotals[b] ? a : b, 1);
+    const maxPct = grand>0 ? (levelTotals[maxLvl]/grand)*100 : 0;
+    const meta = RISK_LEVEL_META[maxLvl as RiskLevelId];
+    interpretation = t('Phần lớn tài sản đang nằm ở nhóm') + ` ${meta.label.toLowerCase()} (${maxPct.toFixed(1)}%).`;
+    // Add secondary note about safety concentration
+    const safePct = grand>0 ? ((levelTotals[1]+levelTotals[2])/grand)*100 : 0;
+    if (safePct < 20 && weightedSafety!=null && weightedSafety < 45) {
+      interpretation += ' ' + t('Tỷ trọng an toàn hiện ở mức thấp.');
+    } else if (safePct > 50) {
+      interpretation += ' ' + t('Cấu trúc thiên về an toàn.');
+    }
+  }
+
+  const handleLevelClick = (lvl: RiskLevelId) => {
+    setActiveLevel(prev => prev===lvl ? null : lvl);
+    setModalLevel(lvl);
+  };
+
+  const handleAssetHover = (e: React.MouseEvent, asset: any, level: RiskLevelId) => {
+    if (!asset) { setHoveredAsset(null); return; }
+    setHoveredAsset({ asset, level, x: (e as any).clientX, y: (e as any).clientY });
+  };
+
+  // close tooltip on scroll
+  useEffect(() => {
+    const onScroll = () => setHoveredAsset(null);
+    window.addEventListener('scroll', onScroll, true);
+    return () => window.removeEventListener('scroll', onScroll, true);
+  }, []);
+
+  const levelOrderTopToBottom: RiskLevelId[] = [5,4,3,2,1];
+  const widthMap: Record<number,string> = {5:'w5',4:'w4',3:'w3',2:'w2',1:'w1'};
+
+  return (
+    <div className="pyramid-card" role="region" aria-label={t('Tháp Tài Sản')}>
+      <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:12, flexWrap:'wrap' }}>
+        <div>
+          <div className="pyramid-card-title">
+            <span style={{ width:22, height:22, borderRadius:7, background:'rgba(124,92,255,0.12)', border:'1px solid rgba(124,92,255,0.16)', display:'inline-flex', alignItems:'center', justifyContent:'center', color:'#9B7CFF' }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            </span>
+            {t('THÁP TÀI SẢN')}
+            <span style={{ fontSize:11, fontWeight:600, letterSpacing:'0.08em', color:'var(--text-muted)', textTransform:'uppercase' }}>• {t('Tháp rủi ro')}</span>
+          </div>
+          <div className="pyramid-card-sub">{t('Phân bổ tài sản theo mức độ an toàn — đáy càng rộng, nền tảng càng vững.')}</div>
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+          <span style={{ fontSize:11, color:'var(--text-muted)', background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.06)', padding:'5px 9px', borderRadius:999 }}>{assets.length} {t('tài sản')} • {hasData ? `${formatCompactValue(grand)} ₫` : '—'}</span>
+          {unclassifiedCount>0 && <span style={{ fontSize:11, color:'#F5A623', background:'rgba(245,166,35,0.10)', border:'1px solid rgba(245,166,35,0.16)', padding:'5px 9px', borderRadius:999 }}>{unclassifiedCount} {t('chưa phân loại')}</span>}
+        </div>
+      </div>
+
+      <div className="pyramid-layout">
+        {/* LEFT: pyramid */}
+        <div className="pyramid-visual">
+          {assets.length===0 ? (
+            <div className="asset-history-empty" style={{ minHeight:260 }}>
+              <div className="asset-history-empty-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div>
+              <div className="asset-history-empty-title">{t('Chưa có tài sản')}</div>
+              <div className="asset-history-empty-desc">{t('Thêm tài sản để xem tháp phân bổ rủi ro.')}</div>
+            </div>
+          ) : (
+            <div className="pyramid-stack" role="list" aria-label={t('Tháp rủi ro 5 tầng')}>
+              {levelOrderTopToBottom.map((lvl) => {
+                const meta = RISK_LEVEL_META[lvl];
+                const list = groups[String(lvl)] || [];
+                const tot = levelTotals[lvl] || 0;
+                const pct = grand>0 ? (tot/grand)*100 : 0;
+                const isActive = activeLevel===lvl;
+                return (
+                  <div
+                    key={lvl}
+                    role="listitem"
+                    tabIndex={0}
+                    aria-label={`${meta.label} ${pct.toFixed(1)}% ${list.length} ${t('tài sản')}`}
+                    className={`pyramid-level trapezoid l${lvl} ${widthMap[lvl]} ${isActive?'active':''}`}
+                    onClick={()=>handleLevelClick(lvl)}
+                    onKeyDown={(e)=>{ if(e.key==='Enter'||e.key===' ') { e.preventDefault(); handleLevelClick(lvl); }}}
+                    onMouseEnter={()=> setActiveLevel(lvl)}
+                    onMouseLeave={()=> setActiveLevel(null)}
+                    title={`${t('MỨC')} ${lvl} — ${meta.label} • ${list.length} ${t('tài sản')} • ${showAmounts?formatCurrency(tot)+' ₫':'•••'} • ${pct.toFixed(1)}%`}
+                  >
+                    <div className="pyramid-level-head">
+                      <div className="pyramid-level-label">
+                        <div className={`pyramid-level-title l${lvl}`}>
+                          <span style={{ fontSize:14, lineHeight:1 }}>{meta.icon}</span>
+                          {t('MỨC')} {lvl} • {meta.label}
+                          <span style={{ fontWeight:400, opacity:0.85, letterSpacing:'0.02em', textTransform:'none', fontSize:11, color:'var(--text-muted)' }}>{meta.riskText}</span>
+                        </div>
+                        <div className="pyramid-level-sub">{list.length} {t('tài sản')} • {pct.toFixed(1)}% {t('tổng tài sản')}</div>
+                      </div>
+                      <div className="pyramid-level-amount">
+                        <div className="pyramid-level-value">{showAmounts ? `${formatCompactValue(tot)} ₫` : '•••'}</div>
+                        <div className="pyramid-level-pct">{list.length ? `${showAmounts?formatCurrency(tot):'•••'} ₫` : t('Trống')}</div>
+                      </div>
+                    </div>
+                    {list.length>0 ? (
+                      <div className="pyramid-assets">
+                        {list.map((a:any)=> <AssetRiskChip key={a.Id||a.id||a.Name} asset={a} level={lvl} showAmounts={showAmounts} onHover={handleAssetHover} />)}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize:11, color:'var(--text-muted)', marginTop:8, fontStyle:'italic' }}>{t('Chưa có tài sản ở mức này')}</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {/* subtle base glow */}
+          <div aria-hidden style={{ marginTop:10, width:'96%', height:1, background:'linear-gradient(90deg, transparent, rgba(124,92,255,0.14), transparent)' }} />
+        </div>
+
+        {/* RIGHT: summary */}
+        <div className="pyramid-summary">
+          {weightedSafety!=null ? (
+            <div className="pyramid-safety">
+              <div className="pyramid-safety-ring">
+                <svg width="84" height="84" viewBox="0 0 84 84">
+                  <circle cx="42" cy="42" r="36" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="8" />
+                  <circle
+                    cx="42" cy="42" r="36" fill="none"
+                    stroke={weightedSafety>=65 ? '#18C995' : weightedSafety>=45 ? '#7C5CFF' : weightedSafety>=25 ? '#F5A623' : '#FF4D67'}
+                    strokeWidth="8" strokeLinecap="round"
+                    strokeDasharray={`${(weightedSafety/100)*226.19} 226.19`}
+                    transform="rotate(-90 42 42)"
+                    style={{ transition:'stroke-dasharray 700ms ease-out' }}
+                  />
+                </svg>
+                <div className="pyramid-safety-center">
+                  <div className="pyramid-safety-score">{weightedSafety}</div>
+                  <div className="pyramid-safety-max">/100</div>
+                </div>
+              </div>
+              <div style={{ minWidth:0, flex:1 }}>
+                <div className="pyramid-safety-label">{t('Chỉ số an toàn tài sản')}</div>
+                <div className="pyramid-safety-status" style={{ color: weightedSafety>=65 ? '#18C995' : weightedSafety>=45 ? '#9B7CFF' : weightedSafety>=25 ? '#F5A623' : '#FF4D67' }}>{safetyLabel}</div>
+                <div className="pyramid-safety-desc">{t('Chỉ báo cấu trúc danh mục, không phải dự báo lợi nhuận.')}</div>
+                <div style={{ display:'flex', gap:6, marginTop:8, flexWrap:'wrap' }}>
+                  <span style={{ fontSize:10, padding:'3px 7px', borderRadius:999, background: weightedSafety>=80 ? 'rgba(24,201,149,0.10)' : weightedSafety>=65 ? 'rgba(24,201,149,0.10)' : weightedSafety>=45 ? 'rgba(124,92,255,0.10)' : 'rgba(255,77,103,0.10)', color: weightedSafety>=65 ? '#18C995' : weightedSafety>=45 ? '#9B7CFF' : '#FF4D67', border:'1px solid currentColor', opacity:0.9 }}>{weightedSafety>=80?t('Rất an toàn'):weightedSafety>=65?t('Khá an toàn'):weightedSafety>=45?t('Cân bằng'):weightedSafety>=25?t('Rủi ro cao'):t('Rủi ro rất cao')}</span>
+                  <span style={{ fontSize:11, color:'var(--text-muted)' }}>{assets.length} {t('tài sản')} • {hasData? `${((levelTotals[1]+levelTotals[2])/grand*100).toFixed(1)}% ${t('an toàn')}`:''}</span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="pyramid-safety" style={{ justifyContent:'center', textAlign:'center' }}>
+              <div style={{ fontSize:13, color:'var(--text-muted)' }}>{t('Chưa đủ dữ liệu để tính chỉ số an toàn')}</div>
+            </div>
+          )}
+
+          <div className="pyramid-dist">
+            <div className="pyramid-dist-title">{t('Cấu trúc tài sản')}</div>
+            {[1,2,3,4,5].map(lvl=>{
+              const meta = RISK_LEVEL_META[lvl as RiskLevelId];
+              const tot = levelTotals[lvl]||0;
+              const pctVal = grand>0 ? (tot/grand)*100 : 0;
+              return (
+                <div key={lvl} className="pyramid-dist-row" style={{ borderLeft:`3px solid ${meta.color}` }}>
+                  <span className="pyramid-dist-dot" style={{ background:meta.color, boxShadow:`0 0 8px ${meta.color}66` }} />
+                  <span className="pyramid-dist-name">{meta.label}<span style={{ fontWeight:400, color:'var(--text-muted)', marginLeft:6, fontSize:11 }}>{meta.riskText}</span></span>
+                  <span className="pyramid-dist-bar"><span className="pyramid-dist-fill" style={{ width:`${pctVal}%`, background: meta.color }} /></span>
+                  <span className="pyramid-dist-pct">{pctVal.toFixed(1)}%</span>
+                  <span className="pyramid-dist-val">{showAmounts? `${formatCompactValue(tot)} ₫`:'•••'}</span>
+                </div>
+              );
+            })}
+          </div>
+
+          {hasData && interpretation && (
+            <div className="pyramid-interpret"><b>{t('Nhận xét')}:</b> {interpretation} <span style={{ color:'var(--text-muted)', fontSize:11 }}></span></div>
+          )}
+
+          <div style={{ fontSize:11, color:'var(--text-muted)', lineHeight:1.5, borderTop:'1px solid rgba(255,255,255,0.06)', paddingTop:10 }}>
+            {t('Tháp là công cụ trực quan, không phải khuyến nghị đầu tư.')}
+            <span style={{ display:'block', marginTop:4, color:'var(--text-faint)', fontSize:10 }}>{t('Nhấn vào từng tầng để xem chi tiết • Di chuột vào tài sản để xem thông tin')}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Level detail modal */}
+      {modalLevel!=null && (
+        <div className="pyramid-modal-overlay" onClick={()=>setModalLevel(null)}>
+          <div className="pyramid-modal" onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label={`${RISK_LEVEL_META[modalLevel].label}`}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12 }}>
+              <div>
+                <div style={{ fontSize:11, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--text-muted)', fontWeight:700 }}>{t('MỨC')} {modalLevel} — {RISK_LEVEL_META[modalLevel].label}</div>
+                <div style={{ fontSize:13, color:'var(--text-secondary)', marginTop:2 }}>{RISK_LEVEL_META[modalLevel].riskText} • {RISK_LEVEL_META[modalLevel].desc}</div>
+                <div style={{ fontSize:12, color:'var(--text-muted)', marginTop:6, fontFamily:'var(--font-mono)' }}>
+                  {levelCounts[modalLevel]||0} {t('tài sản')} • {showAmounts?formatCurrency(levelTotals[modalLevel]||0)+' ₫':'•••'} • {grand>0? ((levelTotals[modalLevel]||0)/grand*100).toFixed(1):'0'}% {t('tổng tài sản')}
+                </div>
+              </div>
+              <button onClick={()=>setModalLevel(null)} style={{ width:32, height:32, borderRadius:9, border:'1px solid var(--border)', background:'rgba(255,255,255,0.04)', color:'var(--text-muted)', cursor:'pointer' }}>✕</button>
+            </div>
+            <div style={{ marginTop:14, display:'flex', flexDirection:'column', gap:8, maxHeight:360, overflowY:'auto' }}>
+              {(groups[String(modalLevel)]||[]).length===0 ? (
+                <div style={{ textAlign:'center', padding:24, color:'var(--text-muted)', fontSize:13 }}>{t('Chưa có tài sản ở mức này')}</div>
+              ) : (
+                (groups[String(modalLevel)]||[]).map((a:any)=>{
+                  const v = Number(a.CurrentValue ?? a.currentValue ?? 0);
+                  const alloc = grand>0 ? (v/grand)*100 : 0;
+                  const safety = getAssetSafetyScore(modalLevel);
+                  return (
+                    <div key={a.Id||a.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, padding:'10px 12px', background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:12 }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:10, minWidth:0 }}>
+                        <span className="pyramid-asset-chip-icon" style={{ width:28, height:28, borderRadius:8, background: RISK_LEVEL_META[modalLevel].bg, borderColor: RISK_LEVEL_META[modalLevel].color+'33', color: RISK_LEVEL_META[modalLevel].color, display:'inline-flex', alignItems:'center', justifyContent:'center' }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="10"/></svg>
+                        </span>
+                        <div style={{ minWidth:0 }}>
+                          <div style={{ fontWeight:600, fontSize:13, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:180 }}>{a.Name||a.name}</div>
+                          <div style={{ fontSize:11, color:'var(--text-muted)' }}>{a.Type||a.type||'—'} • {safety? `${t('An toàn')} ${safety}/100`:''}</div>
+                        </div>
+                      </div>
+                      <div style={{ textAlign:'right' }}>
+                        <div style={{ fontFamily:'var(--font-mono)', fontWeight:650, fontSize:13 }}>{showAmounts?formatCurrency(v)+' ₫':'•••'}</div>
+                        <div style={{ fontSize:11, color:'var(--text-muted)', fontFamily:'var(--font-mono)' }}>{alloc.toFixed(1)}% {t('tài sản')}</div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Asset hover tooltip */}
+      {hoveredAsset && (
+        <div className="pyramid-asset-tooltip" style={{ left: Math.min(window.innerWidth-280, hoveredAsset.x+14), top: Math.min(window.innerHeight-160, hoveredAsset.y+14) }}>
+          <div className="pyramid-asset-tooltip-title">{hoveredAsset.asset.Name||hoveredAsset.asset.name}</div>
+          <div className="pyramid-asset-tooltip-row"><span>{t('Loại')}</span><b>{hoveredAsset.asset.Type||hoveredAsset.asset.type||'—'}</b></div>
+          <div className="pyramid-asset-tooltip-row"><span>{t('Giá trị hiện tại')}</span><b>{showAmounts? formatCurrency(Number(hoveredAsset.asset.CurrentValue??hoveredAsset.asset.currentValue??0))+' ₫':'•••'}</b></div>
+          <div className="pyramid-asset-tooltip-row"><span>{t('Phân bổ')}</span><b>{grand>0? ((Number(hoveredAsset.asset.CurrentValue??hoveredAsset.asset.currentValue??0)/grand)*100).toFixed(1):'0'}%</b></div>
+          <div className="pyramid-asset-tooltip-row"><span>{t('Rủi ro')}</span><b style={{ color: RISK_LEVEL_META[hoveredAsset.level].color }}>{RISK_LEVEL_META[hoveredAsset.level].label} • {RISK_LEVEL_META[hoveredAsset.level].riskText}</b></div>
+          {getAssetSafetyScore(hoveredAsset.level)!=null && <div className="pyramid-asset-tooltip-row"><span>{t('Điểm an toàn')}</span><b>{getAssetSafetyScore(hoveredAsset.level)}/100</b></div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // 3. DASHBOARD COMPONENT — Premium Fintech Command Center
 function DashboardPage({ 
   totalCurrent, 
@@ -1730,6 +2108,9 @@ function DashboardPage({
           )}
         </div>
       </div>
+
+      {/* THÁP TÀI SẢN — Asset Risk Pyramid */}
+      <AssetRiskPyramid assets={assets} showAmounts={showAmounts} />
 
       {/* Analytics 8/4 — Growth (premium) + Allocation */}
       <div className="analytics-grid">

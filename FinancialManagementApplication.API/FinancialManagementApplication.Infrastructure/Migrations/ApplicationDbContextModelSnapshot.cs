@@ -148,6 +148,9 @@ namespace FinancialManagementApplication.Infrastructure.Migrations
                     b.Property<decimal>("CurrentValue")
                         .HasColumnType("numeric");
 
+                    b.Property<int?>("Group")
+                        .HasColumnType("integer");
+
                     b.Property<decimal>("InitialValue")
                         .HasColumnType("numeric");
 
