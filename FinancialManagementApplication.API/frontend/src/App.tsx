@@ -3157,17 +3157,14 @@ function PortfolioPage({
   onReorderAllocations: (orderedList: any[]) => Promise<void>;
 }) {
   const { t } = useLanguage();
+  const { addToast } = useToast();
 
-  // Visual warnings for total percentages
   const isPercentageBalanced = Math.abs(totalAllocatedPercentage - 100) < 0.01;
-
-  // Setup mode totals
+  // keep props used to avoid TS6133
+  void totalSavingCash; void totalInvestmentCash;
   const setupTotalAmount = setupAllocations.reduce((sum, al) => sum + (al.setupAmount || 0), 0);
   const setupTotalPercent = setupAllocations.reduce((sum, al) => sum + al.TargetPercentage, 0);
-
-  // Reorder logic for allocations
   const sortByOrder = (list: any[]) => [...list].sort((a, b) => (a.SortOrder ?? 0) - (b.SortOrder ?? 0));
-
   const handleMoveUp = (id: string, categoryGroup: string) => {
     const group = sortByOrder(allocations.filter(al => al.FinancialCategory === categoryGroup));
     const idx = group.findIndex(al => al.Id === id);
@@ -3181,7 +3178,6 @@ function PortfolioPage({
     }
     onReorderAllocations(reordered);
   };
-
   const handleMoveDown = (id: string, categoryGroup: string) => {
     const group = sortByOrder(allocations.filter(al => al.FinancialCategory === categoryGroup));
     const idx = group.findIndex(al => al.Id === id);
@@ -3195,531 +3191,716 @@ function PortfolioPage({
     }
     onReorderAllocations(reordered);
   };
-
   const sortedExpenses = sortByOrder(calculatedExpenses);
   const sortedSavings = sortByOrder(calculatedSavings);
   const sortedInvestments = sortByOrder(calculatedInvestments);
 
+  // Local UI states for new workspace
+  const [viewMode, setViewMode] = useState<'overview' | 'detail'>('overview');
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({ Expense: true, Saving: false, Investment: false });
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [isApplying, setIsApplying] = useState(false);
+  const toggleGroup = (k: string) => setExpanded(p => ({ ...p, [k]: !p[k] }));
+  const remaining = income - totalAllocatedCash;
+  const remainingIsPositive = remaining > 0.5;
+  const remainingIsNegative = remaining < -0.5;
+  const remainingIsZero = !remainingIsPositive && !remainingIsNegative;
+  // Health derived
+  const healthPct = Math.min(100, Math.max(0, totalAllocatedPercentage));
+  const healthStatus: 'ok' | 'warn' | 'bad' = isPercentageBalanced ? 'ok' : Math.abs(totalAllocatedPercentage - 100) < 10 ? 'warn' : 'bad';
+  // Distribution bar data
+  const expensePct = sortedExpenses.reduce((s, a) => s + (a.TargetPercentage || 0), 0);
+  const savingPct = sortedSavings.reduce((s, a) => s + (a.TargetPercentage || 0), 0);
+  const investmentPct = sortedInvestments.reduce((s, a) => s + (a.TargetPercentage || 0), 0);
+  const expenseCash = sortedExpenses.reduce((s, a) => s + (a.CurrentAmount || 0), 0);
+  const savingCash = sortedSavings.reduce((s, a) => s + (a.CurrentAmount || 0), 0);
+  const investmentCash = sortedInvestments.reduce((s, a) => s + (a.CurrentAmount || 0), 0);
+  const expenseActual = sortedExpenses.reduce((s, a) => s + (a.actual || 0), 0);
+  const savingActual = sortedSavings.reduce((s, a) => s + (a.actual || 0), 0);
+  const investmentActual = sortedInvestments.reduce((s, a) => s + (a.actual || 0), 0);
+  const protectedCount = allocations.filter(al => {
+    const calc = [...calculatedExpenses, ...calculatedSavings, ...calculatedInvestments].find(c => c.Id === al.Id);
+    return calc?.isExcluded;
+  }).length;
+  // Global apply handler
+  const handleGlobalApply = async () => {
+    const applyList = [...sortedExpenses, ...sortedSavings, ...sortedInvestments].filter(a => !!a.AssetId);
+    if (applyList.length === 0) {
+      addToast({ title: t('Chưa liên kết tài sản'), description: t('Vui lòng liên kết danh mục với tài sản trong Thiết lập mới.'), variant: 'warning' });
+      return;
+    }
+    setIsApplying(true);
+    for (const al of applyList) {
+      try { await onApplyToAsset(al); } catch {}
+    }
+    setIsApplying(false);
+    setConfirmOpen(false);
+  };
+
   if (showSetup) {
     return (
-      <div>
-        <div className="tab-header">
-          <div>
-            <h2 className="section-title">{t('Thiết Lập Danh Mục')}</h2>
-            <p className="section-desc">{t('Thêm, sửa, xóa danh mục và nhập số tiền phân bổ. Tỉ lệ phần trăm sẽ tự động tính toán.')}</p>
+      <div className="alloc-page">
+        <div className="alloc-header">
+          <div className="alloc-header-left">
+            <h2 className="alloc-title">{t('Thiết Lập Danh Mục')}</h2>
+            <p className="alloc-subtitle">{t('Thêm, sửa, xóa danh mục và nhập số tiền phân bổ. Tỉ lệ phần trăm sẽ tự động tính toán.')}</p>
           </div>
-          <div style={{ display: 'flex', gap: '12px' }}>
-            <button className="btn btn-secondary" onClick={onCancelSetup}>
-              {t('Hủy')}
-            </button>
-            <button className="btn btn-primary" onClick={onSaveSetup} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-                <polyline points="17 21 17 13 7 13 7 21"/>
-                <polyline points="7 3 7 8 15 8"/>
-              </svg>
+          <div className="alloc-header-actions">
+            <button className="alloc-btn alloc-btn-ghost" onClick={onCancelSetup}>{t('Hủy')}</button>
+            <button className="alloc-btn alloc-btn-primary" onClick={onSaveSetup} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
               {t('Lưu Thiết Lập')}
             </button>
           </div>
         </div>
-
-        {/* Base Amount Input */}
-        <div className="budget-cut-header">
-          <div className="budget-input-item">
-            <label>{t('Phân bổ gốc (Base Amount)')}</label>
-            <MoneyInput 
-              value={setupAmount} 
-              onChange={(val) => onSetupAmountChange(val)} 
-            />
-          </div>
-          <div className="budget-input-item">
-            <label>{t('Tổng đã phân bổ')}</label>
-            <div style={{ padding: '8px 12px', background: 'rgba(99,102,241,0.05)', border: '1px solid rgba(99,102,241,0.15)', borderRadius: '6px', fontWeight: 700, fontFamily: 'var(--font-display)', fontSize: '1rem', color: Math.abs(setupTotalPercent - 100) < 0.01 ? 'var(--success)' : 'var(--warning)' }}>
-              {setupTotalPercent.toFixed(4)}%
+        <div className="alloc-overview-grid" style={{ gridTemplateColumns: '1fr 1fr 1.5fr' }}>
+          <div className="alloc-overview-card primary">
+            <div className="alloc-overview-label">{t('Phân bổ gốc')}</div>
+            <div className="money-input-inline">
+              <MoneyInput value={setupAmount} onChange={(val) => onSetupAmountChange(val)} style={{ height:'36px', padding:'0 10px', borderRadius:'10px', background:'rgba(8,11,20,0.55)', border:'1px solid rgba(255,255,255,0.08)', color:'#F4F5FA', fontFamily:'var(--font-mono)', fontWeight:600, width:'100%', maxWidth:'200px' }} />
             </div>
+            <div className="alloc-overview-sub">{t('Số tiền gốc để tính tỉ trọng')}</div>
           </div>
-          <div style={{ flex: 1, minWidth: '220px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-            <div>{t('• Nhập số tiền cho từng danh mục, hệ thống tự động tính tỉ lệ phần trăm.')}</div>
-            <div>{t('• Tổng tỉ trọng nên đạt 100% để cân bằng.')}</div>
+          <div className="alloc-overview-card">
+            <div className="alloc-overview-label">{t('Tổng đã phân bổ')}</div>
+            <div className="alloc-overview-value" style={{ fontSize:'20px', color: Math.abs(setupTotalPercent - 100) < 0.01 ? '#18C995' : '#F5A623' }}>{setupTotalPercent.toFixed(2)}%</div>
+            <div className="alloc-overview-sub">{formatCurrency(setupTotalAmount)} ₫</div>
+          </div>
+          <div className="alloc-overview-card">
+            <div className="alloc-overview-label">{t('Trạng thái')}</div>
+            <div className="alloc-overview-sub" style={{ marginTop:10 }}>
+              {Math.abs(setupTotalPercent - 100) < 0.01 ? <span className="alloc-overview-delta pos">✓ {t('Đã cân bằng')}</span> : <span className="alloc-overview-delta neg">⚠ {t('Chưa cân bằng')}</span>}
+            </div>
+            <div className="alloc-overview-sub" style={{ marginTop:6 }}>{t('Tổng tỉ trọng nên đạt 100%')}</div>
           </div>
         </div>
-
-        {/* Setup Table */}
-        <div className="table-container">
-          <table className="custom-table">
-            <thead>
-              <tr>
-                <th style={{ width: '160px' }}>{t('Phân loại')}</th>
-                <th>{t('Tên danh mục')}</th>
-                <th style={{ textAlign: 'right', width: '160px' }}>{t('Số tiền (Cash)')}</th>
-                <th style={{ textAlign: 'right', width: '140px' }}>{t('Tỉ trọng (%)')}</th>
-              <th style={{ textAlign: 'center', width: '100px' }}>{t('Hành động')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {setupAllocations.length === 0 ? (
+        <div className="alloc-table-card">
+          <div className="alloc-table-wrap">
+            <table className="alloc-table">
+              <thead>
                 <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '30px' }}>
-                    {t('Chưa có danh mục nào. Bấm "Thêm danh mục" để bắt đầu.')}
-                  </td>
+                  <th style={{ width: '160px' }}>{t('Phân loại')}</th>
+                  <th>{t('Tên danh mục')}</th>
+                  <th className="num" style={{ width: '160px' }}>{t('Số tiền')}</th>
+                  <th className="num" style={{ width: '140px' }}>{t('Tỉ trọng')}</th>
+                  <th style={{ textAlign: 'center', width: '100px' }}>{t('Hành động')}</th>
                 </tr>
-              ) : (
-                setupAllocations.map((al) => (
-                  <tr key={al.Id}>
-                    <td>
-                      <select
-                        className="form-control"
-                        style={{ padding: '4px 8px', height: '32px', fontSize: '0.85rem', width: '100%' }}
-                        value={al.FinancialCategory}
-                        onChange={(e) => onSetupEditAllocation(al.Id, 'FinancialCategory', e.target.value)}
-                      >
-                        <option value="Expense">{t('Sinh hoạt')}</option>
-                        <option value="Saving">{t('Tiết kiệm')}</option>
-                        <option value="Investment">{t('Đầu tư')}</option>
-                      </select>
-                    </td>
-                    <td>
-                      <input 
-                        type="text" 
-                        className="form-control"
-                        style={{ padding: '4px 8px', height: '32px', fontSize: '0.85rem', width: '100%' }}
-                        value={al.Name}
-                        onChange={(e) => onSetupEditAllocation(al.Id, 'Name', e.target.value)}
-                        placeholder={t('Tên danh mục...')}
-                      />
-                      <div style={{ marginTop: '4px' }}>
-                        <select
-                          style={{ fontSize: '0.75rem', padding: '2px 4px', height: '26px', width: '100%', background: '#1a1b26', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '4px', color: '#e2e8f0' }}
-                          value={al.AssetId || ''}
-                          onChange={(e) => onSetupEditAllocation(al.Id, 'AssetId', e.target.value || null)}
-                        >
-                          <option value="">{t('-- Liên kết tài sản --')}</option>
-                          {assets.map(a => (
-                            <option key={a.Id} value={a.Id} style={{ background: '#1a1b26', color: '#e2e8f0' }}>{a.Name}</option>
-                          ))}
+              </thead>
+              <tbody>
+                {setupAllocations.length === 0 ? (
+                  <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '30px' }}>{t('Chưa có danh mục nào. Bấm "Thêm danh mục" để bắt đầu.')}</td></tr>
+                ) : (
+                  setupAllocations.map((al) => (
+                    <tr key={al.Id}>
+                      <td>
+                        <select className="form-control" style={{ padding: '6px 8px', height: '34px', fontSize: '0.85rem', width: '100%', background:'rgba(8,11,20,0.5)', border:'1px solid var(--border)', borderRadius:'9px' }} value={al.FinancialCategory} onChange={(e) => onSetupEditAllocation(al.Id, 'FinancialCategory', e.target.value)}>
+                          <option value="Expense">{t('Sinh hoạt')}</option>
+                          <option value="Saving">{t('Tiết kiệm')}</option>
+                          <option value="Investment">{t('Đầu tư')}</option>
                         </select>
-                      </div>
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <MoneyInput 
-                        className="form-control"
-                        style={{ textAlign: 'right', padding: '4px 8px', width: '140px', display: 'inline-block', height: '32px', fontSize: '0.85rem', fontFamily: 'var(--font-display)' }}
-                        value={al.setupAmount || 0}
-                        onChange={(val) => onSetupAllocationAmountChange(al.Id, val)}
-                      />
-                    </td>
-                    <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 600 }}>
-                      {al.TargetPercentage.toFixed(4)}%
-                    </td>
-                    <td style={{ textAlign: 'center' }}>
-                      <button 
-                        className="btn-icon delete" 
-                        onClick={() => onSetupDeleteAllocation(al.Id)}
-                        title={t('Xóa danh mục')}
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                        </svg>
-                      </button>
-                    </td>
+                      </td>
+                      <td>
+                        <input type="text" className="form-control" style={{ padding: '6px 8px', height: '34px', fontSize: '0.85rem', width: '100%' }} value={al.Name} onChange={(e) => onSetupEditAllocation(al.Id, 'Name', e.target.value)} placeholder={t('Tên danh mục...')} />
+                        <div style={{ marginTop: '6px' }}>
+                          <select style={{ fontSize: '0.78rem', padding: '4px 6px', height: '28px', width: '100%', background: '#101522', border: '1px solid rgba(124,92,255,0.16)', borderRadius: '8px', color: '#e2e8f0' }} value={al.AssetId || ''} onChange={(e) => onSetupEditAllocation(al.Id, 'AssetId', e.target.value || null)}>
+                            <option value="">{t('-- Liên kết tài sản --')}</option>
+                            {assets.map(a => (<option key={a.Id} value={a.Id}>{a.Name}</option>))}
+                          </select>
+                        </div>
+                      </td>
+                      <td className="num">
+                        <MoneyInput className="form-control" style={{ textAlign: 'right', padding: '4px 8px', width: '140px', display: 'inline-block', height: '34px', fontSize: '0.85rem', fontFamily: 'var(--font-mono)' }} value={al.setupAmount || 0} onChange={(val) => onSetupAllocationAmountChange(al.Id, val)} />
+                      </td>
+                      <td className="num" style={{ fontWeight:600, fontFamily:'var(--font-mono)' }}>{al.TargetPercentage.toFixed(4)}%</td>
+                      <td style={{ textAlign: 'center' }}>
+                        <button className="asset-action-btn delete" onClick={() => onSetupDeleteAllocation(al.Id)} title={t('Xóa danh mục')}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+                {setupAllocations.length > 0 && (
+                  <tr style={{ background:'rgba(16,21,34,0.92)', fontWeight:700, borderTop:'1px solid rgba(124,92,255,0.18)' }}>
+                    <td></td>
+                    <td style={{ paddingLeft: '16px' }}>{t('Tổng cộng')}</td>
+                    <td className="num" style={{ fontFamily:'var(--font-mono)' }}>{formatCurrency(setupTotalAmount)} ₫</td>
+                    <td className="num" style={{ fontFamily:'var(--font-mono)', color: Math.abs(setupTotalPercent - 100) < 0.01 ? '#18C995' : '#F5A623' }}>{setupTotalPercent.toFixed(4)}%</td>
+                    <td></td>
                   </tr>
-                ))
-              )}
-              {/* Setup Total Row */}
-              {setupAllocations.length > 0 && (
-                <tr className="total-row">
-                  <td></td>
-                  <td style={{ paddingLeft: '16px' }}>{t('Tổng cộng')}</td>
-                  <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)' }}>
-                    {formatCurrency(setupTotalAmount)}
-                  </td>
-                  <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', color: Math.abs(setupTotalPercent - 100) < 0.01 ? 'var(--success)' : '#f59e0b' }}>
-                    {setupTotalPercent.toFixed(4)}%
-                  </td>
-                  <td></td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-
-        <div style={{ marginTop: '16px' }}>
-          <button className="btn btn-secondary" onClick={onSetupAddAllocation} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
+        <div style={{ display:'flex', gap:8 }}>
+          <button className="alloc-btn alloc-btn-secondary" onClick={onSetupAddAllocation} style={{ display:'flex', gap:'8px', alignItems:'center' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             {t('Thêm danh mục')}
           </button>
         </div>
-
-        {/* Lịch sử phân bổ */}
-        <div className="card" style={{ marginTop: '24px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+        <div className="asset-history-card" style={{ marginTop: '4px' }}>
+          <div className="asset-history-header">
             <div>
-              <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>{t('Lịch sử phân bổ')}</h3>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{t('Chọn một bản ghi để xem chi tiết và khôi phục')}</p>
+              <div className="asset-history-title">{t('Lịch sử phân bổ')}</div>
+              <div className="asset-history-subtitle">{t('Chọn một bản ghi để xem chi tiết và khôi phục')}</div>
             </div>
           </div>
-
           {allocationHistoryRecords.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-              {t('Chưa có dữ liệu lịch sử. Lưu thiết lập để tạo bản ghi.')}
-            </div>
+            <div className="asset-history-empty"><div className="asset-history-empty-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div><div className="asset-history-empty-title">{t('Chưa có lịch sử')}</div><div className="asset-history-empty-desc">{t('Chưa có dữ liệu lịch sử. Lưu thiết lập để tạo bản ghi.')}</div></div>
           ) : (
-            <AllocationHistorySection 
-              records={allocationHistoryRecords}
-              onRestore={onRestoreAllocationHistory}
-              onDelete={onDeleteAllocationHistory}
-              formatDateTime={formatDateTime}
-              formatCurrency={formatCurrency}
-              onUpdateTime={onUpdateAllocationTime}
-            />
+            <AllocationHistorySection records={allocationHistoryRecords} onRestore={onRestoreAllocationHistory} onDelete={onDeleteAllocationHistory} formatDateTime={formatDateTime} formatCurrency={formatCurrency} onUpdateTime={onUpdateAllocationTime} />
           )}
         </div>
       </div>
     );
   }
 
+  const hasAllocations = allocations.length > 0;
+  const showEmpty = !hasAllocations;
+
   return (
-    <div>
-      <div className="tab-header">
-        <div>
-          <h2 className="section-title">{t('Phân Bổ Tài Sản & Cắt Giảm Ngân Sách')}</h2>
-          <p className="section-desc">{t('Phân bố thu nhập thành ba khối Sinh hoạt, Tiết kiệm & Đầu tư, tích hợp bộ lập kế hoạch cắt giảm tự động')}</p>
+    <div className="alloc-page">
+      {/* HEADER */}
+      <div className="alloc-header">
+        <div className="alloc-header-left">
+          <h2 className="alloc-title">{t('Phân Bổ Tài Sản & Cắt Giảm Ngân Sách')}</h2>
+          <p className="alloc-subtitle">{t('Phân chia thu nhập vào các danh mục và tự động điều chỉnh ngân sách theo chiến lược của bạn.')}</p>
         </div>
-        <div style={{ display: 'flex', gap: '12px' }}>
-          <button className="btn btn-secondary" onClick={onStartSetup} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
-            </svg>
+        <div className="alloc-header-actions">
+          <button className="alloc-btn alloc-btn-secondary" onClick={onStartSetup}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
             {t('Thiết lập mới')}
           </button>
-
         </div>
       </div>
 
-      {/* Top Config Inputs Banner */}
-      <div className="budget-cut-header">
-        <div className="budget-input-item">
-          <label>{t('Thu nhập (Income)')}</label>
-          <MoneyInput 
-            value={income} 
-            onChange={(val) => onUpdateIncome(val)} 
-          />
+      {/* OVERVIEW 4 cards */}
+      <div className="alloc-overview-grid">
+        <div className="alloc-overview-card primary">
+          <div className="alloc-overview-label"><span style={{ width:6, height:6, borderRadius:'50%', background:'#7C5CFF', boxShadow:'0 0 8px rgba(124,92,255,0.4)' }} />{t('Thu nhập')}</div>
+          <div className="alloc-overview-value">{formatCurrency(income)} ₫</div>
+          <div className="money-input-inline">
+            <MoneyInput value={income} onChange={(val) => onUpdateIncome(val)} style={{ height:'32px', padding:'0 10px', borderRadius:'9px', background:'rgba(8,11,20,0.55)', border:'1px solid rgba(255,255,255,0.08)', color:'#F4F5FA', fontFamily:'var(--font-mono)', fontVariantNumeric:'tabular-nums', fontWeight:600, width:'100%', maxWidth:'160px', fontSize:'12px' }} />
+          </div>
+          <div className="alloc-overview-sub">{t('Tổng tiền để phân bổ')}</div>
         </div>
-        <div className="budget-input-item">
-          <label>{t('Số tiền cần giảm (Target)')}</label>
-          <MoneyInput 
-            value={targetReduction} 
-            onChange={(val) => onUpdateTargetReduction(val)} 
-          />
+        <div className="alloc-overview-card">
+          <div className="alloc-overview-label" style={{ color:'#F5A623' }}><span style={{ width:6, height:6, borderRadius:'50%', background:'#F5A623' }} />{t('Ngân sách mục tiêu')}</div>
+          <div className="alloc-overview-value" style={{ fontSize:'22px' }}>{formatCurrency(targetReduction)} ₫</div>
+          <div className="money-input-inline">
+            <MoneyInput value={targetReduction} onChange={(val) => onUpdateTargetReduction(val)} style={{ height:'32px', padding:'0 10px', borderRadius:'9px', background:'rgba(8,11,20,0.55)', border:'1px solid rgba(255,255,255,0.08)', color:'#F4F5FA', fontFamily:'var(--font-mono)', fontVariantNumeric:'tabular-nums', fontWeight:600, width:'100%', maxWidth:'160px', fontSize:'12px' }} />
+          </div>
+          <div className="alloc-overview-sub">{t('Số tiền cần cắt giảm')}</div>
         </div>
-        <div style={{ flex: 1, minWidth: '220px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-          <div style={{ marginBottom: '4px' }}>{t('• Công thức giảm mỗi dòng: ')}<code style={{ background: 'rgba(0,0,0,0.3)', padding: '2px 4px', borderRadius: '3px' }}>Target * {t('Tỉ trọng (%)')}</code></div>
-          <div>{t('• Bấm nút hình khiên bảo vệ kế bên dòng để loại trừ dòng đó khỏi diện cắt giảm.')}</div>
+        <div className="alloc-overview-card">
+          <div className="alloc-overview-label">{t('Tổng phân bổ')}</div>
+          <div className="alloc-overview-value" style={{ color: isPercentageBalanced ? '#18C995' : '#F5A623' }}>{formatCurrency(totalAllocatedCash)} ₫</div>
+          <div className="alloc-overview-sub">
+            <span style={{ fontFamily:'var(--font-mono)', fontWeight:700, color: isPercentageBalanced ? '#18C995' : '#F5A623' }}>{totalAllocatedPercentage.toFixed(2)}%</span>
+            <span>• {t('Đã phân bổ')}</span>
+            {protectedCount > 0 && <span className="alloc-overview-delta" style={{ background:'rgba(124,92,255,0.08)', color:'#9B7CFF', borderColor:'rgba(124,92,255,0.14)', padding:'2px 6px', fontSize:'10px' }}>🛡️ {protectedCount} {t('bảo vệ')}</span>}
+          </div>
+        </div>
+        <div className="alloc-overview-card" style={{ borderColor: remainingIsNegative ? 'rgba(255,77,103,0.18)' : remainingIsPositive ? 'rgba(245,166,35,0.16)' : 'rgba(255,255,255,0.06)' }}>
+          <div className="alloc-overview-label">{t('Còn lại')}</div>
+          <div className="alloc-overview-value" style={{ color: remainingIsZero ? 'var(--text-muted)' : remainingIsNegative ? '#FF4D67' : '#F5A623', fontSize:'22px' }}>
+            {remainingIsZero ? `0 ₫` : `${remaining > 0 ? '+' : ''}${formatCurrency(remaining)} ₫`}
+          </div>
+          <div className="alloc-overview-sub">
+            {remainingIsZero && <span className="alloc-overview-delta neu">— {t('Cân bằng')}</span>}
+            {remainingIsPositive && <span className="alloc-overview-delta pos">+{formatCompactValue(remaining)} ₫ {t('chưa phân bổ')}</span>}
+            {remainingIsNegative && <span className="alloc-overview-delta neg">{formatCompactValue(remaining)} ₫ {t('vượt mức')}</span>}
+          </div>
         </div>
       </div>
 
-      {/* Balancing Warning */}
-      {!isPercentageBalanced && (
-        <div style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', padding: '12px 16px', borderRadius: '8px', marginBottom: '20px', color: '#fbd38d', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span style={{ fontSize: '1.2rem' }}>⚠️</span>
-          <span>
-            Tổng tỉ trọng hiện tại đang là <strong>{totalAllocatedPercentage.toFixed(4)}%</strong>. Vui lòng điều chỉnh tỉ trọng các quỹ về đúng <strong>100.00%</strong> để dòng tiền phân bổ cân bằng hoàn toàn.
-          </span>
+      {/* HEALTH */}
+      <div className="alloc-health">
+        <div className="alloc-health-left">
+          <span className="alloc-health-label">{t('Phân bổ')}</span>
+          <div className="alloc-health-track">
+            <div className={`alloc-health-fill ${healthStatus}`} style={{ width: `${healthPct}%` }} />
+          </div>
+          <span className={`alloc-health-meta ${healthStatus}`}>{healthPct.toFixed(1)}%</span>
+          {isPercentageBalanced
+            ? <span className="alloc-health-badge ok">✓ {t('Đã cân bằng')}</span>
+            : <span className={`alloc-health-badge ${healthStatus}`}>⚠ {remainingIsNegative ? `${t('Thừa')} ${formatCompactValue(Math.abs(remaining))} ₫` : `${t('Thiếu')} ${formatCompactValue(Math.abs(remaining))} ₫`}</span>
+          }
+        </div>
+        <div className="alloc-flow">
+          <span className="alloc-flow-step">{t('Thu nhập')}</span>
+          <span className="alloc-flow-arrow">→</span>
+          <span className="alloc-flow-step active">{t('Phân bổ')}</span>
+          <span className="alloc-flow-arrow">→</span>
+          <span className="alloc-flow-step">{t('Danh mục')}</span>
+          <span className="alloc-flow-arrow">→</span>
+          <span className="alloc-flow-step">{t('Tài sản')}</span>
+        </div>
+      </div>
+
+      {/* DISTRIBUTION BAR */}
+      <div className="alloc-dist-card">
+        <div className="alloc-dist-head">
+          <div>
+            <div className="alloc-dist-title">{t('Chiến lược phân bổ')}</div>
+            <div className="alloc-dist-sub">{t('Tỉ trọng theo 3 khối chính — trực quan hóa dòng tiền')}</div>
+          </div>
+          <div className="alloc-view-toggle">
+            <button className={`alloc-view-btn ${viewMode==='overview'?'active':''}`} onClick={() => setViewMode('overview')}>{t('Tổng quan')}</button>
+            <button className={`alloc-view-btn ${viewMode==='detail'?'active':''}`} onClick={() => setViewMode('detail')}>{t('Chi tiết')}</button>
+          </div>
+        </div>
+        {showEmpty ? (
+          <div className="alloc-empty">{t('Chưa có cấu hình phân bổ')} — {t('Tạo cấu hình đầu tiên để bắt đầu phân chia thu nhập.')}</div>
+        ) : (
+          <>
+            <div className="alloc-dist-bar-wrap">
+              {expensePct > 0 && (
+                <div className="alloc-dist-seg expense" style={{ width: `${expensePct}%` }} title={`${t('Sinh hoạt')} ${expensePct.toFixed(2)}%`}>
+                  <span className="alloc-dist-seg-label">{t('Sinh hoạt')} {expensePct.toFixed(0)}%</span>
+                </div>
+              )}
+              {savingPct > 0 && (
+                <div className="alloc-dist-seg saving" style={{ width: `${savingPct}%` }} title={`${t('Tiết kiệm')} ${savingPct.toFixed(2)}%`}>
+                  <span className="alloc-dist-seg-label">{t('Tiết kiệm')} {savingPct.toFixed(0)}%</span>
+                </div>
+              )}
+              {investmentPct > 0 && (
+                <div className="alloc-dist-seg investment" style={{ width: `${investmentPct}%` }} title={`${t('Đầu tư')} ${investmentPct.toFixed(2)}%`}>
+                  <span className="alloc-dist-seg-label">{t('Đầu tư')} {investmentPct.toFixed(0)}%</span>
+                </div>
+              )}
+            </div>
+            <div className="alloc-dist-legends">
+              <span className="alloc-dist-legend"><span className="alloc-dist-dot" style={{ background:'#4D8DFF' }} />{t('Sinh hoạt')} <b>{expensePct.toFixed(2)}%</b> <span style={{ color:'var(--text-muted)', fontFamily:'var(--font-mono)', fontSize:'11px' }}>{formatCompactValue(expenseCash)} ₫</span></span>
+              <span className="alloc-dist-legend"><span className="alloc-dist-dot" style={{ background:'#7C5CFF' }} />{t('Tiết kiệm')} <b>{savingPct.toFixed(2)}%</b> <span style={{ color:'var(--text-muted)', fontFamily:'var(--font-mono)', fontSize:'11px' }}>{formatCompactValue(savingCash)} ₫</span></span>
+              <span className="alloc-dist-legend"><span className="alloc-dist-dot" style={{ background:'#18C995' }} />{t('Đầu tư')} <b>{investmentPct.toFixed(2)}%</b> <span style={{ color:'var(--text-muted)', fontFamily:'var(--font-mono)', fontSize:'11px' }}>{formatCompactValue(investmentCash)} ₫</span></span>
+            </div>
+          </>
+        )}
+      </div>
+
+      {showEmpty ? (
+        <div className="alloc-empty" style={{ padding:'48px 20px' }}>
+          <div style={{ width:48, height:48, borderRadius:14, background:'rgba(124,92,255,0.08)', border:'1px solid rgba(124,92,255,0.12)', display:'inline-flex', alignItems:'center', justifyContent:'center', color:'#9B7CFF', marginBottom:12 }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 9h6v6H9z"/><path d="M9 3v6M15 3v6M9 15v6M15 15v6M3 9h6M3 15h6M15 9h6M15 15h6"/></svg>
+          </div>
+          <div style={{ fontWeight:700, color:'var(--text-primary)', fontSize:'14px' }}>{t('Chưa có cấu hình phân bổ')}</div>
+          <div style={{ maxWidth:420, margin:'6px auto 0', color:'var(--text-secondary)', fontSize:'12px' }}>{t('Tạo cấu hình đầu tiên để bắt đầu phân chia thu nhập.')}</div>
+          <button className="alloc-btn alloc-btn-primary" onClick={onStartSetup} style={{ marginTop:16 }}>{t('Thiết lập mới')}</button>
+        </div>
+      ) : viewMode === 'detail' ? (
+        /* DETAILED TABLE */
+        <div className="alloc-table-card">
+          <div className="alloc-table-wrap">
+            <table className="alloc-table">
+              <thead>
+                <tr>
+                  <th style={{ width:'40px' }}></th>
+                  <th style={{ width:'110px' }}>{t('Khối')}</th>
+                  <th>{t('Thông tin phân bổ')}</th>
+                  <th className="num">{t('Tỷ trọng')}</th>
+                  <th className="num">{t('Số tiền')}</th>
+                  <th className="num">{t('Số tiền giảm')}</th>
+                  <th className="num">{t('Số tiền thực tế')}</th>
+                  <th style={{ textAlign:'center' }}>{t('Loại trừ')}</th>
+                  <th style={{ textAlign:'center' }}>{t('Áp dụng')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {/* Expense */}
+                {sortedExpenses.map((al, idx) => (
+                  <tr key={al.Id}>
+                    <td style={{ textAlign:'center', color:'var(--text-muted)' }}>
+                      <div className="asset-reorder">
+                        <button onClick={() => handleMoveUp(al.Id, 'Expense')} disabled={idx===0}><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5l-7 7h14l-7-7z"/></svg></button>
+                        <span style={{ fontSize:'11px', fontFamily:'var(--font-mono)' }}>{idx+1}</span>
+                        <button onClick={() => handleMoveDown(al.Id, 'Expense')} disabled={idx===sortedExpenses.length-1}><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 19l7-7H5l7 7z"/></svg></button>
+                      </div>
+                    </td>
+                    {idx===0 && <td rowSpan={sortedExpenses.length} className="alloc-table-col-group expense">{t('Sinh hoạt')}</td>}
+                    <td style={{ fontWeight:600 }}>{al.Name}</td>
+                    <td className="num" style={{ fontWeight:650 }}>{al.TargetPercentage.toFixed(4)}%</td>
+                    <td className="num">{formatCurrency(al.CurrentAmount)} ₫</td>
+                    <td className="num" style={{ color: al.reduction>0 ? '#F5A623' : 'var(--text-muted)' }}>{al.reduction>0 ? `↓ ${formatCurrency(al.reduction)} ₫` : '—'}</td>
+                    <td className="num" style={{ fontWeight:750 }}>{formatCurrency(al.actual)} ₫</td>
+                    <td style={{ textAlign:'center' }}>
+                      <button className={`alloc-toggle ${al.isExcluded ? 'on' : 'off'}`} onClick={() => onToggleExclusion(al.Id)} title={al.isExcluded ? t('Đã bảo vệ — không bị cắt giảm') : t('Bấm để bảo vệ khỏi cắt giảm')} aria-label={al.isExcluded ? 'ON' : 'OFF'}>
+                        <span className="alloc-toggle-knob">{al.isExcluded ? '🛡️' : '○'}</span>
+                      </button>
+                    </td>
+                    <td style={{ textAlign:'center' }}>
+                      <button className="alloc-apply-sm" onClick={() => onApplyToAsset(al)} disabled={!al.AssetId} title={al.AssetId ? t('Áp dụng sang tài sản') : t('Chưa liên kết tài sản')}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                        {t('Áp dụng')}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {/* Saving */}
+                {sortedSavings.map((al, idx) => (
+                  <tr key={al.Id}>
+                    <td style={{ textAlign:'center', color:'var(--text-muted)' }}>
+                      <div className="asset-reorder">
+                        <button onClick={() => handleMoveUp(al.Id, 'Saving')} disabled={idx===0}><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5l-7 7h14l-7-7z"/></svg></button>
+                        <span style={{ fontSize:'11px', fontFamily:'var(--font-mono)' }}>{idx+1}</span>
+                        <button onClick={() => handleMoveDown(al.Id, 'Saving')} disabled={idx===sortedSavings.length-1}><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 19l7-7H5l7 7z"/></svg></button>
+                      </div>
+                    </td>
+                    {idx===0 && <td rowSpan={sortedSavings.length} className="alloc-table-col-group saving">{t('Tiết kiệm')}</td>}
+                    <td style={{ fontWeight:600 }}>{al.Name}</td>
+                    <td className="num" style={{ fontWeight:650 }}>{al.TargetPercentage.toFixed(4)}%</td>
+                    <td className="num">{formatCurrency(al.CurrentAmount)} ₫</td>
+                    <td className="num" style={{ color: al.reduction>0 ? '#F5A623' : 'var(--text-muted)' }}>{al.reduction>0 ? `↓ ${formatCurrency(al.reduction)} ₫` : '—'}</td>
+                    <td className="num" style={{ fontWeight:750 }}>{formatCurrency(al.actual)} ₫</td>
+                    <td style={{ textAlign:'center' }}>
+                      <button className={`alloc-toggle ${al.isExcluded ? 'on' : 'off'}`} onClick={() => onToggleExclusion(al.Id)}><span className="alloc-toggle-knob">{al.isExcluded ? '🛡️' : '○'}</span></button>
+                    </td>
+                    <td style={{ textAlign:'center' }}>
+                      <button className="alloc-apply-sm" onClick={() => onApplyToAsset(al)} disabled={!al.AssetId}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> {t('Áp dụng')}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {/* Investment */}
+                {sortedInvestments.map((al, idx) => (
+                  <tr key={al.Id}>
+                    <td style={{ textAlign:'center', color:'var(--text-muted)' }}>
+                      <div className="asset-reorder">
+                        <button onClick={() => handleMoveUp(al.Id, 'Investment')} disabled={idx===0}><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5l-7 7h14l-7-7z"/></svg></button>
+                        <span style={{ fontSize:'11px', fontFamily:'var(--font-mono)' }}>{idx+1}</span>
+                        <button onClick={() => handleMoveDown(al.Id, 'Investment')} disabled={idx===sortedInvestments.length-1}><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 19l7-7H5l7 7z"/></svg></button>
+                      </div>
+                    </td>
+                    {idx===0 && <td rowSpan={sortedInvestments.length} className="alloc-table-col-group investment">{t('Đầu tư')}</td>}
+                    <td style={{ fontWeight:600 }}>{al.Name}</td>
+                    <td className="num" style={{ fontWeight:650 }}>{al.TargetPercentage.toFixed(4)}%</td>
+                    <td className="num">{formatCurrency(al.CurrentAmount)} ₫</td>
+                    <td className="num" style={{ color: al.reduction>0 ? '#F5A623' : 'var(--text-muted)' }}>{al.reduction>0 ? `↓ ${formatCurrency(al.reduction)} ₫` : '—'}</td>
+                    <td className="num" style={{ fontWeight:750 }}>{formatCurrency(al.actual)} ₫</td>
+                    <td style={{ textAlign:'center' }}>
+                      <button className={`alloc-toggle ${al.isExcluded ? 'on' : 'off'}`} onClick={() => onToggleExclusion(al.Id)}><span className="alloc-toggle-knob">{al.isExcluded ? '🛡️' : '○'}</span></button>
+                    </td>
+                    <td style={{ textAlign:'center' }}>
+                      <button className="alloc-apply-sm" onClick={() => onApplyToAsset(al)} disabled={!al.AssetId}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> {t('Áp dụng')}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td></td>
+                  <td colSpan={2} style={{ textAlign:'left' }}>{t('Tổng dòng')} • {isPercentageBalanced ? t('Cân đối') : t('Chưa cân bằng')}</td>
+                  <td className="num" style={{ color: isPercentageBalanced ? '#18C995' : '#F5A623' }}>{formatPercentage(totalAllocatedPercentage)}</td>
+                  <td className="num">{formatCurrency(totalAllocatedCash)} ₫</td>
+                  <td className="num" style={{ color:'#F5A623' }}>{formatCurrency(totalReductionAmount)} ₫</td>
+                  <td className="num" style={{ color:'#18C995' }}>{formatCurrency(totalActualAmount)} ₫</td>
+                  <td></td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      ) : (
+        /* OVERVIEW GRID 8/4 */
+        <div className="alloc-main-grid">
+          <div className="alloc-main-left">
+            {/* Group blocks */}
+            <div className="alloc-groups">
+              {/* Expense */}
+              <div className={`alloc-group ${expanded.Expense ? 'open' : ''}`}>
+                <div className="alloc-group-head" onClick={() => toggleGroup('Expense')}>
+                  <div className="alloc-group-icon expense">🏠</div>
+                  <div className="alloc-group-meta">
+                    <div className="alloc-group-name expense">{t('Sinh hoạt')} <span style={{ fontWeight:400, color:'var(--text-muted)', letterSpacing:'0.04em', textTransform:'none', fontSize:'11px' }}>{sortedExpenses.length} {t('khoản')}</span></div>
+                    <div className="alloc-group-sub">{expensePct.toFixed(2)}% • {formatCompactValue(expenseCash)} ₫ • {t('Thực tế')} {formatCompactValue(expenseActual)} ₫</div>
+                  </div>
+                  <div className="alloc-group-right">
+                    <div className="alloc-group-amounts">
+                      <div className="alloc-group-total">{formatCurrency(expenseActual)} ₫</div>
+                      <div className="alloc-group-pct">{expensePct.toFixed(2)}%</div>
+                    </div>
+                    <span className="alloc-group-chevron"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg></span>
+                  </div>
+                </div>
+                {expanded.Expense && (
+                  <div className="alloc-group-body">
+                    <div className="alloc-rows">
+                      {sortedExpenses.map((al) => {
+                        const reductionPct = al.CurrentAmount > 0 ? (al.reduction / al.CurrentAmount) * 100 : 0;
+                        const linkedAsset = assets.find(a => a.Id === al.AssetId);
+                        return (
+                          <div key={al.Id} className="alloc-row">
+                            <div className="alloc-row-main">
+                              <div className="alloc-row-name" title={al.Name}>{al.Name}{linkedAsset && <span style={{ fontWeight:400, color:'var(--text-muted)', fontSize:'11px', marginLeft:6 }}>→ {linkedAsset.Name}</span>}</div>
+                              <div className="alloc-row-sub">{al.TargetPercentage.toFixed(3)}% • {formatCompactValue(al.CurrentAmount)} ₫</div>
+                            </div>
+                            <div className="alloc-row-metric">
+                              <span className="alloc-row-label">{t('Số tiền')}</span>
+                              <span className="alloc-row-value muted">{formatCurrency(al.CurrentAmount)} ₫</span>
+                            </div>
+                            <div className="alloc-row-metric">
+                              <span className="alloc-row-label">{t('Cắt giảm')}</span>
+                              <span className="alloc-row-value warn">{al.reduction>0 ? `↓ ${formatCurrency(al.reduction)} ₫` : '—'}{al.reduction>0 && reductionPct>=0.01 ? <span style={{ fontSize:'10px', marginLeft:4, opacity:0.85 }}>{reductionPct.toFixed(1)}%</span> : null}</span>
+                            </div>
+                            <div className="alloc-row-metric">
+                              <span className="alloc-row-label">{t('Thực tế')}</span>
+                              <span className="alloc-row-value strong">{formatCurrency(al.actual)} ₫</span>
+                            </div>
+                            <div className="alloc-row-controls">
+                              <button className={`alloc-toggle ${al.isExcluded ? 'on' : 'off'}`} onClick={() => onToggleExclusion(al.Id)} title={al.isExcluded ? t('Đã bảo vệ — không bị cắt giảm. Bấm để tắt.') : t('Khoản này sẽ không bị giảm khi áp dụng cắt giảm. Bấm để bảo vệ.')} aria-label={`${t('Loại trừ cắt giảm')} ${al.isExcluded ? 'ON' : 'OFF'}`}>
+                                <span className="alloc-toggle-knob">{al.isExcluded ? '🛡️' : '○'}</span>
+                              </button>
+                              <button className="alloc-apply-sm" onClick={() => onApplyToAsset(al)} disabled={!al.AssetId} title={al.AssetId ? t('Áp dụng sang tài sản') : t('Chưa liên kết tài sản')}>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {sortedExpenses.length===0 && <div style={{ padding:'16px', textAlign:'center', color:'var(--text-muted)', fontSize:'12px' }}>{t('Chưa có khoản sinh hoạt')}</div>}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Saving */}
+              <div className={`alloc-group ${expanded.Saving ? 'open' : ''}`}>
+                <div className="alloc-group-head" onClick={() => toggleGroup('Saving')}>
+                  <div className="alloc-group-icon saving">💜</div>
+                  <div className="alloc-group-meta">
+                    <div className="alloc-group-name saving">{t('Tiết kiệm')} <span style={{ fontWeight:400, color:'var(--text-muted)', letterSpacing:'0.04em', textTransform:'none', fontSize:'11px' }}>{sortedSavings.length} {t('khoản')}</span></div>
+                    <div className="alloc-group-sub">{savingPct.toFixed(2)}% • {formatCompactValue(savingCash)} ₫ • {t('Thực tế')} {formatCompactValue(savingActual)} ₫</div>
+                  </div>
+                  <div className="alloc-group-right">
+                    <div className="alloc-group-amounts">
+                      <div className="alloc-group-total">{formatCurrency(savingActual)} ₫</div>
+                      <div className="alloc-group-pct">{savingPct.toFixed(2)}%</div>
+                    </div>
+                    <span className="alloc-group-chevron"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg></span>
+                  </div>
+                </div>
+                {expanded.Saving && (
+                  <div className="alloc-group-body">
+                    <div className="alloc-rows">
+                      {sortedSavings.map((al) => {
+                        const reductionPct = al.CurrentAmount > 0 ? (al.reduction / al.CurrentAmount) * 100 : 0;
+                        const linkedAsset = assets.find(a => a.Id === al.AssetId);
+                        return (
+                          <div key={al.Id} className="alloc-row">
+                            <div className="alloc-row-main">
+                              <div className="alloc-row-name">{al.Name}{linkedAsset && <span style={{ fontWeight:400, color:'var(--text-muted)', fontSize:'11px', marginLeft:6 }}>→ {linkedAsset.Name}</span>}</div>
+                              <div className="alloc-row-sub">{al.TargetPercentage.toFixed(3)}% • {formatCompactValue(al.CurrentAmount)} ₫</div>
+                            </div>
+                            <div className="alloc-row-metric"><span className="alloc-row-label">{t('Số tiền')}</span><span className="alloc-row-value muted">{formatCurrency(al.CurrentAmount)} ₫</span></div>
+                            <div className="alloc-row-metric"><span className="alloc-row-label">{t('Cắt giảm')}</span><span className="alloc-row-value warn">{al.reduction>0 ? `↓ ${formatCurrency(al.reduction)} ₫` : '—'}{al.reduction>0 && reductionPct>=0.01 ? <span style={{ fontSize:'10px', marginLeft:4, opacity:0.85 }}>{reductionPct.toFixed(1)}%</span> : null}</span></div>
+                            <div className="alloc-row-metric"><span className="alloc-row-label">{t('Thực tế')}</span><span className="alloc-row-value strong">{formatCurrency(al.actual)} ₫</span></div>
+                            <div className="alloc-row-controls">
+                              <button className={`alloc-toggle ${al.isExcluded ? 'on' : 'off'}`} onClick={() => onToggleExclusion(al.Id)} title={t('Loại trừ cắt giảm')}><span className="alloc-toggle-knob">{al.isExcluded ? '🛡️' : '○'}</span></button>
+                              <button className="alloc-apply-sm" onClick={() => onApplyToAsset(al)} disabled={!al.AssetId}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {sortedSavings.length===0 && <div style={{ padding:'16px', textAlign:'center', color:'var(--text-muted)', fontSize:'12px' }}>{t('Chưa có khoản tiết kiệm')}</div>}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Investment */}
+              <div className={`alloc-group ${expanded.Investment ? 'open' : ''}`}>
+                <div className="alloc-group-head" onClick={() => toggleGroup('Investment')}>
+                  <div className="alloc-group-icon investment">📈</div>
+                  <div className="alloc-group-meta">
+                    <div className="alloc-group-name investment">{t('Đầu tư')} <span style={{ fontWeight:400, color:'var(--text-muted)', letterSpacing:'0.04em', textTransform:'none', fontSize:'11px' }}>{sortedInvestments.length} {t('khoản')}</span></div>
+                    <div className="alloc-group-sub">{investmentPct.toFixed(2)}% • {formatCompactValue(investmentCash)} ₫ • {t('Thực tế')} {formatCompactValue(investmentActual)} ₫</div>
+                  </div>
+                  <div className="alloc-group-right">
+                    <div className="alloc-group-amounts">
+                      <div className="alloc-group-total">{formatCurrency(investmentActual)} ₫</div>
+                      <div className="alloc-group-pct">{investmentPct.toFixed(2)}%</div>
+                    </div>
+                    <span className="alloc-group-chevron"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg></span>
+                  </div>
+                </div>
+                {expanded.Investment && (
+                  <div className="alloc-group-body">
+                    <div className="alloc-rows">
+                      {sortedInvestments.map((al) => {
+                        const reductionPct = al.CurrentAmount > 0 ? (al.reduction / al.CurrentAmount) * 100 : 0;
+                        const linkedAsset = assets.find(a => a.Id === al.AssetId);
+                        return (
+                          <div key={al.Id} className="alloc-row">
+                            <div className="alloc-row-main">
+                              <div className="alloc-row-name">{al.Name}{linkedAsset && <span style={{ fontWeight:400, color:'var(--text-muted)', fontSize:'11px', marginLeft:6 }}>→ {linkedAsset.Name}</span>}</div>
+                              <div className="alloc-row-sub">{al.TargetPercentage.toFixed(3)}% • {formatCompactValue(al.CurrentAmount)} ₫</div>
+                            </div>
+                            <div className="alloc-row-metric"><span className="alloc-row-label">{t('Số tiền')}</span><span className="alloc-row-value muted">{formatCurrency(al.CurrentAmount)} ₫</span></div>
+                            <div className="alloc-row-metric"><span className="alloc-row-label">{t('Cắt giảm')}</span><span className="alloc-row-value warn">{al.reduction>0 ? `↓ ${formatCurrency(al.reduction)} ₫` : '—'}{al.reduction>0 && reductionPct>=0.01 ? <span style={{ fontSize:'10px', marginLeft:4, opacity:0.85 }}>{reductionPct.toFixed(1)}%</span> : null}</span></div>
+                            <div className="alloc-row-metric"><span className="alloc-row-label">{t('Thực tế')}</span><span className="alloc-row-value strong">{formatCurrency(al.actual)} ₫</span></div>
+                            <div className="alloc-row-controls">
+                              <button className={`alloc-toggle ${al.isExcluded ? 'on' : 'off'}`} onClick={() => onToggleExclusion(al.Id)}><span className="alloc-toggle-knob">{al.isExcluded ? '🛡️' : '○'}</span></button>
+                              <button className="alloc-apply-sm" onClick={() => onApplyToAsset(al)} disabled={!al.AssetId}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {sortedInvestments.length===0 && <div style={{ padding:'16px', textAlign:'center', color:'var(--text-muted)', fontSize:'12px' }}>{t('Chưa có khoản đầu tư')}</div>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Portfolio destination */}
+            <div className="alloc-portfolio">
+              <div className="alloc-portfolio-head">
+                <div>
+                  <div className="alloc-portfolio-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9B7CFF" strokeWidth="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>{t('Phân bổ vào danh mục')}</div>
+                  <div className="alloc-portfolio-sub">{t('Dòng tiền sau phân bổ sẽ đi vào các tài sản đã liên kết')}</div>
+                </div>
+                <span style={{ fontSize:'11px', color:'var(--text-muted)', background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.06)', padding:'4px 8px', borderRadius:999 }}>{t('Áp dụng sang Tài sản')}</span>
+              </div>
+              <div className="alloc-portfolio-body">
+                {/* Expense destination */}
+                <div className="alloc-portfolio-group">
+                  <div className="alloc-portfolio-group-title expense">🏠 {t('Sinh hoạt')} • {formatCurrency(expenseActual)} ₫</div>
+                  {sortedExpenses.length===0 ? <div style={{ fontSize:'12px', color:'var(--text-muted)', fontStyle:'italic' }}>{t('Chưa có khoản')}</div> : sortedExpenses.map(al => {
+                    const asset = assets.find(a=>a.Id===al.AssetId);
+                    return (
+                      <div key={al.Id} className="alloc-portfolio-item">
+                        <span className="alloc-portfolio-item-name">{al.Name}{asset ? ` → ${asset.Name}` : ''}</span>
+                        <span className="alloc-portfolio-item-meta"><span className="alloc-portfolio-pct">{al.TargetPercentage.toFixed(2)}%</span><span className="alloc-portfolio-amt">{formatCurrency(al.actual)} ₫</span></span>
+                      </div>
+                    );
+                  })}
+                  <div className="alloc-portfolio-item" style={{ fontWeight:700, borderTop:'1px solid rgba(255,255,255,0.06)', marginTop:4, paddingTop:10 }}>
+                    <span>{t('Tổng sinh hoạt')}</span><span className="alloc-portfolio-amt">{formatCurrency(expenseActual)} ₫</span>
+                  </div>
+                </div>
+                <div className="alloc-portfolio-group">
+                  <div className="alloc-portfolio-group-title saving">💜 {t('Tiết kiệm')} • {formatCurrency(savingActual)} ₫</div>
+                  {sortedSavings.map(al => {
+                    const asset = assets.find(a=>a.Id===al.AssetId);
+                    return (
+                      <div key={al.Id} className="alloc-portfolio-item">
+                        <span className="alloc-portfolio-item-name">{al.Name}{asset ? ` → ${asset.Name}` : ''}</span>
+                        <span className="alloc-portfolio-item-meta"><span className="alloc-portfolio-pct">{al.TargetPercentage.toFixed(2)}%</span><span className="alloc-portfolio-amt">{formatCurrency(al.actual)} ₫</span></span>
+                      </div>
+                    );
+                  })}
+                  {sortedSavings.length===0 && <div style={{ fontSize:'12px', color:'var(--text-muted)', fontStyle:'italic' }}>{t('Chưa có khoản')}</div>}
+                  <div className="alloc-portfolio-item" style={{ fontWeight:700, borderTop:'1px solid rgba(255,255,255,0.06)', marginTop:4, paddingTop:10 }}>
+                    <span>{t('Tổng tiết kiệm')}</span><span className="alloc-portfolio-amt">{formatCurrency(savingActual)} ₫</span>
+                  </div>
+                </div>
+                {sortedInvestments.length>0 && (
+                  <div className="alloc-portfolio-group">
+                    <div className="alloc-portfolio-group-title investment">📈 {t('Đầu tư')} • {formatCurrency(investmentActual)} ₫</div>
+                    {sortedInvestments.map(al => {
+                      const asset = assets.find(a=>a.Id===al.AssetId);
+                      return (
+                        <div key={al.Id} className="alloc-portfolio-item">
+                          <span className="alloc-portfolio-item-name">{al.Name}{asset ? ` → ${asset.Name}` : ''}</span>
+                          <span className="alloc-portfolio-item-meta"><span className="alloc-portfolio-pct">{al.TargetPercentage.toFixed(2)}%</span><span className="alloc-portfolio-amt">{formatCurrency(al.actual)} ₫</span></span>
+                        </div>
+                      );
+                    })}
+                    <div className="alloc-portfolio-item" style={{ fontWeight:700, borderTop:'1px solid rgba(255,255,255,0.06)', marginTop:4, paddingTop:10 }}>
+                      <span>{t('Tổng đầu tư')}</span><span className="alloc-portfolio-amt">{formatCurrency(investmentActual)} ₫</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="alloc-main-right">
+            {/* Preview */}
+            <div className="alloc-preview">
+              <div className="alloc-preview-head">
+                <div className="alloc-preview-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7C5CFF" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>{t('Xem trước phân bổ')}</div>
+                <span style={{ fontSize:'11px', color: isPercentageBalanced ? '#18C995' : '#F5A623', fontWeight:700 }}>{isPercentageBalanced ? `✓ ${t('Cân bằng')}` : `⚠ ${totalAllocatedPercentage.toFixed(1)}%`}</span>
+              </div>
+              <div className="alloc-preview-body">
+                <div className="alloc-preview-row"><span className="label">{t('Thu nhập')}</span><span className="value">{formatCurrency(income)} ₫</span></div>
+                <div className="alloc-preview-row"><span className="label">🏠 {t('Sinh hoạt')}</span><span className="value">{formatCurrency(expenseActual)} ₫</span></div>
+                <div className="alloc-preview-row"><span className="label">💜 {t('Tiết kiệm')}</span><span className="value">{formatCurrency(savingActual)} ₫</span></div>
+                {sortedInvestments.length>0 && <div className="alloc-preview-row"><span className="label">📈 {t('Đầu tư')}</span><span className="value">{formatCurrency(investmentActual)} ₫</span></div>}
+                <div style={{ height:1, background:'rgba(255,255,255,0.06)', margin:'2px 0' }} />
+                <div className="alloc-preview-row"><span className="label">{t('Cắt giảm')}</span><span className="value" style={{ color:'#F5A623' }}>↓ {formatCurrency(totalReductionAmount)} ₫</span></div>
+                {protectedCount>0 && <div className="alloc-preview-row"><span className="label">🛡️ {t('Bảo vệ')}</span><span className="value" style={{ color:'#9B7CFF', fontSize:'12px' }}>{protectedCount} {t('khoản được bảo vệ')}</span></div>}
+                <div className="alloc-preview-row total"><span className="label">{t('Tổng thực tế')}</span><span className="value" style={{ color:'#18C995' }}>{formatCurrency(totalActualAmount)} ₫</span></div>
+                <div className={`alloc-preview-status ${isPercentageBalanced ? 'ok' : healthStatus==='warn' ? 'warn' : 'bad'}`}>
+                  {isPercentageBalanced ? <>✓ {t('Phân bổ cân bằng — sẵn sàng áp dụng')}</> : <>{t('Phân bổ chưa cân bằng')} • {remainingIsPositive ? `${t('Còn thiếu')} ${formatCurrency(Math.abs(remaining))} ₫` : `${t('Vượt')} ${formatCurrency(Math.abs(remaining))} ₫`}</>}
+                </div>
+              </div>
+              <div className="alloc-preview-actions">
+                <button className="alloc-btn alloc-btn-primary" style={{ width:'100%', justifyContent:'center', height:44, fontSize:'14px' }} onClick={() => setConfirmOpen(true)} disabled={!isPercentageBalanced}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                  {t('Áp dụng phân bổ')}
+                </button>
+                <div className="alloc-preview-note">{t('Các thay đổi sẽ được cập nhật vào danh mục tài sản đã liên kết.')}</div>
+                {!isPercentageBalanced && <div style={{ fontSize:'11px', color:'#F5A623', textAlign:'center' }}>{t('Cần cân bằng 100% mới có thể áp dụng.')}</div>}
+              </div>
+            </div>
+
+            {/* Quick stats */}
+            <div className="alloc-portfolio" style={{ padding:'14px' }}>
+              <div style={{ fontSize:'11px', fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase', color:'var(--text-muted)', marginBottom:10 }}>{t('Tóm tắt dòng tiền')}</div>
+              <div style={{ display:'grid', gap:8, fontSize:'12px' }}>
+                <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'var(--text-secondary)' }}>{t('Tỉ trọng')}</span><b style={{ fontFamily:'var(--font-mono)' }}>{totalAllocatedPercentage.toFixed(2)}%</b></div>
+                <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'var(--text-secondary)' }}>{t('Số tiền giảm')}</span><b style={{ fontFamily:'var(--font-mono)', color:'#F5A623' }}>{formatCurrency(totalReductionAmount)} ₫</b></div>
+                <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'var(--text-secondary)' }}>{t('Còn lại')}</span><b style={{ fontFamily:'var(--font-mono)', color: remainingIsZero ? 'var(--text-muted)' : remainingIsNegative ? '#FF4D67' : '#F5A623' }}>{remainingIsZero ? '0 ₫' : `${remaining>0?'+':''}${formatCurrency(remaining)} ₫`}</b></div>
+                <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'var(--text-secondary)' }}>🛡️ {t('Bảo vệ')}</span><b>{protectedCount}</b></div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Spreadsheet Table */}
-      <div className="table-container">
-        <table className="custom-table" style={{ borderCollapse: 'separate', borderSpacing: '0' }}>
-          <thead>
-            <tr>
-              <th style={{ width: '40px' }}></th>
-              <th style={{ width: '100px', borderRight: '1px solid var(--border-light)' }}>{t('Khối')}</th>
-              <th>{t('Thông tin phân bổ (Allocations Info)')}</th>
-              <th style={{ textAlign: 'right', width: '160px' }}>{t('Tỉ trọng (%)')}</th>
-              <th style={{ textAlign: 'right', width: '160px' }}>{t('Số tiền (Cash)')}</th>
-              <th style={{ textAlign: 'right', width: '160px' }}>{t('Số tiền giảm')}</th>
-              <th style={{ textAlign: 'right', width: '160px' }}>{t('Số tiền thực tế')}</th>
-              <th style={{ textAlign: 'center', width: '90px' }}>{t('Loại trừ')}</th>
-              <th style={{ textAlign: 'center', width: '100px' }}>{t('Áp dụng')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            
-            {/* 1. SINH HOẠT BLOCK */}
-            {sortedExpenses.map((al, idx) => (
-              <tr key={al.Id}>
-                <td style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-                    <button onClick={() => handleMoveUp(al.Id, 'Expense')} disabled={idx === 0} title={t('Di chuyển lên')}
-                      style={{ background: 'none', border: 'none', cursor: idx === 0 ? 'default' : 'pointer', padding: '0', lineHeight: '1', color: idx === 0 ? 'var(--text-muted)' : 'var(--text-secondary)', opacity: idx === 0 ? 0.3 : 1 }}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5l-7 7h14l-7-7z"/></svg>
-                    </button>
-                    <span style={{ fontSize: '0.85rem' }}>{idx + 1}</span>
-                    <button onClick={() => handleMoveDown(al.Id, 'Expense')} disabled={idx === sortedExpenses.length - 1} title={t('Di chuyển xuống')}
-                      style={{ background: 'none', border: 'none', cursor: idx === sortedExpenses.length - 1 ? 'default' : 'pointer', padding: '0', lineHeight: '1', color: idx === sortedExpenses.length - 1 ? 'var(--text-muted)' : 'var(--text-secondary)', opacity: idx === sortedExpenses.length - 1 ? 0.3 : 1 }}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 19l7-7H5l7 7z"/></svg>
-                    </button>
-                  </div>
-                </td>
-                {idx === 0 && (
-                  <td 
-                    className="span-col" 
-                    rowSpan={sortedExpenses.length} 
-                    style={{ 
-                      verticalAlign: 'middle', 
-                      background: 'rgba(99,102,241,0.02)',
-                      borderRight: '1px solid var(--border-light)'
-                    }}
-                  >
-                    {t('Sinh hoạt')}
-                  </td>
-                )}
-                <td style={{ fontWeight: 500, paddingLeft: '16px' }}>{al.Name}</td>
-                <td style={{ textAlign: 'right' }}>
-                  <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600 }}>
-                    {al.TargetPercentage.toFixed(4)}%
-                  </span>
-                </td>
-                <td style={{ textAlign: 'right' }}>
-                  <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600 }}>
-                    {formatCurrency(al.CurrentAmount)}
-                  </span>
-                </td>
-                <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', color: al.reduction > 0 ? 'var(--warning)' : 'var(--text-muted)', fontWeight: 500 }}>
-                  {formatCurrency(al.reduction)}
-                </td>
-                <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 600 }}>
-                  {formatCurrency(al.actual)}
-                </td>
-                <td style={{ textAlign: 'center' }}>
-                  <button 
-                    className={`exclude-btn ${al.isExcluded ? 'excluded' : ''}`}
-                    onClick={() => onToggleExclusion(al.Id)}
-                    title={al.isExcluded ? t('Đã được loại trừ khỏi cắt giảm') : t('Bật khiên bảo vệ loại trừ khỏi cắt giảm')}
-                  >
-                    {al.isExcluded ? t('🛡️ Khóa') : '🔓'}
-                  </button>
-                </td>
-                <td style={{ textAlign: 'center' }}>
-                  <button
-                    className="btn-icon"
-                    onClick={() => onApplyToAsset(al)}
-                    disabled={!al.AssetId}
-                    title={al.AssetId ? t('Áp dụng số tiền sang tài sản') : t('Chưa liên kết tài sản')}
-                    style={{ opacity: al.AssetId ? 1 : 0.3, cursor: al.AssetId ? 'pointer' : 'not-allowed', background: 'transparent', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '4px', padding: '4px 8px', color: '#10b981' }}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
-                    </svg>
-                  </button>
-                </td>
-              </tr>
-            ))}
-
-            {/* divider: Còn lại (Saving Base) */}
-            <tr className="table-section-divider">
-              <td></td>
-              <td style={{ borderRight: '1px solid var(--border-light)' }}></td>
-              <td style={{ fontWeight: 700, paddingLeft: '16px' }}>{t('Còn lại (Saving Base)')}</td>
-              <td style={{ textAlign: 'right' }}></td>
-              <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 700 }}>
-                {formatCurrency(totalSavingCash)}
-              </td>
-              <td></td>
-              <td></td>
-              <td></td>
-              <td></td>
-            </tr>
-
-            {/* 2. TIẾT KIỆM BLOCK */}
-            {sortedSavings.map((al, idx) => (
-              <tr key={al.Id}>
-                <td style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-                    <button onClick={() => handleMoveUp(al.Id, 'Saving')} disabled={idx === 0} title={t('Di chuyển lên')}
-                      style={{ background: 'none', border: 'none', cursor: idx === 0 ? 'default' : 'pointer', padding: '0', lineHeight: '1', color: idx === 0 ? 'var(--text-muted)' : 'var(--text-secondary)', opacity: idx === 0 ? 0.3 : 1 }}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5l-7 7h14l-7-7z"/></svg>
-                    </button>
-                    <span style={{ fontSize: '0.85rem' }}>{idx + 1}</span>
-                    <button onClick={() => handleMoveDown(al.Id, 'Saving')} disabled={idx === sortedSavings.length - 1} title={t('Di chuyển xuống')}
-                      style={{ background: 'none', border: 'none', cursor: idx === sortedSavings.length - 1 ? 'default' : 'pointer', padding: '0', lineHeight: '1', color: idx === sortedSavings.length - 1 ? 'var(--text-muted)' : 'var(--text-secondary)', opacity: idx === sortedSavings.length - 1 ? 0.3 : 1 }}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 19l7-7H5l7 7z"/></svg>
-                    </button>
-                  </div>
-                </td>
-                {idx === 0 && (
-                  <td 
-                    className="span-col" 
-                    rowSpan={sortedSavings.length} 
-                    style={{ 
-                      verticalAlign: 'middle', 
-                      background: 'rgba(217,70,239,0.02)',
-                      borderRight: '1px solid var(--border-light)'
-                    }}
-                  >
-                    {t('Tiết kiệm')}
-                  </td>
-                )}
-                <td style={{ fontWeight: 500, paddingLeft: '16px' }}>{al.Name}</td>
-                <td style={{ textAlign: 'right' }}>
-                  <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600 }}>
-                    {al.TargetPercentage.toFixed(4)}%
-                  </span>
-                </td>
-                <td style={{ textAlign: 'right' }}>
-                  <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600 }}>
-                    {formatCurrency(al.CurrentAmount)}
-                  </span>
-                </td>
-                <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', color: al.reduction > 0 ? 'var(--warning)' : 'var(--text-muted)', fontWeight: 500 }}>
-                  {formatCurrency(al.reduction)}
-                </td>
-                <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 600 }}>
-                  {formatCurrency(al.actual)}
-                </td>
-                <td style={{ textAlign: 'center' }}>
-                  <button 
-                    className={`exclude-btn ${al.isExcluded ? 'excluded' : ''}`}
-                    onClick={() => onToggleExclusion(al.Id)}
-                    title={al.isExcluded ? t('Đã được loại trừ khỏi cắt giảm') : t('Bật khiên bảo vệ loại trừ khỏi cắt giảm')}
-                  >
-                    {al.isExcluded ? t('🛡️ Khóa') : '🔓'}
-                  </button>
-                </td>
-                <td style={{ textAlign: 'center' }}>
-                  <button
-                    className="btn-icon"
-                    onClick={() => onApplyToAsset(al)}
-                    disabled={!al.AssetId}
-                    title={al.AssetId ? t('Áp dụng số tiền sang tài sản') : t('Chưa liên kết tài sản')}
-                    style={{ opacity: al.AssetId ? 1 : 0.3, cursor: al.AssetId ? 'pointer' : 'not-allowed', background: 'transparent', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '4px', padding: '4px 8px', color: '#10b981' }}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
-                    </svg>
-                  </button>
-                </td>
-              </tr>
-            ))}
-
-            {/* 3. ĐẦU TƯ BLOCK */}
-            {sortedInvestments.length > 0 && (
-              <>
-            <tr className="table-section-divider">
-              <td></td>
-              <td style={{ borderRight: '1px solid var(--border-light)' }}></td>
-              <td style={{ fontWeight: 700, paddingLeft: '16px' }}>{t('Đầu tư (Investment Base)')}</td>
-              <td style={{ textAlign: 'right' }}></td>
-              <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 700 }}>
-                {formatCurrency(totalInvestmentCash)}
-              </td>
-              <td></td>
-              <td></td>
-              <td></td>
-              <td></td>
-            </tr>
-            {sortedInvestments.map((al, idx) => (
-              <tr key={al.Id}>
-                <td style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-                    <button onClick={() => handleMoveUp(al.Id, 'Investment')} disabled={idx === 0} title={t('Di chuyển lên')}
-                      style={{ background: 'none', border: 'none', cursor: idx === 0 ? 'default' : 'pointer', padding: '0', lineHeight: '1', color: idx === 0 ? 'var(--text-muted)' : 'var(--text-secondary)', opacity: idx === 0 ? 0.3 : 1 }}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5l-7 7h14l-7-7z"/></svg>
-                    </button>
-                    <span style={{ fontSize: '0.85rem' }}>{idx + 1}</span>
-                    <button onClick={() => handleMoveDown(al.Id, 'Investment')} disabled={idx === sortedInvestments.length - 1} title={t('Di chuyển xuống')}
-                      style={{ background: 'none', border: 'none', cursor: idx === sortedInvestments.length - 1 ? 'default' : 'pointer', padding: '0', lineHeight: '1', color: idx === sortedInvestments.length - 1 ? 'var(--text-muted)' : 'var(--text-secondary)', opacity: idx === sortedInvestments.length - 1 ? 0.3 : 1 }}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 19l7-7H5l7 7z"/></svg>
-                    </button>
-                  </div>
-                </td>
-                {idx === 0 && (
-                  <td 
-                    className="span-col" 
-                    rowSpan={sortedInvestments.length} 
-                    style={{ 
-                      verticalAlign: 'middle', 
-                      background: 'rgba(16,185,129,0.02)',
-                      borderRight: '1px solid var(--border-light)'
-                    }}
-                  >
-                    {t('Đầu tư')}
-                  </td>
-                )}
-                <td style={{ fontWeight: 500, paddingLeft: '16px' }}>{al.Name}</td>
-                <td style={{ textAlign: 'right' }}>
-                  <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600 }}>
-                    {al.TargetPercentage.toFixed(4)}%
-                  </span>
-                </td>
-                <td style={{ textAlign: 'right' }}>
-                  <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600 }}>
-                    {formatCurrency(al.CurrentAmount)}
-                  </span>
-                </td>
-                <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', color: al.reduction > 0 ? 'var(--warning)' : 'var(--text-muted)', fontWeight: 500 }}>
-                  {formatCurrency(al.reduction)}
-                </td>
-                <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', fontWeight: 600 }}>
-                  {formatCurrency(al.actual)}
-                </td>
-                <td style={{ textAlign: 'center' }}>
-                  <button 
-                    className={`exclude-btn ${al.isExcluded ? 'excluded' : ''}`}
-                    onClick={() => onToggleExclusion(al.Id)}
-                    title={al.isExcluded ? t('Đã được loại trừ khỏi cắt giảm') : t('Bật khiên bảo vệ loại trừ khỏi cắt giảm')}
-                  >
-                    {al.isExcluded ? t('🛡️ Khóa') : '🔓'}
-                  </button>
-                </td>
-                <td style={{ textAlign: 'center' }}>
-                  <button
-                    className="btn-icon"
-                    onClick={() => onApplyToAsset(al)}
-                    disabled={!al.AssetId}
-                    title={al.AssetId ? t('Áp dụng số tiền sang tài sản') : t('Chưa liên kết tài sản')}
-                    style={{ opacity: al.AssetId ? 1 : 0.3, cursor: al.AssetId ? 'pointer' : 'not-allowed', background: 'transparent', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '4px', padding: '4px 8px', color: '#10b981' }}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
-                    </svg>
-                  </button>
-                </td>
-              </tr>
-            ))}
-            </>
-            )}
-
-            {/* Total Row */}
-            <tr className="total-row">
-              <td></td>
-              <td style={{ borderRight: '1px solid var(--border-light)' }}>{t('Tổng dòng')}</td>
-              <td style={{ paddingLeft: '16px' }}>{t('Cân đối (Balanced)')}</td>
-              <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', color: isPercentageBalanced ? 'var(--success)' : '#f59e0b' }}>
-                {formatPercentage(totalAllocatedPercentage)}
-              </td>
-              <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)' }}>
-                {formatCurrency(totalAllocatedCash)}
-              </td>
-              <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', color: 'var(--warning)' }}>
-                {formatCurrency(totalReductionAmount)}
-              </td>
-              <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', color: 'var(--success)' }}>
-                {formatCurrency(totalActualAmount)}
-              </td>
-              <td></td>
-              <td></td>
-            </tr>
-
-          </tbody>
-        </table>
-      </div>
+      {/* Confirm modal */}
+      {confirmOpen && (
+        <div className="alloc-confirm-overlay" onClick={() => setConfirmOpen(false)}>
+          <div className="alloc-confirm" onClick={e => e.stopPropagation()}>
+            <div className="alloc-confirm-head">
+              <div className="alloc-confirm-title"><span style={{ width:32, height:32, borderRadius:10, background:'rgba(124,92,255,0.12)', border:'1px solid rgba(124,92,255,0.16)', display:'inline-flex', alignItems:'center', justifyContent:'center', color:'#9B7CFF' }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></span>{t('Xác nhận phân bổ')}</div>
+              <button onClick={() => setConfirmOpen(false)} style={{ width:28, height:28, borderRadius:8, border:'1px solid var(--border)', background:'rgba(255,255,255,0.04)', color:'var(--text-muted)', cursor:'pointer' }}>✕</button>
+            </div>
+            <div className="alloc-confirm-body">
+              <p style={{ fontSize:'13px', color:'var(--text-secondary)', lineHeight:1.5 }}>{t('Bạn sắp phân bổ')} <b style={{ color:'var(--text-primary)', fontFamily:'var(--font-mono)' }}>{formatCurrency(totalActualAmount)} ₫</b> {t('vào các danh mục. Các thay đổi sẽ được cập nhật vào tài sản đã liên kết.')}</p>
+              <div className="alloc-confirm-summary">
+                <div className="alloc-confirm-row"><span className="l">🏠 {t('Sinh hoạt')}</span><span className="v">{formatCurrency(expenseActual)} ₫</span></div>
+                <div className="alloc-confirm-row"><span className="l">💜 {t('Tiết kiệm')}</span><span className="v">{formatCurrency(savingActual)} ₫</span></div>
+                {sortedInvestments.length>0 && <div className="alloc-confirm-row"><span className="l">📈 {t('Đầu tư')}</span><span className="v">{formatCurrency(investmentActual)} ₫</span></div>}
+                <div className="alloc-confirm-row" style={{ fontWeight:750, borderTop:'1px solid rgba(255,255,255,0.08)', marginTop:6, paddingTop:10 }}><span className="l">{t('Tổng thực tế')}</span><span className="v" style={{ color:'#18C995' }}>{formatCurrency(totalActualAmount)} ₫</span></div>
+                <div className="alloc-confirm-row"><span className="l">{t('Thu nhập')}</span><span className="v">{formatCurrency(income)} ₫</span></div>
+                <div className="alloc-confirm-row"><span className="l" style={{ color:'#F5A623' }}>{t('Cắt giảm')}</span><span className="v" style={{ color:'#F5A623' }}>↓ {formatCurrency(totalReductionAmount)} ₫</span></div>
+              </div>
+              <div style={{ fontSize:'11px', color:'var(--text-muted)', textAlign:'center' }}>{t('Hành động này sẽ cộng dồn số tiền vào Giá trị hiện tại của tài sản tương ứng.')}</div>
+            </div>
+            <div className="alloc-confirm-actions">
+              <button className="alloc-btn alloc-btn-secondary" onClick={() => setConfirmOpen(false)} disabled={isApplying}>{t('Hủy')}</button>
+              <button className="alloc-btn alloc-btn-primary" onClick={handleGlobalApply} disabled={isApplying}>
+                {isApplying ? <><span style={{ width:14, height:14, border:'2px solid rgba(255,255,255,0.3)', borderTopColor:'#fff', borderRadius:'50%', animation:'spin 0.6s linear infinite' }} /> {t('Đang áp dụng...')}</> : <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg> {t('Xác nhận áp dụng')}</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      <style>{`@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}`}</style>
     </div>
   );
 }
+
+// 5. GOALS PAGE COMPONENT
+
 
 // 5. GOALS PAGE COMPONENT
 function GoalsPage({ goals, userId, totalCurrent, onRefresh }: {
@@ -4100,7 +4281,7 @@ function MoneyInput({ value, onChange, className = '', style, placeholder }: {
   );
 }
 
-// 5. ALLOCATION HISTORY SECTION COMPONENT
+// 5. DEBT MANAGEMENT — Premium Debt Control Center
 function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; onRefresh: () => void }) {
   const { t } = useLanguage();
   const [formName, setFormName] = useState('');
@@ -4123,6 +4304,14 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [closeConfirmId, setCloseConfirmId] = useState<string | null>(null);
   const [saveConfirmData, setSaveConfirmData] = useState<any>(null);
+  // new UI states
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'upcoming' | 'closed'>('all');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<'remainingDesc' | 'dueAsc' | 'interestDesc' | 'createdDesc'>('remainingDesc');
+  const [drawerDebt, setDrawerDebt] = useState<any>(null);
+  const [historyFilter, setHistoryFilter] = useState<'all' | '30d' | '3m' | '1y'>('all');
+  const [dropdownId, setDropdownId] = useState<string | null>(null);
 
   const openCreate = () => {
     setEditingDebt(null);
@@ -4136,7 +4325,6 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
     setFormType('Borrowed');
     setShowModal(true);
   };
-
   const openEdit = (debt: any) => {
     setEditingDebt(debt);
     setFormName(debt.Name || '');
@@ -4148,8 +4336,8 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
     setFormInterestRate(debt.InterestRate != null ? String(debt.InterestRate) : '');
     setFormType(debt.Type || 'Borrowed');
     setShowModal(true);
+    setDropdownId(null);
   };
-
   const handleSaveDebt = async (e: React.FormEvent) => {
     e.preventDefault();
     const interestRate = formInterestRate !== '' ? parseFloat(formInterestRate.replace(/,/g, '')) : null;
@@ -4169,7 +4357,6 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
       await doSaveDebt(payload);
     }
   };
-
   const doSaveDebt = async (payload: any) => {
     try {
       if (editingDebt) {
@@ -4185,27 +4372,26 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
       alert(err.message || t('Có lỗi xảy ra'));
     }
   };
-
   const handleDelete = async (id: string) => {
     setDeleteConfirmId(id);
+    setDropdownId(null);
   };
-
   const confirmDelete = async () => {
     if (!deleteConfirmId) return;
     try {
       await debtService.delete(deleteConfirmId);
       setDeleteConfirmId(null);
+      if (drawerDebt?.Id === deleteConfirmId) setDrawerDebt(null);
       onRefresh();
     } catch (err: any) {
       alert(err.message || t('Có lỗi xảy ra'));
       setDeleteConfirmId(null);
     }
   };
-
   const handleClose = async (id: string) => {
     setCloseConfirmId(id);
+    setDropdownId(null);
   };
-
   const confirmClose = async () => {
     if (!closeConfirmId) return;
     try {
@@ -4217,7 +4403,6 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
       setCloseConfirmId(null);
     }
   };
-
   const openPaymentModal = (debt: any) => {
     setPayingDebt(debt);
     setPaymentAmount('');
@@ -4225,8 +4410,8 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
     setPaymentNote('');
     setPayingError('');
     setShowPaymentModal(true);
+    setDropdownId(null);
   };
-
   const handleAddPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!payingDebt) return;
@@ -4249,362 +4434,716 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
       setPayingError(err.message || t('Có lỗi xảy ra'));
     }
   };
-
-  const toggleExpand = (id: string) => {
-    setExpandedId(expandedId === id ? null : id);
-  };
-
-  const totalDebtCount = debts.length;
-  const totalOutstanding = debts.reduce((s, d) => s + (d.RemainingAmount ?? (d.TotalDebt - d.PaidAmount)), 0);
-  const totalPaid = debts.reduce((s, d) => s + (d.PaidAmount || 0), 0);
-  const nearestDueDebt = debts
-    .filter(d => !d.IsClosed && d.DueDate)
-    .sort((a, b) => new Date(a.DueDate).getTime() - new Date(b.DueDate).getTime())[0] || null;
-
-  const getStatusBadge = (debt: any) => {
-    if (debt.IsClosed) return { text: t('Đã đóng'), bg: 'rgba(16,185,129,0.15)', color: '#10b981' };
-    const remaining = debt.RemainingAmount ?? (debt.TotalDebt - debt.PaidAmount);
-    if (remaining <= 0) return { text: t('Đã đóng'), bg: 'rgba(16,185,129,0.15)', color: '#10b981' };
-    if (debt.DueDate && new Date(debt.DueDate) < new Date()) return { text: t('Quá hạn'), bg: 'rgba(239,68,68,0.15)', color: '#ef4444' };
-    return { text: t('Đang vay'), bg: 'rgba(99,102,241,0.15)', color: 'var(--primary)' };
-  };
-
-  const getTypeBadge = (type: string) => {
-    if (type === 'Lent') return { text: t('Cho vay'), bg: 'rgba(245,158,11,0.15)', color: '#f59e0b' };
-    return { text: t('Vay'), bg: 'rgba(99,102,241,0.15)', color: 'var(--primary)' };
-  };
-
+  // legacy toggle kept for compat
+  void expandedId; void setExpandedId;
   const formatDate = (iso: string) => {
     if (!iso) return '';
     const d = new Date(iso);
     if (isNaN(d.getTime())) return iso;
     return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
   };
+  // derived
+  const totalDebtCount = debts.length;
+  const totalOutstanding = debts.reduce((s, d) => s + (d.RemainingAmount ?? (d.TotalDebt - d.PaidAmount)), 0);
+  const totalPaid = debts.reduce((s, d) => s + (d.PaidAmount || 0), 0);
+  const totalInitial = debts.reduce((s, d) => s + (d.TotalDebt || 0), 0);
+  const healthPct = totalInitial > 0 ? Math.round((totalPaid / totalInitial) * 100) : 0;
+  const healthStatus: 'ok' | 'warn' | 'bad' = healthPct >= 70 ? 'ok' : healthPct >= 40 ? 'warn' : totalOutstanding > 0 ? 'bad' : 'ok';
+  const healthLabel = healthPct >= 80 ? t('Đang kiểm soát tốt') : healthPct >= 50 ? t('Đang kiểm soát') : totalOutstanding === 0 ? t('Đã hoàn tất') : t('Cần chú ý');
+  const getRemaining = (d: any) => d.RemainingAmount ?? (d.TotalDebt - (d.PaidAmount || 0));
+  const isOverdue = (d: any) => !d.IsClosed && getRemaining(d) > 0 && d.DueDate && new Date(d.DueDate) < new Date(new Date().setHours(0,0,0,0));
+  const overdueDebts = debts.filter(isOverdue);
+  const totalOverdue = overdueDebts.reduce((s, d) => s + getRemaining(d), 0);
+  const upcomingDebts = [...debts].filter(d => !d.IsClosed && d.DueDate && getRemaining(d) > 0).sort((a,b) => new Date(a.DueDate).getTime() - new Date(b.DueDate).getTime()).slice(0,5);
+  const highInterestDebts = [...debts].filter(d => d.InterestRate != null && d.InterestRate > 0 && !d.IsClosed && getRemaining(d) > 0).sort((a,b) => (b.InterestRate||0) - (a.InterestRate||0)).slice(0,3);
+  const calcInterest = (d: any) => {
+    if (d.InterestRate == null || d.InterestRate === 0 || !d.BorrowDate) return 0;
+    const rate = d.InterestRate / 100;
+    const payments = (d.Payments || []).slice().sort((a: any, b: any) => new Date(a.PaymentDate).getTime() - new Date(b.PaymentDate).getTime());
+    let totalInterest = 0;
+    let prevDate = new Date(d.BorrowDate);
+    let balance = d.TotalDebt;
+    for (const pmt of payments) {
+      const pmtDate = new Date(pmt.PaymentDate);
+      if (pmtDate <= prevDate) continue;
+      const days = (pmtDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24);
+      totalInterest += balance * rate * (days / 365);
+      balance = pmt.RemainingAfterPayment ?? Math.max(0, balance - pmt.Amount);
+      prevDate = pmtDate;
+    }
+    const now = new Date(); now.setHours(23,59,59,999);
+    const dueDate = d.DueDate ? new Date(d.DueDate) : null; dueDate?.setHours(23,59,59,999);
+    if (dueDate && dueDate < now) {
+      if (dueDate > prevDate) {
+        const termDays = (dueDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24);
+        totalInterest += balance * rate * (termDays / 365);
+        prevDate = dueDate;
+      }
+      if (balance > 0 && now > prevDate) {
+        const overdueDays = (now.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24);
+        totalInterest += balance * rate * (overdueDays / 365);
+      }
+    } else {
+      if (now > prevDate) {
+        const finalDays = (now.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24);
+        totalInterest += balance * rate * (finalDays / 365);
+      }
+    }
+    return totalInterest;
+  };
+  const getDaysUntil = (due: string) => {
+    const now = new Date(); now.setHours(0,0,0,0);
+    const d = new Date(due); d.setHours(0,0,0,0);
+    return Math.round((d.getTime() - now.getTime()) / (1000*60*60*24));
+  };
+  const getDueColor = (d: any) => {
+    if (d.IsClosed || getRemaining(d) <= 0) return { tone:'green', label: t('Đã thanh toán'), icon:'green' };
+    if (!d.DueDate) return { tone:'neutral', label: t('Không kỳ hạn'), icon:'neutral' };
+    const days = getDaysUntil(d.DueDate);
+    if (days < 0) return { tone:'red', label: `${t('Quá hạn')} ${Math.abs(days)} ${t('ngày')}`, icon:'red' };
+    if (days <= 7) return { tone:'orange', label: `${t('Còn')} ${days} ${t('ngày')}`, icon:'orange' };
+    if (days <= 30) return { tone:'amber', label: `${t('Còn')} ${days} ${t('ngày')}`, icon:'amber' };
+    return { tone:'neutral', label: `${t('Còn')} ${days} ${t('ngày')}`, icon:'neutral' };
+  };
+  const getStatusBadge = (debt: any) => {
+    if (debt.IsClosed || getRemaining(debt) <= 0) return { text: t('Đã đóng'), cls: 'green' };
+    if (isOverdue(debt)) return { text: t('Quá hạn'), cls: 'red' };
+    if (debt.DueDate) {
+      const days = getDaysUntil(debt.DueDate);
+      if (days >=0 && days <=7) return { text: t('Sắp đến hạn'), cls: 'amber' };
+    }
+    return { text: t('Đang vay'), cls: 'violet' };
+  };
+  const getTypeBadge = (type: string) => {
+    if (type === 'Lent') return { text: t('Cho vay'), cls: 'amber' };
+    return { text: t('Vay'), cls: 'violet' };
+  };
+  // filter + sort
+  const filtered = debts.filter(d => {
+    const q = searchQuery.trim().toLowerCase();
+    if (q && !String(d.Name||'').toLowerCase().includes(q) && !String(d.Note||'').toLowerCase().includes(q)) return false;
+    if (typeFilter !== 'all' && (d.Type||'Borrowed') !== typeFilter) return false;
+    if (statusFilter !== 'all') {
+      const st = getStatusBadge(d).cls;
+      if (statusFilter === 'active' && !(st==='violet' || st==='amber' || st==='red')) return false;
+      if (statusFilter === 'upcoming' && st !== 'amber' && st !== 'red') return false;
+      if (statusFilter === 'closed' && st !== 'green') return false;
+      if (statusFilter === 'closed' && isOverdue(d)) return false; // overdue not closed
+    }
+    return true;
+  }).sort((a,b) => {
+    if (sortBy==='remainingDesc') return getRemaining(b)-getRemaining(a);
+    if (sortBy==='dueAsc') {
+      if (!a.DueDate) return 1;
+      if (!b.DueDate) return -1;
+      return new Date(a.DueDate).getTime() - new Date(b.DueDate).getTime();
+    }
+    if (sortBy==='interestDesc') return (b.InterestRate||0)-(a.InterestRate||0);
+    return new Date(b.BorrowDate||0).getTime() - new Date(a.BorrowDate||0).getTime();
+  });
+  // payment history flattened
+  const allPayments = debts.flatMap(d => (d.Payments||[]).map((p:any)=> ({...p, debtName: d.Name, debtId: d.Id }))).sort((a:any,b:any)=> new Date(b.PaymentDate||b.CreatedAt).getTime() - new Date(a.PaymentDate||a.CreatedAt).getTime());
+  const filteredPayments = allPayments.filter((p:any)=>{
+    if (historyFilter==='all') return true;
+    const d = new Date(p.PaymentDate||p.CreatedAt);
+    const now = new Date();
+    const diff = (now.getTime() - d.getTime())/(1000*60*60*24);
+    if (historyFilter==='30d') return diff <=30;
+    if (historyFilter==='3m') return diff <=90;
+    if (historyFilter==='1y') return diff <=365;
+    return true;
+  }).slice(0,50);
+  // distribution by Type
+  const typeGroups: Record<string, {count:number, total:number}> = {};
+  debts.forEach(d=>{
+    const tp = d.Type||'Borrowed';
+    if (!typeGroups[tp]) typeGroups[tp] = {count:0,total:0};
+    typeGroups[tp].count++;
+    typeGroups[tp].total += d.TotalDebt||0;
+  });
+  const distEntries = Object.entries(typeGroups).sort((a,b)=>b[1].total-a[1].total);
+  const maxDistTotal = Math.max(1, ...distEntries.map(([,v])=>v.total));
+  void maxDistTotal;
+  useEffect(()=>{
+    const onClickOutside = () => setDropdownId(null);
+    document.addEventListener('click', onClickOutside);
+    return ()=> document.removeEventListener('click', onClickOutside);
+  },[]);
 
   return (
     <div className="debt-page">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h2 style={{ margin: 0 }}>{t('Quản lý nợ')}</h2>
-        <button className="btn" onClick={openCreate} style={{
-          background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: '6px',
-          padding: '8px 16px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem'
-        }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px', verticalAlign: 'middle' }}>
-            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-          </svg>
-          {t('Thêm sổ nợ')}
-        </button>
-      </div>
-
-      <div className="summary-cards" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '24px' }}>
-        <div className="summary-card" style={{ background: 'rgba(99,102,241,0.08)', borderRadius: '10px', padding: '16px' }}>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px' }}>{t('Tổng sổ nợ')}</div>
-          <div style={{ fontSize: '1.3rem', fontWeight: 700, fontFamily: 'var(--font-display)' }}>{totalDebtCount}</div>
+      <div className="debt-header">
+        <div className="debt-header-left">
+          <h2 className="debt-title">{t('Quản lý nợ')}</h2>
+          <p className="debt-subtitle">{t('Theo dõi dư nợ, lãi suất, lịch thanh toán và tiến độ trả nợ.')}</p>
         </div>
-        <div className="summary-card" style={{ background: 'rgba(239,68,68,0.08)', borderRadius: '10px', padding: '16px' }}>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px' }}>{t('Còn nợ')}</div>
-          <div style={{ fontSize: '1.3rem', fontWeight: 700, fontFamily: 'var(--font-display)', color: '#ef4444' }}>{formatInputNumber(totalOutstanding)}</div>
-        </div>
-        <div className="summary-card" style={{ background: 'rgba(16,185,129,0.08)', borderRadius: '10px', padding: '16px' }}>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px' }}>{t('Đã trả')}</div>
-          <div style={{ fontSize: '1.3rem', fontWeight: 700, fontFamily: 'var(--font-display)', color: '#10b981' }}>{formatInputNumber(totalPaid)}</div>
-        </div>
-        <div className="summary-card" onClick={() => { if (nearestDueDebt) { setExpandedId(nearestDueDebt.Id); setTimeout(() => { const el = document.getElementById('debt-row-' + nearestDueDebt.Id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 50); } }} style={{ background: 'rgba(245,158,11,0.08)', borderRadius: '10px', padding: '16px', cursor: nearestDueDebt ? 'pointer' : 'default', transition: 'var(--transition-smooth)' }}>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '4px' }}>{t('Sắp đến hạn')}</div>
-          <div style={{ fontSize: nearestDueDebt ? '1rem' : '1.3rem', fontWeight: 700, fontFamily: 'var(--font-display)', color: '#f59e0b' }}>{nearestDueDebt ? nearestDueDebt.Name : '—'}</div>
-          {nearestDueDebt && <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>{formatDate(nearestDueDebt.DueDate)}</div>}
-        </div>
-      </div>
-
-      {debts.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ marginBottom: '12px', opacity: 0.5 }}>
-            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
-          </svg>
-          <div>{t('Chưa có sổ nợ nào')}</div>
-          <button className="btn" onClick={openCreate} style={{ marginTop: '16px', background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: '6px', padding: '8px 20px', cursor: 'pointer' }}>
-            {t('Tạo sổ nợ đầu tiên')}
+        <div className="debt-header-actions">
+          <button className="debt-btn debt-btn-primary" onClick={openCreate}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            {t('Thêm khoản nợ')}
           </button>
         </div>
-      ) : (
-        <div className="table-container" style={{ overflowX: 'auto', borderRadius: '10px', border: '1px solid var(--border)' }}>
-          <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-            <thead>
-              <tr style={{ background: 'var(--bg-secondary)' }}>
-                <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600 }}>{t('Tên')}</th>
-                <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600 }}>{t('Loại')}</th>
-                <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600 }}>{t('Tổng nợ')}</th>
-                <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600 }}>{t('Đã trả')}</th>
-                <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600 }}>{t('Còn lại')}</th>
-                <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{t('Lãi suất')}</th>
-                <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600 }}>{t('Tiền lãi')}</th>
-                <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{t('Ngày vay')}</th>
-                <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{t('Hạn trả')}</th>
-                <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600 }}>{t('Ghi chú')}</th>
-                <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{t('Trạng thái')}</th>
-                <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 600 }}>{t('Thao tác')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {debts.map((debt: any) => {
-                const remaining = debt.RemainingAmount ?? (debt.TotalDebt - (debt.PaidAmount || 0));
-                const statusBadge = getStatusBadge(debt);
-                const typeBadge = getTypeBadge(debt.Type);
-                const isExpanded = expandedId === debt.Id;
-                const calcInterest = (d: any) => {
-                  if (d.InterestRate == null || d.InterestRate === 0 || !d.BorrowDate) return 0;
-                  const rate = d.InterestRate / 100;
-                  const payments = (d.Payments || []).slice().sort((a: any, b: any) => new Date(a.PaymentDate).getTime() - new Date(b.PaymentDate).getTime());
-                  let totalInterest = 0;
-                  let prevDate = new Date(d.BorrowDate);
-                  let balance = d.TotalDebt;
-                  for (const pmt of payments) {
-                    const pmtDate = new Date(pmt.PaymentDate);
-                    if (pmtDate <= prevDate) continue;
-                    const days = (pmtDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24);
-                    totalInterest += balance * rate * (days / 365);
-                    balance = pmt.RemainingAfterPayment ?? Math.max(0, balance - pmt.Amount);
-                    prevDate = pmtDate;
-                  }
-                  const now = new Date();
-                  now.setHours(23, 59, 59, 999);
-                  const dueDate = d.DueDate ? new Date(d.DueDate) : null;
-                  dueDate?.setHours(23, 59, 59, 999);
+      </div>
 
-                  if (dueDate && dueDate < now) {
-                    if (dueDate > prevDate) {
-                      const termDays = (dueDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24);
-                      totalInterest += balance * rate * (termDays / 365);
-                      prevDate = dueDate;
-                    }
-                    if (balance > 0 && now > prevDate) {
-                      const overdueDays = (now.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24);
-                      totalInterest += balance * rate * (overdueDays / 365);
-                    }
-                  } else {
-                    if (now > prevDate) {
-                      const finalDays = (now.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24);
-                      totalInterest += balance * rate * (finalDays / 365);
-                    }
-                  }
-                  return totalInterest;
-                };
-                const interestAmount = calcInterest(debt);
+      {/* Overview 4 cards */}
+      <div className="debt-overview-grid">
+        <div className="debt-overview-card">
+          <div className="debt-overview-label"><span style={{width:6,height:6,borderRadius:'50%',background:'#7C5CFF',boxShadow:'0 0 8px rgba(124,92,255,0.4)'}} />{t('Tổng khoản nợ')}</div>
+          <div className="debt-overview-value">{totalDebtCount}</div>
+          <div className="debt-overview-sub">{t('khoản')} • {distEntries.length} {t('loại')}</div>
+        </div>
+        <div className="debt-overview-card primary" style={{ borderColor: totalOutstanding>0 ? 'rgba(255,77,103,0.14)' : 'rgba(24,201,149,0.14)' }}>
+          <div className="debt-overview-label" style={{color: totalOutstanding>0 ? '#FF6B8A' : '#18C995'}}><span style={{width:6,height:6,borderRadius:'50%',background: totalOutstanding>0 ? '#FF4D67' : '#18C995'}} />{t('Dư nợ hiện tại')}</div>
+          <div className="debt-overview-value" style={{color: totalOutstanding>0 ? '#FF4D67' : '#18C995'}}>{formatCurrency(totalOutstanding)} ₫</div>
+          <div className="debt-overview-sub">{t('Tổng ban đầu')}: <b style={{fontFamily:'var(--font-mono)',color:'var(--text-primary)'}}>{formatCurrency(totalInitial)} ₫</b></div>
+        </div>
+        <div className="debt-overview-card">
+          <div className="debt-overview-label" style={{color:'#18C995'}}><span style={{width:6,height:6,borderRadius:'50%',background:'#18C995'}} />{t('Đã thanh toán')}</div>
+          <div className="debt-overview-value" style={{color:'#18C995'}}>{formatCurrency(totalPaid)} ₫</div>
+          <div className="debt-overview-sub">{totalInitial>0 ? `${healthPct}% ${t('đã trả')}` : t('Chưa có dữ liệu')}</div>
+        </div>
+        <div className="debt-overview-card">
+          <div className="debt-overview-label"><span style={{width:6,height:6,borderRadius:'50%',background:'#F5A623'}} />{t('Sắp đến hạn')}</div>
+          <div className="debt-overview-value" style={{fontSize: upcomingDebts.length? '22px':'24px', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{upcomingDebts.length ? `${upcomingDebts.length} ${t('khoản')}` : '—'}</div>
+          <div className="debt-overview-sub">{upcomingDebts[0] ? <span style={{color:'var(--text-primary)',fontFamily:'var(--font-mono)',fontWeight:600}}>{upcomingDebts[0].Name}</span> : t('Không có khoản sắp hạn')}</div>
+        </div>
+      </div>
+
+      {/* Overdue alert */}
+      {overdueDebts.length>0 && (
+        <div className="debt-overdue-alert">
+          <div className="debt-overdue-main">
+            <span className="debt-overdue-dot" />
+            <span>⚠ {overdueDebts.length} {t('khoản nợ quá hạn')}</span>
+            <span className="debt-overdue-meta">{formatCurrency(totalOverdue)} ₫</span>
+          </div>
+          <button className="debt-btn debt-btn-ghost" style={{height:32, padding:'0 12px', fontSize:12}} onClick={()=>{ setStatusFilter('upcoming'); const el=document.getElementById('debt-list-anchor'); el?.scrollIntoView({behavior:'smooth'}); }}>{t('Xem khoản nợ')}</button>
+        </div>
+      )}
+
+      {/* Health + Upcoming */}
+      <div className="debt-insights-grid">
+        <div className="debt-health-card">
+          <div className="debt-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9B7CFF" strokeWidth="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>{t('Sức khỏe khoản nợ')}</div>
+          <div className="debt-health-main">
+            <div className="debt-health-ring">
+              <svg width="84" height="84" viewBox="0 0 84 84">
+                <circle cx="42" cy="42" r="36" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="8" />
+                <circle cx="42" cy="42" r="36" fill="none" stroke={healthStatus==='ok' ? '#18C995' : healthStatus==='warn' ? '#F5A623' : '#FF4D67'} strokeWidth="8" strokeLinecap="round" strokeDasharray={`${(healthPct/100)*226.19} 226.19`} transform="rotate(-90 42 42)" style={{transition:'stroke-dasharray 600ms ease-out'}} />
+              </svg>
+              <div className="debt-health-center">
+                <div className="debt-health-pct">{healthPct}%</div>
+                <div className="debt-health-label">{t('đã trả')}</div>
+              </div>
+            </div>
+            <div className="debt-health-info">
+              <div className="debt-health-value">{formatCurrency(totalOutstanding)} ₫</div>
+              <div className="debt-health-sub">{t('Dư nợ hiện tại')}</div>
+              <div style={{fontSize:11,color:'var(--text-muted)',marginTop:4}}>{t('Đã trả')} {formatCurrency(totalPaid)} / {formatCurrency(totalInitial)} ₫</div>
+            </div>
+          </div>
+          <div className="debt-health-track"><div className={`debt-health-fill ${healthStatus}`} style={{width:`${healthPct}%`}} /></div>
+          <div className={`debt-health-status ${healthStatus}`}>
+            {healthStatus==='ok' ? `✓ ${healthLabel}` : healthStatus==='warn' ? `⚠ ${healthLabel}` : `⚠ ${healthLabel}`}
+          </div>
+        </div>
+
+        <div className="debt-upcoming-card">
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+            <div className="debt-card-title" style={{marginBottom:0}}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F5A623" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>{t('Sắp đến hạn')}</div>
+            <span style={{fontSize:11,color:'var(--text-muted)',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.06)',padding:'3px 8px',borderRadius:999}}>{upcomingDebts.length} {t('khoản')}</span>
+          </div>
+          {upcomingDebts.length===0 ? (
+            <div className="debt-empty" style={{padding:'20px 12px'}}>{t('Không có khoản sắp đến hạn')}</div>
+          ) : (
+            <div className="debt-upcoming-list">
+              {upcomingDebts.map(d=>{
+                const due = getDueColor(d);
+                const remain = getRemaining(d);
                 return (
-                  <React.Fragment key={debt.Id}>
-                    <tr id={`debt-row-${debt.Id}`} onClick={() => toggleExpand(debt.Id)} style={{ cursor: 'pointer', borderBottom: '1px solid var(--border)', background: isExpanded ? 'rgba(99,102,241,0.04)' : 'transparent' }}>
-                      <td style={{ padding: '12px 16px', fontWeight: 600 }}>{debt.Name}</td>
-                      <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
-                        <span style={{ fontSize: '0.8rem', padding: '3px 10px', borderRadius: '10px', fontWeight: 600, background: typeBadge.bg, color: typeBadge.color }}>{typeBadge.text}</span>
+                  <div key={d.Id} className={`debt-upcoming-item ${due.tone==='red'?'overdue': due.tone==='amber'||due.tone==='orange'?'due-soon':''}`} onClick={()=> setDrawerDebt(d)}>
+                    <div className={`debt-upcoming-icon ${due.icon}`}>{due.tone==='red'?'⚠': due.tone==='green'?'✓':'◷'}</div>
+                    <div className="debt-upcoming-main">
+                      <div className="debt-upcoming-name">{d.Name}</div>
+                      <div className="debt-upcoming-meta">{t('Hạn')}: {formatDate(d.DueDate)} • {d.InterestRate!=null? `${d.InterestRate}%`: t('Không lãi')}</div>
+                    </div>
+                    <div className="debt-upcoming-right">
+                      <div className="debt-upcoming-amount">{formatCurrency(remain)} ₫</div>
+                      <div className={`debt-upcoming-due ${due.tone}`}>{due.label}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Distribution + High interest */}
+      <div className="debt-secondary-grid">
+        <div className="debt-dist-card">
+          <div className="debt-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4D8DFF" strokeWidth="2"><path d="M3 3h18v18H3z"/><path d="M3 9h18M9 21V9"/></svg>{t('Phân bổ khoản nợ')}</div>
+          {distEntries.length===0 ? (
+            <div className="debt-empty">{t('Chưa có dữ liệu')}</div>
+          ) : (
+            <div style={{display:'flex',flexDirection:'column'}}>
+              {distEntries.map(([tp, v])=>{
+                const pct = totalInitial>0 ? (v.total/totalInitial)*100 : 0;
+                const label = tp==='Lent'? t('Cho vay') : tp==='Borrowed'? t('Vay') : tp;
+                const color = tp==='Lent' ? '#F5A623' : '#7C5CFF';
+                return (
+                  <div key={tp} className="debt-dist-row">
+                    <span className="debt-dist-label">{label} • {v.count} {t('khoản')}</span>
+                    <span className="debt-dist-bar"><span className="debt-dist-fill" style={{width:`${pct}%`, background: color}} /></span>
+                    <span className="debt-dist-pct">{pct.toFixed(1)}%</span>
+                    <span className="debt-dist-val">{formatCurrency(v.total)} ₫</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        <div className="debt-interest-card">
+          <div className="debt-card-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#F5A623" strokeWidth="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>{t('Khoản nợ lãi suất cao')}</div>
+          {highInterestDebts.length===0 ? (
+            <div className="debt-empty" style={{padding:'20px 12px'}}>{t('Không có khoản lãi cao')}</div>
+          ) : (
+            <div>
+              {highInterestDebts.map(d=>(
+                <div key={d.Id} className="debt-interest-item" onClick={()=> setDrawerDebt(d)} style={{cursor:'pointer'}}>
+                  <div className="debt-interest-main">
+                    <div className="debt-interest-name">{d.Name}</div>
+                    <div className="debt-interest-meta">{formatCurrency(getRemaining(d))} ₫ {t('còn lại')} • {formatDate(d.BorrowDate)}</div>
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <span className="debt-interest-badge">{d.InterestRate}%</span>
+                    <span className="debt-interest-amt">{formatCurrency(getRemaining(d))} ₫</span>
+                  </div>
+                </div>
+              ))}
+              <div style={{fontSize:11,color:'var(--text-muted)',marginTop:8,display:'flex',alignItems:'center',gap:6}}><span style={{width:6,height:6,borderRadius:'50%',background:'#F5A623'}} />{t('Ưu tiên trả các khoản lãi cao trước')}</div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* List header + toolbar */}
+      <div id="debt-list-anchor" style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,flexWrap:'wrap',marginTop:4}}>
+        <div>
+          <h3 style={{fontFamily:'var(--font-display)',fontWeight:700,fontSize:15,letterSpacing:'-0.02em'}}>{t('Tất cả khoản nợ')}</h3>
+          <div style={{fontSize:12,color:'var(--text-secondary)',marginTop:2}}>{filtered.length} / {debts.length} {t('khoản')} • {t('Dư nợ')}: <b style={{fontFamily:'var(--font-mono)',color:'var(--text-primary)'}}>{formatCurrency(filtered.reduce((s,d)=>s+getRemaining(d),0))} ₫</b></div>
+        </div>
+      </div>
+
+      <div className="debt-toolbar">
+        <div className="debt-search-wrap">
+          <span className="debt-search-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg></span>
+          <input className="debt-search-input" placeholder={t('Tìm khoản nợ...')} value={searchQuery} onChange={e=> setSearchQuery(e.target.value)} />
+        </div>
+        <div className="debt-filter-pills">
+          <button className={`debt-pill ${statusFilter==='all'?'active':''}`} onClick={()=> setStatusFilter('all')}>{t('Tất cả')}</button>
+          <button className={`debt-pill ${statusFilter==='active'?'active':''}`} onClick={()=> setStatusFilter('active')}>{t('Đang vay')}</button>
+          <button className={`debt-pill ${statusFilter==='upcoming'?'active amber':''}`} onClick={()=> setStatusFilter('upcoming')}>{t('Sắp đến hạn')}</button>
+          <button className={`debt-pill ${statusFilter==='closed'?'active green':''}`} onClick={()=> setStatusFilter('closed')}>{t('Đã đóng')}</button>
+        </div>
+        <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+          <select value={typeFilter} onChange={e=> setTypeFilter(e.target.value)} style={{height:32,padding:'0 10px',borderRadius:999,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.06)',color:'var(--text-primary)',fontSize:12}}>
+            <option value="all">{t('Loại nợ')}</option>
+            <option value="Borrowed">{t('Vay')}</option>
+            <option value="Lent">{t('Cho vay')}</option>
+          </select>
+          <select value={sortBy} onChange={e=> setSortBy(e.target.value as any)} style={{height:32,padding:'0 10px',borderRadius:999,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.06)',color:'var(--text-primary)',fontSize:12}}>
+            <option value="remainingDesc">{t('Dư nợ')} ↓</option>
+            <option value="dueAsc">{t('Hạn trả')} ↑</option>
+            <option value="interestDesc">{t('Lãi suất')} ↓</option>
+            <option value="createdDesc">{t('Ngày tạo')} ↓</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Debt list */}
+      {debts.length===0 ? (
+        <div className="debt-empty" style={{background:'#101522',border:'1px solid rgba(255,255,255,0.06)',borderRadius:16,padding:'48px 20px'}}>
+          <div style={{width:48,height:48,borderRadius:14,background:'rgba(124,92,255,0.08)',border:'1px solid rgba(124,92,255,0.12)',display:'inline-flex',alignItems:'center',justifyContent:'center',color:'#9B7CFF',marginBottom:12}}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          </div>
+          <div style={{fontWeight:700,color:'var(--text-primary)',fontSize:14}}>{t('Bạn chưa có khoản nợ nào')}</div>
+          <div style={{maxWidth:420,margin:'6px auto 0',color:'var(--text-secondary)',fontSize:12}}>{t('Thêm khoản nợ để bắt đầu theo dõi lịch thanh toán và chi phí lãi.')}</div>
+          <button className="debt-btn debt-btn-primary" onClick={openCreate} style={{marginTop:16}}>{t('Thêm khoản nợ')}</button>
+        </div>
+      ) : filtered.length===0 ? (
+        <div className="debt-empty" style={{background:'#101522',border:'1px solid rgba(255,255,255,0.06)',borderRadius:16,padding:'32px'}}>{t('Không tìm thấy khoản nợ phù hợp bộ lọc')}</div>
+      ) : (
+        <div className="debt-table-card">
+          <div className="debt-table-wrap">
+            <table className="debt-table">
+              <thead>
+                <tr>
+                  <th>{t('Tên')}</th>
+                  <th>{t('Loại')}</th>
+                  <th className="num">{t('Tổng nợ')}</th>
+                  <th className="num">{t('Đã trả')}</th>
+                  <th className="num">{t('Còn lại')}</th>
+                  <th style={{textAlign:'center'}}>{t('Lãi suất')}</th>
+                  <th className="num">{t('Tiền lãi')}</th>
+                  <th style={{textAlign:'center'}}>{t('Ngày vay')}</th>
+                  <th style={{textAlign:'center'}}>{t('Hạn trả')}</th>
+                  <th style={{textAlign:'center'}}>{t('Trạng thái')}</th>
+                  <th style={{textAlign:'center'}}>{t('Thao tác')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(debt=>{
+                  const remaining = getRemaining(debt);
+                  const paid = debt.PaidAmount||0;
+                  const total = debt.TotalDebt||0;
+                  const pct = total>0 ? Math.round((paid/total)*100) : 0;
+                  const interestAmount = calcInterest(debt);
+                  const status = getStatusBadge(debt);
+                  const type = getTypeBadge(debt.Type);
+                  const isSelected = drawerDebt?.Id===debt.Id;
+                  const progressCls = status.cls==='green' ? 'green' : status.cls==='red' ? 'red' : pct>=90 ? 'green' : status.cls==='amber' ? 'amber' : 'violet';
+                  return (
+                    <tr key={debt.Id} className={isSelected? 'selected':''} onClick={()=> setDrawerDebt(debt)}>
+                      <td>
+                        <div className="debt-name-cell">
+                          <div className={`debt-icon ${String(debt.Type)==='Lent'?'lent':'borrowed'}`}>{String(debt.Type)==='Lent'?'⇄':'◯'}</div>
+                          <div className="debt-name-main">
+                            <div className="debt-name-title" title={debt.Name}>{debt.Name}</div>
+                            <div className="debt-name-sub">{type.text} • {formatDate(debt.BorrowDate)}</div>
+                            <div className="debt-progress-wrap" style={{marginTop:6}}>
+                              <div className="debt-progress-track"><div className={`debt-progress-fill ${progressCls}`} style={{width:`${pct}%`}} /></div>
+                              <div className="debt-progress-meta"><span>{t('Đã trả')} {formatCurrency(paid)} / {formatCurrency(total)}</span><span>{pct}%</span></div>
+                            </div>
+                          </div>
+                        </div>
                       </td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: 'var(--font-display)' }}>{formatInputNumber(debt.TotalDebt)}</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: 'var(--font-display)', color: '#10b981' }}>{formatInputNumber(debt.PaidAmount || 0)}</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: 'var(--font-display)', color: remaining > 0 ? '#ef4444' : '#10b981', fontWeight: 700 }}>{formatInputNumber(remaining)}</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                        {debt.InterestRate != null ? <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{debt.InterestRate}%</span> : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                      <td><span className={`debt-badge ${type.cls==='amber'?'amber':'violet'}`}>{type.text}</span></td>
+                      <td className="num">{formatCurrency(total)} ₫</td>
+                      <td className="num" style={{color:'#10b981'}}>{formatCurrency(paid)} ₫</td>
+                      <td className="num" style={{color: remaining>0? '#FF4D67':'#10b981', fontWeight:700}}>{formatCurrency(remaining)} ₫</td>
+                      <td style={{textAlign:'center'}}>{debt.InterestRate!=null ? <span style={{fontWeight:700, color: (debt.InterestRate||0)>=15 ? '#F5A623':'var(--text-secondary)', fontFamily:'var(--font-mono)' }}>{debt.InterestRate}%</span> : <span style={{color:'var(--text-muted)'}}>—</span>}</td>
+                      <td className="num" style={{color: interestAmount>0 ? '#F5A623':'var(--text-muted)', fontWeight:600}}>{interestAmount>0 ? formatCurrency(Math.round(interestAmount))+' ₫' : '—'}</td>
+                      <td style={{textAlign:'center', color:'var(--text-muted)', fontSize:12, fontFamily:'var(--font-mono)'}}>{formatDate(debt.BorrowDate)}</td>
+                      <td style={{textAlign:'center'}}>
+                        {debt.DueDate ? (
+                          <span style={{fontSize:12, fontFamily:'var(--font-mono)', color: isOverdue(debt)? '#FF4D67' : getDueColor(debt).tone==='amber'||getDueColor(debt).tone==='orange'? '#F5A623':'var(--text-secondary)'}}>{formatDate(debt.DueDate)}</span>
+                        ) : <span style={{color:'var(--text-muted)'}}>—</span>}
                       </td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: 'var(--font-display)', color: interestAmount > 0 ? '#f59e0b' : 'var(--text-muted)', fontWeight: 600 }}>{interestAmount > 0 ? formatInputNumber(Math.round(interestAmount)) : '—'}</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>{formatDate(debt.BorrowDate)}</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>{debt.DueDate ? formatDate(debt.DueDate) : <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
-                      <td style={{ padding: '12px 16px', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: debt.Note ? 'inherit' : 'var(--text-muted)' }}>{debt.Note || '—'}</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                        <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '10px', fontWeight: 600, background: statusBadge.bg, color: statusBadge.color }}>{statusBadge.text}</span>
-                      </td>
-                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
-                          {!debt.IsClosed && remaining > 0 && (
-                            <button onClick={(e) => { e.stopPropagation(); openPaymentModal(debt); }} style={{ background: 'rgba(16,185,129,0.1)', border: 'none', borderRadius: '4px', padding: '4px 8px', cursor: 'pointer', fontSize: '0.75rem', color: '#10b981' }} title={t('Thanh toán')}>
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="2" x2="12" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                            </button>
+                      <td style={{textAlign:'center'}}><span className={`debt-badge ${status.cls}`}>{status.text}</span></td>
+                      <td style={{textAlign:'center'}}>
+                        <div className="debt-actions" onClick={e=> e.stopPropagation()}>
+                          {remaining>0 && !debt.IsClosed ? (
+                            <button className="debt-action-btn primary" onClick={()=> openPaymentModal(debt)}>{t('Thanh toán')}</button>
+                          ) : (
+                            <button className="debt-action-btn ghost" onClick={()=> setDrawerDebt(debt)}>{t('Xem')}</button>
                           )}
-                          {!debt.IsClosed && (
-                            <button onClick={(e) => { e.stopPropagation(); handleClose(debt.Id); }} style={{ background: 'rgba(99,102,241,0.1)', border: 'none', borderRadius: '4px', padding: '4px 8px', cursor: 'pointer', fontSize: '0.75rem', color: 'var(--primary)' }} title={t('Đóng sổ')}>
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                            </button>
-                          )}
-                          <button onClick={(e) => { e.stopPropagation(); openEdit(debt); }} style={{ background: 'rgba(245,158,11,0.1)', border: 'none', borderRadius: '4px', padding: '4px 8px', cursor: 'pointer', fontSize: '0.75rem', color: '#f59e0b' }} title={t('Sửa')}>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                          </button>
-                          <button onClick={(e) => { e.stopPropagation(); handleDelete(debt.Id); }} style={{ background: 'rgba(239,68,68,0.1)', border: 'none', borderRadius: '4px', padding: '4px 8px', cursor: 'pointer', fontSize: '0.75rem', color: '#ef4444' }} title={t('Xóa')}>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-                          </button>
+                          <div style={{position:'relative'}}>
+                            <button className="debt-action-btn ghost" style={{width:30, padding:0, justifyContent:'center'}} onClick={(e)=>{ e.stopPropagation(); setDropdownId(dropdownId===debt.Id? null: debt.Id); }}>⋯</button>
+                            {dropdownId===debt.Id && (
+                              <div style={{position:'absolute', right:0, top:'100%', marginTop:6, background:'#0F1320', border:'1px solid var(--border)', borderRadius:12, boxShadow:'0 16px 40px rgba(0,0,0,0.38)', minWidth:160, zIndex:10, overflow:'hidden'}} onClick={e=> e.stopPropagation()}>
+                                <button style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'10px 12px',background:'transparent',border:'none',color:'var(--text-primary)',fontSize:12,cursor:'pointer',textAlign:'left'}} onClick={()=> setDrawerDebt(debt)}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>{t('Xem chi tiết')}</button>
+                                <button style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'10px 12px',background:'transparent',border:'none',color:'var(--text-primary)',fontSize:12,cursor:'pointer',textAlign:'left'}} onClick={()=> openEdit(debt)}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>{t('Chỉnh sửa')}</button>
+                                {!debt.IsClosed && <button style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'10px 12px',background:'transparent',border:'none',color:'var(--text-primary)',fontSize:12,cursor:'pointer',textAlign:'left'}} onClick={()=> handleClose(debt.Id)}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>{t('Đóng sổ')}</button>}
+                                <button style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'10px 12px',background:'transparent',border:'none',color:'#FF4D67',fontSize:12,cursor:'pointer',textAlign:'left',borderTop:'1px solid var(--border)'}} onClick={()=> handleDelete(debt.Id)}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>{t('Xóa')}</button>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </td>
                     </tr>
-                    {isExpanded && (
-                      <tr key={`${debt.Id}-expanded`}>
-                        <td colSpan={12} style={{ padding: '16px 20px', background: 'rgba(99,102,241,0.02)', borderBottom: '1px solid var(--border)' }}>
-                          {debt.Description && (
-                            <div style={{ marginBottom: '12px', padding: '12px', background: 'rgba(99,102,241,0.05)', borderRadius: '8px', fontSize: '0.85rem', lineHeight: 1.6, color: 'var(--text-muted)' }}>
-                              <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--text)' }}>{t('Mô tả')}</div>
-                              {debt.Description}
-                            </div>
-                          )}
-                          <div style={{ fontWeight: 600, marginBottom: '8px', color: 'var(--text)' }}>{t('Lịch sử thanh toán')}</div>
-                          {(!debt.Payments || debt.Payments.length === 0) ? (
-                            <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', fontStyle: 'italic' }}>{t('Chưa có thanh toán nào')}</div>
-                          ) : (
-                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
-                              <thead>
-                                <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                                  <th style={{ padding: '6px 8px', textAlign: 'left', fontWeight: 600 }}>{t('Ngày')}</th>
-                                  <th style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600 }}>{t('Số tiền')}</th>
-                                  <th style={{ padding: '6px 8px', textAlign: 'left', fontWeight: 600 }}>{t('Ghi chú')}</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {(debt.Payments || []).map((pmt: any) => (
-                                  <tr key={pmt.Id} style={{ borderBottom: '1px solid var(--border)' }}>
-                                    <td style={{ padding: '6px 8px' }}>{formatDateTime(pmt.PaymentDate || pmt.CreatedAt)}</td>
-                                    <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'var(--font-display)', color: '#10b981', fontWeight: 600 }}>{formatInputNumber(pmt.Amount)}</td>
-                                    <td style={{ padding: '6px 8px', color: pmt.Note ? 'inherit' : 'var(--text-muted)' }}>{pmt.Note || '—'}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          )}
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-            </tbody>
-          </table>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td colSpan={2}>{t('Tổng')}</td>
+                  <td className="num">{formatCurrency(filtered.reduce((s,d)=> s+(d.TotalDebt||0),0))} ₫</td>
+                  <td className="num" style={{color:'#10b981'}}>{formatCurrency(filtered.reduce((s,d)=> s+(d.PaidAmount||0),0))} ₫</td>
+                  <td className="num" style={{color:'#FF4D67'}}>{formatCurrency(filtered.reduce((s,d)=> s+getRemaining(d),0))} ₫</td>
+                  <td></td>
+                  <td className="num" style={{color:'#F5A623'}}>{formatCurrency(Math.round(filtered.reduce((s,d)=> s+calcInterest(d),0)))} ₫</td>
+                  <td colSpan={4}></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          {/* mobile cards */}
+          <div className="debt-mobile-list">
+            {filtered.map(debt=>{
+              const remaining = getRemaining(debt);
+              const pct = debt.TotalDebt? Math.round(((debt.PaidAmount||0)/debt.TotalDebt)*100):0;
+              const status = getStatusBadge(debt);
+              return (
+                <div key={debt.Id} className="debt-mobile-card" onClick={()=> setDrawerDebt(debt)}>
+                  <div className="debt-mobile-top">
+                    <div className="debt-name-cell" style={{minWidth:0}}>
+                      <div className={`debt-icon ${String(debt.Type)==='Lent'?'lent':'borrowed'}`} style={{width:32,height:32}}>{String(debt.Type)==='Lent'?'⇄':'◯'}</div>
+                      <div className="debt-name-main"><div className="debt-name-title" style={{fontSize:13}}>{debt.Name}</div><div className="debt-name-sub">{formatDate(debt.BorrowDate)} • {debt.InterestRate!=null? `${debt.InterestRate}%`:'—'}</div></div>
+                    </div>
+                    <span className={`debt-badge ${status.cls}`}>{status.text}</span>
+                  </div>
+                  <div className="debt-mobile-grid">
+                    <div className="debt-mobile-item"><span className="debt-mobile-label">{t('Còn lại')}</span><span className="debt-mobile-value" style={{color: remaining>0? '#FF4D67':'#10b981'}}>{formatCurrency(remaining)} ₫</span></div>
+                    <div className="debt-mobile-item"><span className="debt-mobile-label">{t('Đã trả')}</span><span className="debt-mobile-value" style={{color:'#10b981'}}>{formatCurrency(debt.PaidAmount||0)} ₫</span></div>
+                    <div className="debt-mobile-item"><span className="debt-mobile-label">{t('Lãi suất')}</span><span className="debt-mobile-value">{debt.InterestRate!=null? `${debt.InterestRate}%`:'—'}</span></div>
+                    <div className="debt-mobile-item"><span className="debt-mobile-label">{t('Hạn trả')}</span><span className="debt-mobile-value">{debt.DueDate? formatDate(debt.DueDate):'—'}</span></div>
+                  </div>
+                  <div className="debt-progress-wrap">
+                    <div className="debt-progress-track"><div className={`debt-progress-fill ${status.cls==='green'?'green': status.cls==='red'?'red': pct>=90?'green':'violet'}`} style={{width:`${pct}%`}} /></div>
+                    <div className="debt-progress-meta"><span>{pct}% {t('đã trả')}</span><span>{formatCurrency(remaining)} ₫</span></div>
+                  </div>
+                  <div style={{display:'flex',gap:8}}>
+                    {remaining>0 && !debt.IsClosed ? <button className="debt-action-btn primary" style={{flex:1,justifyContent:'center'}} onClick={(e)=>{e.stopPropagation(); openPaymentModal(debt);}}>{t('Thanh toán')}</button> : <button className="debt-action-btn ghost" style={{flex:1,justifyContent:'center'}} onClick={(e)=>{e.stopPropagation(); setDrawerDebt(debt);}}>{t('Xem')}</button>}
+                    <button className="debt-action-btn ghost" style={{width:36,justifyContent:'center'}} onClick={(e)=>{e.stopPropagation(); openEdit(debt);}}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
-      {/* Create/Edit Modal */}
+      {/* Payment History */}
+      <div className="debt-history-card">
+        <div className="debt-history-header">
+          <div>
+            <div className="debt-history-title">{t('Lịch sử thanh toán')}</div>
+            <div style={{fontSize:11,color:'var(--text-muted)',marginTop:2}}>{allPayments.length} {t('giao dịch')} • {t('Hiển thị')} {filteredPayments.length}</div>
+          </div>
+          <div className="debt-history-controls">
+            <button className={`debt-history-btn ${historyFilter==='all'?'active':''}`} onClick={()=> setHistoryFilter('all')}>{t('Tất cả')}</button>
+            <button className={`debt-history-btn ${historyFilter==='30d'?'active':''}`} onClick={()=> setHistoryFilter('30d')}>30 {t('ngày')}</button>
+            <button className={`debt-history-btn ${historyFilter==='3m'?'active':''}`} onClick={()=> setHistoryFilter('3m')}>3 {t('tháng')}</button>
+            <button className={`debt-history-btn ${historyFilter==='1y'?'active':''}`} onClick={()=> setHistoryFilter('1y')}>1 {t('năm')}</button>
+          </div>
+        </div>
+        {filteredPayments.length===0 ? (
+          <div className="debt-empty">{t('Chưa có thanh toán nào')}</div>
+        ) : (
+          <div style={{overflowX:'auto'}}>
+            <table className="debt-history-table">
+              <thead><tr><th>{t('Ngày')}</th><th>{t('Khoản nợ')}</th><th style={{textAlign:'right'}}>{t('Số tiền')}</th><th>{t('Ghi chú')}</th></tr></thead>
+              <tbody>
+                {filteredPayments.map((p:any)=>(
+                  <tr key={p.Id}>
+                    <td style={{fontFamily:'var(--font-mono)',fontSize:12,whiteSpace:'nowrap'}}>{formatDateTime(p.PaymentDate||p.CreatedAt)}</td>
+                    <td style={{fontWeight:600}}>{p.debtName}</td>
+                    <td style={{textAlign:'right',fontFamily:'var(--font-mono)',fontWeight:700,color:'#10b981'}}>{formatCurrency(p.Amount)} ₫</td>
+                    <td style={{color: p.Note? 'var(--text-primary)':'var(--text-muted)', maxWidth:200, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{p.Note||'—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Drawer */}
+      {drawerDebt && (
+        <div className="debt-drawer-overlay" onClick={()=> setDrawerDebt(null)}>
+          <div className="debt-drawer" onClick={e=> e.stopPropagation()}>
+            <div className="debt-drawer-head">
+              <div>
+                <div className="debt-drawer-title">{drawerDebt.Name}</div>
+                <div className="debt-drawer-sub">{getTypeBadge(drawerDebt.Type).text} • {formatDate(drawerDebt.BorrowDate)}</div>
+              </div>
+              <button onClick={()=> setDrawerDebt(null)} style={{width:28,height:28,borderRadius:8,border:'1px solid var(--border)',background:'rgba(255,255,255,0.04)',color:'var(--text-muted)',cursor:'pointer'}}>✕</button>
+            </div>
+            <div className="debt-drawer-body">
+              <div style={{textAlign:'center',padding:'12px 0'}}>
+                <div style={{fontSize:11,letterSpacing:'0.08em',textTransform:'uppercase',color:'var(--text-muted)',fontWeight:700}}>{t('Dư nợ hiện tại')}</div>
+                <div style={{fontFamily:'var(--font-mono)',fontWeight:750,fontSize:26,letterSpacing:'-0.03em',marginTop:6,color: getRemaining(drawerDebt)>0? '#FF4D67':'#18C995'}}>{formatCurrency(getRemaining(drawerDebt))} ₫</div>
+                <div style={{marginTop:10}}><span className={`debt-badge ${getStatusBadge(drawerDebt).cls}`}>{getStatusBadge(drawerDebt).text}</span></div>
+              </div>
+              <div className="debt-drawer-card">
+                <div className="debt-drawer-label">{t('Chi tiết')}</div>
+                <div className="debt-drawer-grid">
+                  <div className="debt-drawer-item"><span className="debt-drawer-item-label">{t('Tổng nợ')}</span><span className="debt-drawer-item-value">{formatCurrency(drawerDebt.TotalDebt)} ₫</span></div>
+                  <div className="debt-drawer-item"><span className="debt-drawer-item-label">{t('Đã trả')}</span><span className="debt-drawer-item-value" style={{color:'#10b981'}}>{formatCurrency(drawerDebt.PaidAmount||0)} ₫</span></div>
+                  <div className="debt-drawer-item"><span className="debt-drawer-item-label">{t('Lãi suất')}</span><span className="debt-drawer-item-value">{drawerDebt.InterestRate!=null? `${drawerDebt.InterestRate}%`:'—'}</span></div>
+                  <div className="debt-drawer-item"><span className="debt-drawer-item-label">{t('Tiền lãi')}</span><span className="debt-drawer-item-value" style={{color:'#F5A623'}}>{formatCurrency(Math.round(calcInterest(drawerDebt)))} ₫</span></div>
+                  <div className="debt-drawer-item"><span className="debt-drawer-item-label">{t('Ngày vay')}</span><span className="debt-drawer-item-value">{formatDate(drawerDebt.BorrowDate)}</span></div>
+                  <div className="debt-drawer-item"><span className="debt-drawer-item-label">{t('Hạn trả')}</span><span className="debt-drawer-item-value">{drawerDebt.DueDate? formatDate(drawerDebt.DueDate):'—'}</span></div>
+                </div>
+                {drawerDebt.Description && <div style={{marginTop:12,padding:10,background:'rgba(124,92,255,0.06)',border:'1px solid rgba(124,92,255,0.10)',borderRadius:10,fontSize:12,color:'var(--text-secondary)',lineHeight:1.5}}><b style={{color:'var(--text-primary)'}}>{t('Mô tả')}:</b> {drawerDebt.Description}</div>}
+                {drawerDebt.Note && <div style={{marginTop:8, fontSize:12,color:'var(--text-muted)'}}><b>{t('Ghi chú')}:</b> {drawerDebt.Note}</div>}
+                <div style={{marginTop:12}}>
+                  <div style={{fontSize:11, color:'var(--text-muted)',marginBottom:6}}>{t('Tiến độ')}: <b style={{color:'var(--text-primary)',fontFamily:'var(--font-mono)'}}>{drawerDebt.TotalDebt? Math.round(((drawerDebt.PaidAmount||0)/drawerDebt.TotalDebt)*100):0}%</b></div>
+                  <div className="debt-progress-track"><div className={`debt-progress-fill ${getStatusBadge(drawerDebt).cls==='green'?'green': getStatusBadge(drawerDebt).cls==='red'?'red':'violet'}`} style={{width:`${drawerDebt.TotalDebt? Math.round(((drawerDebt.PaidAmount||0)/drawerDebt.TotalDebt)*100):0}%`}} /></div>
+                </div>
+              </div>
+              <div className="debt-drawer-card">
+                <div className="debt-drawer-label">{t('Lịch sử thanh toán')} • {(drawerDebt.Payments||[]).length}</div>
+                {(drawerDebt.Payments||[]).length===0 ? (
+                  <div style={{fontSize:12,color:'var(--text-muted)',fontStyle:'italic',padding:'8px 0'}}>{t('Chưa có thanh toán nào')}</div>
+                ) : (
+                  <div className="debt-history-list">
+                    {(drawerDebt.Payments||[]).slice().sort((a:any,b:any)=> new Date(b.PaymentDate).getTime()-new Date(a.PaymentDate).getTime()).map((p:any)=>(
+                      <div key={p.Id} className="debt-history-item">
+                        <div><div style={{fontWeight:600,fontSize:12}}>{formatDate(p.PaymentDate||p.CreatedAt)}</div><div style={{fontSize:11,color:'var(--text-muted)'}}>{p.Note||'—'}</div></div>
+                        <div className="debt-history-item-amount">+{formatCurrency(p.Amount)} ₫</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="debt-drawer-actions">
+                {getRemaining(drawerDebt)>0 && !drawerDebt.IsClosed ? <button className="debt-btn debt-btn-primary" style={{flex:1,justifyContent:'center'}} onClick={()=> openPaymentModal(drawerDebt)}>{t('Thanh toán')}</button> : <span style={{flex:1,textAlign:'center',fontSize:12,color:'var(--text-muted)',padding:'10px'}}>{t('Khoản nợ đã đóng')}</span>}
+                <button className="debt-btn debt-btn-secondary" onClick={()=> openEdit(drawerDebt)}>{t('Sửa')}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create/Edit Modal — premium */}
       {showModal && (
-        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div className="modal" style={{ background: 'var(--bg-card)', borderRadius: '12px', padding: '24px', width: '90%', maxWidth: '480px', maxHeight: '90vh', overflowY: 'auto' }}>
-            <h3 style={{ margin: '0 0 16px' }}>{editingDebt ? t('Sửa sổ nợ') : t('Thêm sổ nợ mới')}</h3>
+        <div className="modal-overlay">
+          <div className="modal-content" style={{maxWidth:520}}>
+            <div className="modal-header">
+              <h3 className="modal-title">{editingDebt ? t('Chỉnh sửa khoản nợ') : t('Thêm khoản nợ mới')}</h3>
+              <button className="modal-close" onClick={()=> setShowModal(false)}>✕</button>
+            </div>
             <form onSubmit={handleSaveDebt}>
-              <div className="form-group" style={{ marginBottom: '12px' }}>
-                <label className="form-label" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '4px', color: 'var(--text-muted)' }}>{t('Tên')} *</label>
-                <input className="form-control" style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border)', fontSize: '0.85rem' }} value={formName} onChange={(e) => setFormName(e.target.value)} required />
+              <div className="form-group">
+                <label className="form-label">{t('Tên khoản nợ')} *</label>
+                <input className="form-control" value={formName} onChange={e=> setFormName(e.target.value)} placeholder={t('VD: Vay ngân hàng, Ứng tiền...')} required />
               </div>
-              <div className="form-group" style={{ marginBottom: '12px' }}>
-                <label className="form-label" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '4px', color: 'var(--text-muted)' }}>{t('Loại')}</label>
-                <select className="form-control" style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border)', color: 'var(--text-primary)', fontSize: '0.85rem' }} value={formType} onChange={(e) => setFormType(e.target.value)}>
-                  <option value="Borrowed">{t('Vay')}</option>
-                  <option value="Lent">{t('Cho vay')}</option>
-                </select>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+                <div className="form-group">
+                  <label className="form-label">{t('Loại')}</label>
+                  <select className="form-control" value={formType} onChange={e=> setFormType(e.target.value)}>
+                    <option value="Borrowed">{t('Vay')}</option>
+                    <option value="Lent">{t('Cho vay')}</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">{t('Lãi suất (%/năm)')}</label>
+                  <input className="form-control" type="number" step="0.01" min="0" value={formInterestRate} onChange={e=> setFormInterestRate(e.target.value)} placeholder="12.5" />
+                </div>
               </div>
-              <div className="form-group" style={{ marginBottom: '12px' }}>
-                <label className="form-label" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '4px', color: 'var(--text-muted)' }}>{t('Tổng nợ')} *</label>
-                <input className="form-control" style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border)', fontSize: '0.85rem' }} value={formatInputNumber(parseFloat(formTotalDebt.replace(/,/g, '')) || 0)} onChange={(e) => setFormTotalDebt(e.target.value.replace(/,/g, ''))} required />
+              <div className="form-group">
+                <label className="form-label">{t('Tổng nợ')} *</label>
+                <input className="form-control" value={formatInputNumber(parseFloat(formTotalDebt.replace(/,/g,''))||0)} onChange={e=> setFormTotalDebt(e.target.value.replace(/,/g,''))} placeholder="0" required />
               </div>
-              <div className="form-group" style={{ marginBottom: '12px' }}>
-                <label className="form-label" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '4px', color: 'var(--text-muted)' }}>{t('Ngày vay')} *</label>
-                <input className="form-control" type="date" style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border)', fontSize: '0.85rem' }} value={formBorrowDate} onChange={(e) => setFormBorrowDate(e.target.value)} required />
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+                <div className="form-group">
+                  <label className="form-label">{t('Ngày vay')} *</label>
+                  <input className="form-control" type="date" value={formBorrowDate} onChange={e=> setFormBorrowDate(e.target.value)} required />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">{t('Hạn trả')}</label>
+                  <input className="form-control" type="date" value={formDueDate} onChange={e=> setFormDueDate(e.target.value)} />
+                </div>
               </div>
-              <div className="form-group" style={{ marginBottom: '12px' }}>
-                <label className="form-label" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '4px', color: 'var(--text-muted)' }}>{t('Hạn trả')}</label>
-                <input className="form-control" type="date" style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border)', fontSize: '0.85rem' }} value={formDueDate} onChange={(e) => setFormDueDate(e.target.value)} />
+              <div className="form-group">
+                <label className="form-label">{t('Mô tả')}</label>
+                <textarea className="form-control" value={formDescription} onChange={e=> setFormDescription(e.target.value)} placeholder={t('Mô tả chi tiết...')} rows={2} style={{resize:'vertical'}} />
               </div>
-              <div className="form-group" style={{ marginBottom: '12px' }}>
-                <label className="form-label" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '4px', color: 'var(--text-muted)' }}>{t('Mô tả')}</label>
-                <textarea className="form-control" style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border)', fontSize: '0.85rem', resize: 'vertical' }} value={formDescription} onChange={(e) => setFormDescription(e.target.value)} placeholder={t('Nhập mô tả')} rows={3} />
+              <div className="form-group">
+                <label className="form-label">{t('Ghi chú')}</label>
+                <input className="form-control" value={formNote} onChange={e=> setFormNote(e.target.value)} placeholder={t('Ghi chú ngắn...')} />
               </div>
-              <div className="form-group" style={{ marginBottom: '12px' }}>
-                <label className="form-label" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '4px', color: 'var(--text-muted)' }}>{t('Lãi suất (%/năm)')}</label>
-                <input className="form-control" type="number" step="0.01" min="0" style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border)', fontSize: '0.85rem' }} value={formInterestRate} onChange={(e) => setFormInterestRate(e.target.value)} placeholder={t('VD: 12.5')} />
-              </div>
-              <div className="form-group" style={{ marginBottom: '12px' }}>
-                <label className="form-label" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '4px', color: 'var(--text-muted)' }}>{t('Ghi chú')}</label>
-                <input className="form-control" style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border)', fontSize: '0.85rem' }} value={formNote} onChange={(e) => setFormNote(e.target.value)} />
-              </div>
-              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '16px' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)} style={{ padding: '8px 16px', fontSize: '0.85rem' }}>{t('Hủy')}</button>
-                <button type="submit" style={{ padding: '8px 16px', borderRadius: '6px', border: 'none', background: 'var(--primary)', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}>{editingDebt ? t('Lưu') : t('Thêm')}</button>
+              <div className="modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={()=> setShowModal(false)}>{t('Hủy')}</button>
+                <button type="submit" className="btn btn-primary">{editingDebt ? t('Lưu') : t('Thêm')}</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
-      {deleteConfirmId && (
-        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div className="modal" style={{ background: 'var(--bg-card)', borderRadius: '12px', padding: '24px', width: '90%', maxWidth: '400px', textAlign: 'center' }}>
-            <h3 style={{ margin: '0 0 12px' }}>{t('Xóa sổ nợ')}</h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6, margin: '0 0 20px' }}>
-              {t('Bạn có chắc chắn muốn xóa sổ nợ này? Hành động này không thể hoàn tác.')}
-            </p>
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-              <button className="btn btn-secondary" onClick={() => setDeleteConfirmId(null)} style={{ padding: '8px 20px', fontSize: '0.85rem' }}>{t('Hủy')}</button>
-              <button onClick={confirmDelete} style={{ padding: '8px 20px', borderRadius: '6px', border: 'none', background: '#ef4444', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}>{t('Xóa')}</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Close Confirmation Modal */}
-      {closeConfirmId && (
-        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div className="modal" style={{ background: 'var(--bg-card)', borderRadius: '12px', padding: '24px', width: '90%', maxWidth: '400px', textAlign: 'center' }}>
-            <h3 style={{ margin: '0 0 12px' }}>{t('Đóng sổ nợ')}</h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6, margin: '0 0 20px' }}>
-              {t('Bạn có chắc chắn muốn đóng sổ nợ này? Sau khi đóng sẽ không thể thay đổi.')}
-            </p>
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-              <button className="btn btn-secondary" onClick={() => setCloseConfirmId(null)} style={{ padding: '8px 20px', fontSize: '0.85rem' }}>{t('Hủy')}</button>
-              <button onClick={confirmClose} style={{ padding: '8px 20px', borderRadius: '6px', border: 'none', background: 'var(--primary)', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}>{t('Đóng')}</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Save Confirmation Modal */}
-      {saveConfirmData && (
-        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div className="modal" style={{ background: 'var(--bg-card)', borderRadius: '12px', padding: '24px', width: '90%', maxWidth: '400px', textAlign: 'center' }}>
-            <h3 style={{ margin: '0 0 12px' }}>{t('Xác nhận chỉnh sửa')}</h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.6, margin: '0 0 20px' }}>
-              {t('Bạn có chắc chắn muốn lưu các thay đổi cho sổ nợ này?')}
-            </p>
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-              <button className="btn btn-secondary" onClick={() => setSaveConfirmData(null)} style={{ padding: '8px 20px', fontSize: '0.85rem' }}>{t('Hủy')}</button>
-              <button onClick={() => doSaveDebt(saveConfirmData)} style={{ padding: '8px 20px', borderRadius: '6px', border: 'none', background: 'var(--primary)', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}>{t('Xác nhận')}</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Payment Modal */}
+      {/* Payment Modal — improved flow */}
       {showPaymentModal && payingDebt && (
-        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div className="modal" style={{ background: 'var(--bg-card)', borderRadius: '12px', padding: '24px', width: '90%', maxWidth: '420px' }}>
-            <h3 style={{ margin: '0 0 4px' }}>{t('Thêm thanh toán')}</h3>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
-              {payingDebt.Name} — {t('Còn lại')}: <strong style={{ fontFamily: 'var(--font-display)' }}>{formatInputNumber(payingDebt.RemainingAmount ?? (payingDebt.TotalDebt - payingDebt.PaidAmount))}</strong>
+        <div className="modal-overlay">
+          <div className="modal-content" style={{maxWidth:420}}>
+            <div className="modal-header">
+              <h3 className="modal-title">{t('Thanh toán khoản nợ')}</h3>
+              <button className="modal-close" onClick={()=> {setShowPaymentModal(false); setPayingDebt(null);}}>✕</button>
+            </div>
+            <div style={{background:'rgba(124,92,255,0.06)',border:'1px solid rgba(124,92,255,0.10)',borderRadius:12,padding:12,marginBottom:14}}>
+              <div style={{fontSize:12,color:'var(--text-secondary)'}}>{t('Khoản nợ')}:</div>
+              <div style={{fontWeight:700,color:'var(--text-primary)',marginTop:2}}>{payingDebt.Name}</div>
+              <div style={{display:'flex',justifyContent:'space-between',marginTop:8, fontSize:12}}>
+                <span style={{color:'var(--text-muted)'}}>{t('Dư nợ')}:</span>
+                <span style={{fontFamily:'var(--font-mono)',fontWeight:700,color:'#FF4D67'}}>{formatCurrency(getRemaining(payingDebt))} ₫</span>
+              </div>
             </div>
             <form onSubmit={handleAddPayment}>
-              <div className="form-group" style={{ marginBottom: '12px' }}>
-                <label className="form-label" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '4px', color: 'var(--text-muted)' }}>{t('Ngày thanh toán')} *</label>
-                <input className="form-control" type="date" style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border)', fontSize: '0.85rem' }} value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} required />
+              <div className="form-group">
+                <label className="form-label">{t('Ngày thanh toán')} *</label>
+                <input className="form-control" type="date" value={paymentDate} onChange={e=> setPaymentDate(e.target.value)} required />
               </div>
-              <div className="form-group" style={{ marginBottom: '12px' }}>
-                <label className="form-label" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '4px', color: 'var(--text-muted)' }}>{t('Số tiền')} *</label>
-                <input className="form-control" style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border)', fontSize: '0.85rem' }} value={formatInputNumber(parseFloat(paymentAmount.replace(/,/g, '')) || 0)} onChange={(e) => setPaymentAmount(e.target.value.replace(/,/g, ''))} required autoFocus />
+              <div className="form-group">
+                <label className="form-label">{t('Số tiền thanh toán')} *</label>
+                <input className="form-control" value={paymentAmount? formatInputNumber(parseFloat(paymentAmount.replace(/,/g,''))||0):''} onChange={e=> setPaymentAmount(e.target.value.replace(/,/g,''))} placeholder="0" required autoFocus />
+                {paymentAmount && (
+                  <div style={{marginTop:8, display:'flex',justifyContent:'space-between', fontSize:12, background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.06)',borderRadius:8,padding:'8px 10px'}}>
+                    <span style={{color:'var(--text-muted)'}}>{t('Còn lại sau thanh toán')}:</span>
+                    <span style={{fontFamily:'var(--font-mono)',fontWeight:700, color: (getRemaining(payingDebt) - (parseFloat(paymentAmount.replace(/,/g,''))||0))<=0 ? '#18C995':'var(--text-primary)'}}>{formatCurrency(Math.max(0, getRemaining(payingDebt) - (parseFloat(paymentAmount.replace(/,/g,''))||0)))} ₫</span>
+                  </div>
+                )}
+                {paymentAmount && (parseFloat(paymentAmount.replace(/,/g,''))||0) >= getRemaining(payingDebt) && getRemaining(payingDebt)>0 && (
+                  <div style={{marginTop:6, fontSize:11, color:'#18C995', fontWeight:600, display:'flex',alignItems:'center',gap:4}}>✓ {t('Khoản nợ sẽ được đóng sau thanh toán này.')}</div>
+                )}
               </div>
-              <div className="form-group" style={{ marginBottom: '12px' }}>
-                <label className="form-label" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '4px', color: 'var(--text-muted)' }}>{t('Ghi chú')}</label>
-                <input className="form-control" style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border)', fontSize: '0.85rem' }} value={paymentNote} onChange={(e) => setPaymentNote(e.target.value)} />
+              <div className="form-group">
+                <label className="form-label">{t('Ghi chú')}</label>
+                <input className="form-control" value={paymentNote} onChange={e=> setPaymentNote(e.target.value)} placeholder={t('VD: Thanh toán tháng 9')} />
               </div>
-              {payingError && <div style={{ color: '#ef4444', fontSize: '0.8rem', marginBottom: '8px' }}>{payingError}</div>}
-              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '16px' }}>
-                <button type="button" className="btn btn-secondary" onClick={() => { setShowPaymentModal(false); setPayingDebt(null); }} style={{ padding: '8px 16px', fontSize: '0.85rem' }}>{t('Hủy')}</button>
-                <button type="submit" style={{ padding: '8px 16px', borderRadius: '6px', border: 'none', background: '#10b981', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}>{t('Xác nhận')}</button>
+              {payingError && <div style={{color:'#FF4D67',fontSize:12,marginBottom:8}}>{payingError}</div>}
+              <div className="modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={()=> {setShowPaymentModal(false); setPayingDebt(null);}}>{t('Hủy')}</button>
+                <button type="submit" className="btn btn-primary" style={{background:'#18C995',borderColor:'#18C995'}}>{t('Xác nhận thanh toán')}</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm modals — keep existing */}
+      {deleteConfirmId && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{maxWidth:400,textAlign:'center'}}>
+            <div className="modal-header"><h3 className="modal-title">{t('Xóa khoản nợ')}</h3><button className="modal-close" onClick={()=> setDeleteConfirmId(null)}>✕</button></div>
+            <p style={{color:'var(--text-secondary)',fontSize:13,lineHeight:1.6,margin:'12px 0 18px'}}>{t('Bạn có chắc chắn muốn xóa khoản nợ này? Hành động này không thể hoàn tác.')}</p>
+            <div style={{display:'flex',gap:12,justifyContent:'center'}}>
+              <button className="btn btn-secondary" onClick={()=> setDeleteConfirmId(null)}>{t('Hủy')}</button>
+              <button className="btn btn-primary" style={{background:'#FF4D67',borderColor:'#FF4D67'}} onClick={confirmDelete}>{t('Xóa')}</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {closeConfirmId && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{maxWidth:400,textAlign:'center'}}>
+            <div className="modal-header"><h3 className="modal-title">{t('Đóng sổ nợ')}</h3><button className="modal-close" onClick={()=> setCloseConfirmId(null)}>✕</button></div>
+            <p style={{color:'var(--text-secondary)',fontSize:13,lineHeight:1.6,margin:'12px 0 18px'}}>{t('Bạn có chắc chắn muốn đóng sổ nợ này? Sau khi đóng sẽ không thể thay đổi.')}</p>
+            <div style={{display:'flex',gap:12,justifyContent:'center'}}>
+              <button className="btn btn-secondary" onClick={()=> setCloseConfirmId(null)}>{t('Hủy')}</button>
+              <button className="btn btn-primary" onClick={confirmClose}>{t('Đóng')}</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {saveConfirmData && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{maxWidth:400,textAlign:'center'}}>
+            <div className="modal-header"><h3 className="modal-title">{t('Xác nhận chỉnh sửa')}</h3><button className="modal-close" onClick={()=> setSaveConfirmData(null)}>✕</button></div>
+            <p style={{color:'var(--text-secondary)',fontSize:13,lineHeight:1.6,margin:'12px 0 18px'}}>{t('Bạn có chắc chắn muốn lưu các thay đổi cho khoản nợ này?')}</p>
+            <div style={{display:'flex',gap:12,justifyContent:'center'}}>
+              <button className="btn btn-secondary" onClick={()=> setSaveConfirmData(null)}>{t('Hủy')}</button>
+              <button className="btn btn-primary" onClick={()=> doSaveDebt(saveConfirmData)}>{t('Xác nhận')}</button>
+            </div>
           </div>
         </div>
       )}
     </div>
   );
 }
+
+
 
 function AllocationHistorySection({ records, onRestore, onDelete, formatDateTime, formatCurrency, onUpdateTime }: {
   records: any[];
