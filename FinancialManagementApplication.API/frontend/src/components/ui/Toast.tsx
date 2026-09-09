@@ -68,7 +68,7 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
   return (
     <ToastContext.Provider value={{ addToast, removeToast, toasts }}>
       {children}
-      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 items-center w-full max-w-sm pointer-events-none">
+      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 items-center w-full max-w-md pointer-events-none">
         <AnimatePresence>
           {toasts.map((toast) => (
             <motion.div
@@ -76,13 +76,13 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 20, transition: { duration: 0.2 } }}
-              className={`relative w-full p-4 rounded-xl border backdrop-blur-sm ${variantClasses[toast.variant!]}`}
+              className={`relative w-full p-4 rounded-xl border backdrop-blur-sm pointer-events-auto ${variantClasses[toast.variant!]}`}
             >
               <div className="flex items-start gap-3">
                 <div className="flex-shrink-0 mt-0.5">{variantIcon[toast.variant!]}</div>
                 <div className="flex-1 min-w-0">
-                  {toast.title && <p className="font-medium">{toast.title}</p>}
-                  {toast.description && <p className="text-sm opacity-80">{toast.description}</p>}
+                  {toast.title && <p className="font-medium break-words">{toast.title}</p>}
+                  {toast.description && <p className="text-sm opacity-80 break-words whitespace-pre-line">{toast.description}</p>}
                 </div>
                 <button
                   onClick={() => removeToast(toast.id)}
