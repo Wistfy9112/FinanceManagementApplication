@@ -2186,4 +2186,235 @@ select option{ background:#101522; color:#F4F5FA; }
   text-align:center; padding:36px 16px; color:var(--text-muted); font-size:13px; line-height:1.6;
 }
 
+/* =============================================================
+   FINANCIAL GOALS — Goal Tracking experience (redesign)
+   Calm, precise, information-dense. No gradients/glass/neon.
+   ============================================================= */
+.goals-page { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+
+/* Header */
+.goals-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+}
+.goals-title {
+  font-family: var(--font-display); font-weight: 600;
+  font-size: 24px; letter-spacing: -0.03em; line-height: 1.2;
+  color: var(--text-primary); margin: 0;
+}
+@media (min-width: 1024px) { .goals-title { font-size: 26px; } }
+.goals-subtitle { font-size: 13px; color: var(--text-secondary); margin: 4px 0 0; line-height: 1.5; }
+.goals-cta {
+  display: inline-flex; align-items: center; gap: 8px;
+  height: 38px; padding: 0 16px; font-size: 13px; white-space: nowrap;
+}
+
+/* Summary lives inside the hero microstrip — no standalone stat cards */
+
+/* List */
+.goals-list { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.goals-empty {
+  background: #101522; border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 14px; padding: 36px 20px; text-align: center;
+  color: var(--text-muted); font-size: 13px;
+}
+
+/* =============================================================
+   JOURNEY — editorial split hero (full figure + thin ring),
+   borderless ledger rows, dot-only status language.
+   ============================================================= */
+
+/* HERO */
+.journey-hero {
+  background: #0C111D; border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 20px; padding: 36px 40px; min-width: 0;
+}
+.journey-hero-main {
+  display: grid; grid-template-columns: 1.15fr 0.85fr;
+  gap: 48px; align-items: center; min-width: 0;
+}
+.journey-hero-info { min-width: 0; }
+.journey-hero-top {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.journey-hero-name {
+  font-family: var(--font-display); font-weight: 600; font-size: 22px;
+  letter-spacing: -0.02em; line-height: 1.2; color: var(--text-primary);
+  margin: 14px 0 0; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.journey-hero-current {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-weight: 700; font-size: clamp(40px, 5.5vw, 60px);
+  letter-spacing: -0.04em; line-height: 1.05; color: var(--text-primary);
+  margin-top: 16px; overflow: hidden; text-overflow: ellipsis;
+}
+.journey-hero-current span {
+  font-size: 0.42em; font-weight: 500; color: var(--text-muted); letter-spacing: 0;
+}
+.journey-hero-sub { margin-top: 10px; font-size: 13px; color: var(--text-muted); }
+.journey-hero-sub b {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-weight: 600; color: var(--text-secondary);
+}
+.journey-hero-stats {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  margin-top: 24px; padding-top: 20px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+.journey-hero-stats > div { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.journey-hero-stats span { font-size: 12px; color: var(--text-muted); }
+.journey-hero-stats b {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-weight: 600; font-size: 16px; color: var(--text-primary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.journey-hero-stats b.ok { font-family: var(--font-sans); font-size: 14px; color: #34D399; }
+.journey-hero-stats b.bad { color: #FB7185; }
+
+/* Thin ring gauge */
+.journey-hero-gauge {
+  display: flex; flex-direction: column; align-items: center; gap: 14px; min-width: 0;
+}
+.journey-ring { position: relative; width: 184px; height: 184px; }
+.journey-ring svg { width: 100%; height: 100%; display: block; }
+.journey-ring .track { fill: none; stroke: rgba(255,255,255,0.07); stroke-width: 8; }
+.journey-ring .fill {
+  fill: none; stroke: #7C5CFF; stroke-width: 8;
+  transition: stroke-dasharray 0.6s ease-out;
+}
+.journey-ring .fill.success { stroke: #18C995; }
+.journey-ring .fill.failed { stroke: #FF4D67; }
+.journey-ring-center {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+}
+.journey-ring-center b {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-weight: 700; font-size: 30px; letter-spacing: -0.03em; line-height: 1;
+  color: var(--text-primary);
+}
+.journey-ring-center span { font-size: 11px; color: var(--text-muted); }
+.journey-hero-range {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: 11px; color: var(--text-muted); white-space: nowrap;
+}
+
+.journey-ledger-note { font-size: 12px; color: var(--text-muted); }
+
+/* Quiet dot-only status */
+.journey-status {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 12px; font-weight: 500; color: var(--text-secondary);
+  white-space: nowrap;
+}
+.journey-status i {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #8A94A6; flex-shrink: 0;
+}
+.journey-status.active i { background: #8B7CFF; }
+.journey-status.success i { background: #18C995; }
+.journey-status.failed i { background: #FF4D67; }
+
+/* Sections — quiet editorial label with hairline rule */
+.journey-section { margin-top: 10px; min-width: 0; }
+.journey-section-title {
+  font-size: 12px; font-weight: 600; letter-spacing: 0.02em;
+  color: var(--text-secondary); display: flex; align-items: center; gap: 12px;
+  margin-bottom: 2px;
+}
+.journey-section-title::after {
+  content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.06);
+}
+.journey-section-title span {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: 11px; color: var(--text-muted);
+}
+
+/* Upcoming + history — borderless ledger rows, hairline dividers only */
+.journey-uplist, .journey-hlist { display: flex; flex-direction: column; min-width: 0; }
+.journey-urow, .journey-hrow {
+  display: grid; gap: 20px; align-items: center; min-width: 0;
+  padding: 15px 4px; border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.journey-urow { grid-template-columns: 1fr auto auto auto auto; }
+.journey-hrow { grid-template-columns: 10px minmax(150px, 1.3fr) auto auto auto auto; }
+.journey-urow:last-child, .journey-hrow:last-child { border-bottom: none; }
+.journey-urow-main, .journey-hmain { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.journey-urow-name, .journey-hname {
+  font-weight: 600; font-size: 14px; color: var(--text-primary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.journey-urow-meta, .journey-hmeta {
+  font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.journey-hnode {
+  width: 7px; height: 7px; border-radius: 50%; margin: 0 auto;
+  background: #8A94A6; flex-shrink: 0;
+}
+.journey-hrow.success .journey-hnode { background: #18C995; }
+.journey-hrow.failed .journey-hnode { background: #FF4D67; }
+.journey-urow-amount, .journey-hamount {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-size: 13px; color: var(--text-secondary); white-space: nowrap;
+}
+.journey-hamount { font-size: 12px; }
+.journey-urow-pct, .journey-hpct {
+  font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  font-weight: 700; font-size: 13px; color: var(--text-primary);
+  min-width: 44px; text-align: right;
+}
+
+/* Overflow menu — ghost icon button, visually quiet until needed */
+.goals-menu-wrap { position: relative; flex-shrink: 0; }
+.goals-menu-btn {
+  width: 30px; height: 30px; border-radius: 8px; padding: 0;
+  background: transparent; border: 1px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+  transition: background 150ms ease-out, color 150ms ease-out;
+  line-height: 1;
+}
+.goals-menu-btn:hover { background: rgba(255,255,255,0.06); color: var(--text-primary); }
+.goals-menu-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.goals-menu {
+  position: absolute; right: 0; top: calc(100% + 8px); min-width: 180px; z-index: 50;
+  background: #141A29; border: 1px solid rgba(255,255,255,0.09); border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(0,0,0,0.45); padding: 6px; overflow: hidden;
+}
+.goals-menu-item {
+  display: flex; align-items: center; width: 100%; text-align: left;
+  background: transparent; border: none; cursor: pointer;
+  font-size: 13px; color: var(--text-primary); padding: 9px 12px; border-radius: 8px;
+  transition: background 130ms ease-out;
+}
+.goals-menu-item:hover { background: rgba(255,255,255,0.06); }
+.goals-menu-item.danger { color: #FB7185; }
+.goals-menu-item.danger:hover { background: rgba(255,77,103,0.10); }
+.goals-menu-divider { height: 1px; background: rgba(255,255,255,0.07); margin: 6px 4px; }
+
+/* Tablet: hero stacks, rows keep hairline language */
+@media (max-width: 960px) {
+  .journey-hero { padding: 30px 28px; }
+  .journey-hero-main { grid-template-columns: 1fr; gap: 30px; }
+  .journey-hero-gauge { flex-direction: row; justify-content: flex-start; gap: 20px; }
+  .journey-ring { width: 148px; height: 148px; }
+  .journey-ring-center b { font-size: 24px; }
+  .journey-urow-meta, .journey-hmeta { display: none; }
+}
+
+/* Mobile: compact hero, wrapping rows — no horizontal scrolling */
+@media (max-width: 640px) {
+  .journey-hero { padding: 24px 20px; border-radius: 16px; }
+  .journey-hero-name { font-size: 19px; }
+  .journey-hero-stats { grid-template-columns: 1fr 1fr; gap: 12px; }
+  .journey-hero-gauge { flex-direction: column; align-items: flex-start; }
+  .journey-urow, .journey-hrow { display: flex; flex-wrap: wrap; row-gap: 8px; gap: 12px; }
+  .journey-urow-main, .journey-hmain { flex: 1 1 55%; }
+  .journey-urow .goals-menu-wrap, .journey-hrow .goals-menu-wrap { margin-left: auto; }
+  .journey-hnode { margin: 6px 0 0; }
+  .goals-menu { right: 0; }
+}
+
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { useToast } from "./components/ui/Toast";
+import { GlobalLoadingOverlay, useGlobalBusy, runExclusiveGlobalLoading, isGlobalBusy } from "./components/ui/GlobalLoading";
 import { 
   authService, 
   assetService, 
@@ -167,6 +168,8 @@ export default function App() {
   const [loading, setLoading] = useState<boolean>(true);
   const [authLoading, setAuthLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  // Global busy (chống spam khi đang ghi DB) — overlay toàn màn hình + disable nút
+  const { isBusy } = useGlobalBusy();
 
   // Delete Confirmation State
   const [deleteConfirmAsset, setDeleteConfirmAsset] = useState<{ id: string; name: string } | null>(null);
@@ -327,28 +330,31 @@ export default function App() {
     setDebts([]);
   };
 
-  // Asset Handlers
+  // Asset Handlers — bọc runExclusiveGlobalLoading để chống spam ghi đè DB
   const handleSaveAsset = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      if (!user) return;
-      // Đồng bộ Type cũ theo Nhóm mới để tương thích dữ liệu cũ
-      const groupToType = (g: number | null): string => {
-        if (g == null) return assetModal.data.Type;
-        if (g === 1 || g === 2) return 'Saving';
-        return 'Investment';
-      };
-      const payload = { ...assetModal.data, Type: groupToType(assetModal.data.Group) };
-      if (assetModal.mode === 'add') {
-        await assetService.create(payload as any, user.id);
-      } else if (assetModal.mode === 'edit' && assetModal.data.Id) {
-        await assetService.update(assetModal.data.Id, payload as any, user.id);
+    if (isGlobalBusy()) return;
+    await runExclusiveGlobalLoading(async () => {
+      try {
+        if (!user) return;
+        // Đồng bộ Type cũ theo Nhóm mới để tương thích dữ liệu cũ
+        const groupToType = (g: number | null): string => {
+          if (g == null) return assetModal.data.Type;
+          if (g === 1 || g === 2) return 'Saving';
+          return 'Investment';
+        };
+        const payload = { ...assetModal.data, Type: groupToType(assetModal.data.Group) };
+        if (assetModal.mode === 'add') {
+          await assetService.create(payload as any, user.id);
+        } else if (assetModal.mode === 'edit' && assetModal.data.Id) {
+          await assetService.update(assetModal.data.Id, payload as any, user.id);
+        }
+        setAssetModal({ ...assetModal, isOpen: false });
+        await loadData();
+      } catch (err: any) {
+        addToast({ title: t('Lỗi lưu tài sản'), description: err.message, variant: 'error' });
       }
-      setAssetModal({ ...assetModal, isOpen: false });
-      await loadData();
-    } catch (err: any) {
-      addToast({ title: t('Lỗi lưu tài sản'), description: err.message, variant: 'error' });
-    }
+    }, t('Đang lưu tài sản...'));
   };
 
   const handleDeleteAsset = async (id: string, name: string) => {
@@ -357,45 +363,53 @@ export default function App() {
 
   const confirmDeleteAsset = async () => {
     if (!deleteConfirmAsset) return;
-    try {
-      await assetService.delete(deleteConfirmAsset.id);
-      await loadData();
-    } catch (err: any) {
-      addToast({ title: t('Lỗi xóa tài sản'), description: err.message, variant: 'error' });
-    } finally {
-      setDeleteConfirmAsset(null);
-    }
+    if (isGlobalBusy()) return;
+    await runExclusiveGlobalLoading(async () => {
+      try {
+        await assetService.delete(deleteConfirmAsset.id);
+        await loadData();
+      } catch (err: any) {
+        addToast({ title: t('Lỗi xóa tài sản'), description: err.message, variant: 'error' });
+      } finally {
+        setDeleteConfirmAsset(null);
+      }
+    }, t('Đang xóa tài sản...'));
   };
 
   const confirmDeleteHistory = async () => {
     if (!deleteConfirmHistory || !user) return;
+    if (isGlobalBusy()) return;
     const { id, type } = deleteConfirmHistory;
     setDeleteConfirmHistory(null);
-    try {
-      setError(null);
-      if (type === 'asset') {
-        const ok = await historyService.deleteAssetHistory(id);
-        if (ok) {
-          setHistoryRecords((prev: any[]) => prev.filter((r: any) => r.Id !== id));
-          addToast({ title: t('Đã xóa lịch sử tài sản!'), variant: 'success' });
+    await runExclusiveGlobalLoading(async () => {
+      try {
+        setError(null);
+        if (type === 'asset') {
+          const ok = await historyService.deleteAssetHistory(id);
+          if (ok) {
+            setHistoryRecords((prev: any[]) => prev.filter((r: any) => r.Id !== id));
+            addToast({ title: t('Đã xóa lịch sử tài sản!'), variant: 'success' });
+          } else {
+            addToast({ title: t('Xóa lịch sử thất bại'), variant: 'error' });
+          }
         } else {
-          addToast({ title: t('Xóa lịch sử thất bại'), variant: 'error' });
+          const ok = await historyService.deleteAllocationHistory(id);
+          if (ok) {
+            setAllocationHistoryRecords((prev: any[]) => prev.filter((r: any) => r.Id !== id));
+            addToast({ title: t('Đã xóa lịch sử phân bổ!'), variant: 'success' });
+          } else {
+            addToast({ title: t('Xóa lịch sử thất bại'), variant: 'error' });
+          }
         }
-      } else {
-        const ok = await historyService.deleteAllocationHistory(id);
-        if (ok) {
-          setAllocationHistoryRecords((prev: any[]) => prev.filter((r: any) => r.Id !== id));
-          addToast({ title: t('Đã xóa lịch sử phân bổ!'), variant: 'success' });
-        } else {
-          addToast({ title: t('Xóa lịch sử thất bại'), variant: 'error' });
-        }
+      } catch (err: any) {
+        addToast({ title: t('Lỗi xóa lịch sử'), description: err.message, variant: 'error' });
       }
-    } catch (err: any) {
-      addToast({ title: t('Lỗi xóa lịch sử'), description: err.message, variant: 'error' });
-    }
+    }, t('Đang xóa lịch sử...'));
   };
 
   const handleSaveAllAssets = async () => {
+    if (isGlobalBusy()) return;
+    await runExclusiveGlobalLoading(async () => {
     try {
       setError(null);
       if (!user) return;
@@ -455,22 +469,26 @@ export default function App() {
       addToast({ title: t('Lưu tài sản thất bại'), description: msg, variant: 'error' });
       setSaveAssetResult({ success: false, error: msg });
     }
+    }, t('Đang lưu thông tin tài sản...'));
   };
 
   const handleRestoreFromHistory = async (historyId: string) => {
-    try {
-      setError(null);
-      if (!user) return;
-      const ok = await historyService.restoreSnapshot(historyId);
-      if (ok) {
-        await loadData();
-        addToast({ title: t('Đã khôi phục thông tin tài sản!'), variant: 'success' });
-      } else {
-        addToast({ title: t('Khôi phục thất bại'), variant: 'error' });
+    if (isGlobalBusy()) return;
+    await runExclusiveGlobalLoading(async () => {
+      try {
+        setError(null);
+        if (!user) return;
+        const ok = await historyService.restoreSnapshot(historyId);
+        if (ok) {
+          await loadData();
+          addToast({ title: t('Đã khôi phục thông tin tài sản!'), variant: 'success' });
+        } else {
+          addToast({ title: t('Khôi phục thất bại'), variant: 'error' });
+        }
+      } catch (err: any) {
+        addToast({ title: t('Lỗi khôi phục'), description: err.message, variant: 'error' });
       }
-    } catch (err: any) {
-      addToast({ title: t('Lỗi khôi phục'), description: err.message, variant: 'error' });
-    }
+    }, t('Đang khôi phục...'));
   };
 
   const handleUpdateAssetHistoryTime = async (historyId: string, recordedAt: string) => {
@@ -502,17 +520,23 @@ export default function App() {
   };
 
   const handleReorderAssets = async (orderedList: any[]) => {
-    const items = orderedList.map((a: any, i: number) => ({ id: a.Id, sortOrder: i + 1 }));
-    await assetService.reorder(items);
-    await loadData();
-    addToast({ title: t('Đã sắp xếp lại thứ tự!'), variant: 'success' });
+    if (isGlobalBusy()) return;
+    await runExclusiveGlobalLoading(async () => {
+      const items = orderedList.map((a: any, i: number) => ({ id: a.Id, sortOrder: i + 1 }));
+      await assetService.reorder(items);
+      await loadData();
+      addToast({ title: t('Đã sắp xếp lại thứ tự!'), variant: 'success' });
+    }, t('Đang sắp xếp...'));
   };
 
   const handleReorderAllocations = async (orderedList: any[]) => {
-    const items = orderedList.map((a: any, i: number) => ({ id: a.Id, sortOrder: i + 1 }));
-    await portfolioService.reorder(items);
-    await loadData();
-    addToast({ title: t('Đã sắp xếp danh mục!'), variant: 'success' });
+    if (isGlobalBusy()) return;
+    await runExclusiveGlobalLoading(async () => {
+      const items = orderedList.map((a: any, i: number) => ({ id: a.Id, sortOrder: i + 1 }));
+      await portfolioService.reorder(items);
+      await loadData();
+      addToast({ title: t('Đã sắp xếp danh mục!'), variant: 'success' });
+    }, t('Đang sắp xếp...'));
   };
 
   // Budget Cut Handlers
@@ -534,15 +558,21 @@ export default function App() {
     portfolioService.saveBudgetCutConfig({ income, targetReduction, exclusions: updated });
   };
 
-  const handleApplyToAsset = async (allocation: any) => {
-    if (!allocation.AssetId) return;
+  // Core áp dụng 1 allocation sang asset — KHÔNG tự bật busy, để tái dùng cho "áp dụng tất cả"
+  const applySingleAllocationToAsset = async (allocation: any) => {
     const asset = assets.find(a => a.Id === allocation.AssetId);
     if (!asset) return;
-    const transferAmount = allocation.CurrentAmount;
+    // Dùng SỐ TIỀN THỰC TẾ (sau cắt giảm), không phải số gốc. Fallback về
+    // CurrentAmount cho allocation chưa qua tính toán cắt giảm.
+    const rawTransfer = (allocation.actual ?? allocation.CurrentAmount) || 0;
+    const transferAmount = Math.round(rawTransfer);
     const prevCurrent = asset.CurrentValue;
-    const nextCurrent = prevCurrent + transferAmount;
     const prevInitial = asset.InitialValue;
-    const nextInitial = prevInitial + transferAmount;
+    // Chỉ giữ thập phân khi input vốn là thập phân; nguyên + nguyên → nguyên
+    const addMoney = (a: number, b: number) =>
+      (Number.isInteger(a) && Number.isInteger(b) ? Math.round(a + b) : a + b);
+    const nextCurrent = addMoney(prevCurrent, transferAmount);
+    const nextInitial = addMoney(prevInitial, transferAmount);
     try {
       setError(null);
       await assetService.update(asset.Id, {
@@ -573,31 +603,55 @@ export default function App() {
     }
   };
 
-  const handleRestoreAllocationHistory = async (historyId: string) => {
-    try {
-      setError(null);
-      if (!user) return;
-      const ok = await historyService.restoreAllocationSnapshot(historyId);
-      if (ok) {
-        const { portfolio: freshPortfolio, allocations: freshAllocations } = await portfolioService.getDetails(user.id);
-        setPortfolio(freshPortfolio);
-        setAllocations(freshAllocations);
-        const freshHistory = await historyService.getAllocationHistoryByAccount(user.id);
-        setAllocationHistoryRecords(freshHistory);
-        if (showSetup) {
-          setSetupAmount(freshPortfolio?.Amount || 0);
-          setSetupAllocations(freshAllocations.map(al => ({
-            ...al,
-            setupAmount: al.CurrentAmount
-          })));
-        }
-        addToast({ title: t('Đã khôi phục phân bổ!'), variant: 'success' });
-      } else {
-        addToast({ title: t('Khôi phục thất bại'), variant: 'error' });
+  const handleApplyToAsset = async (allocation: any) => {
+    if (!allocation.AssetId) return;
+    if (isGlobalBusy()) return;
+    await runExclusiveGlobalLoading(
+      () => applySingleAllocationToAsset(allocation),
+      t('Đang áp dụng sang tài sản...')
+    );
+  };
+
+  // Bulk: áp dụng tất cả allocation đã liên kết — 1 overlay duy nhất, chống spam toàn bộ quá trình
+  const handleApplyAllToAssets = async (list: any[]) => {
+    if (isGlobalBusy()) return;
+    const applyList = (list || []).filter((a: any) => !!a.AssetId);
+    if (applyList.length === 0) return;
+    await runExclusiveGlobalLoading(async () => {
+      for (const al of applyList) {
+        try { await applySingleAllocationToAsset(al); } catch {}
       }
-    } catch (err: any) {
-      addToast({ title: t('Lỗi khôi phục'), description: err.message, variant: 'error' });
-    }
+    }, t('Đang áp dụng sang tài sản...'));
+  };
+
+  const handleRestoreAllocationHistory = async (historyId: string) => {
+    if (isGlobalBusy()) return;
+    await runExclusiveGlobalLoading(async () => {
+      try {
+        setError(null);
+        if (!user) return;
+        const ok = await historyService.restoreAllocationSnapshot(historyId);
+        if (ok) {
+          const { portfolio: freshPortfolio, allocations: freshAllocations } = await portfolioService.getDetails(user.id);
+          setPortfolio(freshPortfolio);
+          setAllocations(freshAllocations);
+          const freshHistory = await historyService.getAllocationHistoryByAccount(user.id);
+          setAllocationHistoryRecords(freshHistory);
+          if (showSetup) {
+            setSetupAmount(freshPortfolio?.Amount || 0);
+            setSetupAllocations(freshAllocations.map(al => ({
+              ...al,
+              setupAmount: al.CurrentAmount
+            })));
+          }
+          addToast({ title: t('Đã khôi phục phân bổ!'), variant: 'success' });
+        } else {
+          addToast({ title: t('Khôi phục thất bại'), variant: 'error' });
+        }
+      } catch (err: any) {
+        addToast({ title: t('Lỗi khôi phục'), description: err.message, variant: 'error' });
+      }
+    }, t('Đang khôi phục phân bổ...'));
   };
 
   const handleDeleteAllocationHistory = async (historyId: string) => {
@@ -691,61 +745,63 @@ export default function App() {
   };
 
   const handleSaveSetup = async () => {
-    try {
-      if (!user) return;
-      if (setupAllocations.length === 0) {
-        addToast({ title: t('Lỗi'), description: t('Vui lòng thêm ít nhất một danh mục.'), variant: 'warning' });
-        return;
-      }
-      if (setupAllocations.some(al => !al.Name.trim())) {
-        addToast({ title: t('Lỗi'), description: t('Vui lòng nhập tên cho tất cả danh mục.'), variant: 'warning' });
-        return;
-      }
-      const totalAmount = setupAllocations.reduce((sum, al) => sum + (al.setupAmount || 0), 0);
-      if (totalAmount > setupAmount) {
-        addToast({ title: t('Lỗi'), description: t('Tổng số tiền danh mục vượt quá phân bổ gốc.'), variant: 'warning' });
-        return;
-      }
-
-      let currentPortfolio = portfolio;
-      if (!currentPortfolio) {
-        currentPortfolio = await portfolioService.create(
-          { Name: 'Kế Hoạch Phân Bổ Tổng Thể', Amount: setupAmount },
-          user.id
-        );
-        setPortfolio(currentPortfolio);
-      }
-
-      await portfolioService.updateAmount(currentPortfolio.Id, setupAmount, 'Kế Hoạch Phân Bổ Tổng Thể', user.id);
-
-      const savedAllocs = setupAllocations.map(al => ({
-        Id: al.Id,
-        PortfolioId: currentPortfolio.Id,
-        FinancialCategory: al.FinancialCategory,
-        Name: al.Name,
-        CurrentAmount: al.CurrentAmount,
-        TargetPercentage: al.TargetPercentage,
-        AssetId: al.AssetId || null,
-        AssetType: al.AssetType || al.FinancialCategory || 'Saving'
-      }));
-
-      await portfolioService.saveAllocations(savedAllocs);
-
-      const removedIds = allocations
-        .filter(al => !savedAllocs.some(sa => sa.Id === al.Id))
-        .map(al => al.Id);
-      for (const id of removedIds) {
-        await portfolioService.deleteAllocation(id);
-      }
-
-      setAllocations(savedAllocs);
-      setPortfolio((prev: any) => prev ? { ...prev, Amount: setupAmount } : prev);
-      await historyService.saveAllocationSetupSnapshot(user.id);
-      await loadData();
-      setSetupSuccessModal(true);
-    } catch (err: any) {
-      addToast({ title: t('Lỗi lưu thiết lập'), description: err.message, variant: 'error' });
+    if (isGlobalBusy()) return;
+    if (setupAllocations.length === 0) {
+      addToast({ title: t('Lỗi'), description: t('Vui lòng thêm ít nhất một danh mục.'), variant: 'warning' });
+      return;
     }
+    if (setupAllocations.some(al => !al.Name.trim())) {
+      addToast({ title: t('Lỗi'), description: t('Vui lòng nhập tên cho tất cả danh mục.'), variant: 'warning' });
+      return;
+    }
+    const totalAmount = setupAllocations.reduce((sum, al) => sum + (al.setupAmount || 0), 0);
+    if (totalAmount > setupAmount) {
+      addToast({ title: t('Lỗi'), description: t('Tổng số tiền danh mục vượt quá phân bổ gốc.'), variant: 'warning' });
+      return;
+    }
+    await runExclusiveGlobalLoading(async () => {
+      try {
+        if (!user) return;
+        let currentPortfolio = portfolio;
+        if (!currentPortfolio) {
+          currentPortfolio = await portfolioService.create(
+            { Name: 'Kế Hoạch Phân Bổ Tổng Thể', Amount: setupAmount },
+            user.id
+          );
+          setPortfolio(currentPortfolio);
+        }
+
+        await portfolioService.updateAmount(currentPortfolio.Id, setupAmount, 'Kế Hoạch Phân Bổ Tổng Thể', user.id);
+
+        const savedAllocs = setupAllocations.map(al => ({
+          Id: al.Id,
+          PortfolioId: currentPortfolio.Id,
+          FinancialCategory: al.FinancialCategory,
+          Name: al.Name,
+          CurrentAmount: al.CurrentAmount,
+          TargetPercentage: al.TargetPercentage,
+          AssetId: al.AssetId || null,
+          AssetType: al.AssetType || al.FinancialCategory || 'Saving'
+        }));
+
+        await portfolioService.saveAllocations(savedAllocs);
+
+        const removedIds = allocations
+          .filter(al => !savedAllocs.some(sa => sa.Id === al.Id))
+          .map(al => al.Id);
+        for (const id of removedIds) {
+          await portfolioService.deleteAllocation(id);
+        }
+
+        setAllocations(savedAllocs);
+        setPortfolio((prev: any) => prev ? { ...prev, Amount: setupAmount } : prev);
+        await historyService.saveAllocationSetupSnapshot(user.id);
+        await loadData();
+        setSetupSuccessModal(true);
+      } catch (err: any) {
+        addToast({ title: t('Lỗi lưu thiết lập'), description: err.message, variant: 'error' });
+      }
+    }, t('Đang lưu thiết lập danh mục...'));
   };
 
   // Dynamic values calculated from allocations
@@ -755,11 +811,13 @@ export default function App() {
       .reduce((sum, al) => sum + al.TargetPercentage, 0);
 
     return allocations.map(al => {
-      const currentAmount = income > 0 ? income * (al.TargetPercentage / 100) : 0;
+      // VND không có đơn vị lẻ: làm tròn về đồng ngay từ nguồn để hiển thị
+      // và áp dụng luôn là số nguyên, tránh float kiểu 5000000.0000001
+      const currentAmount = Math.round(income > 0 ? income * (al.TargetPercentage / 100) : 0);
       const isExcluded = exclusions.includes(al.Id);
-      const reduction = (!isExcluded && nonExcludedPct > 0)
+      const reduction = Math.round((!isExcluded && nonExcludedPct > 0)
         ? targetReduction * (al.TargetPercentage / nonExcludedPct)
-        : 0;
+        : 0);
       const actual = currentAmount - reduction;
       return {
         ...al,
@@ -821,6 +879,8 @@ export default function App() {
 
   return (
     <div className="app">
+      {/* Overlay loading toàn màn hình — chặn spam khi đang ghi DB */}
+      <GlobalLoadingOverlay />
       {/* Navigation — premium compact */}
       <nav className="navbar">
         <div className="navbar-content">
@@ -967,6 +1027,7 @@ export default function App() {
             onSetupDeleteAllocation={handleSetupDeleteAllocation}
             onSetupAllocationAmountChange={handleSetupAllocationAmountChange}
             onApplyToAsset={handleApplyToAsset}
+            onApplyAllToAssets={handleApplyAllToAssets}
             allocationHistoryRecords={allocationHistoryRecords}
             onRestoreAllocationHistory={handleRestoreAllocationHistory}
             onDeleteAllocationHistory={handleDeleteAllocationHistory}
@@ -1052,8 +1113,8 @@ export default function App() {
                 <div style={{ fontSize:11, color:'var(--text-muted)', marginTop:6, lineHeight:1.4 }}>{t('Hệ thống tự đưa tài sản vào đúng tầng tháp theo nhóm bạn chọn.')}</div>
               </div>
               <div className="modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={() => setAssetModal({ ...assetModal, isOpen: false })}>{t('Hủy')}</button>
-                <button type="submit" className="btn btn-primary">{t('Lưu lại')}</button>
+                <button type="button" className="btn btn-secondary" onClick={() => setAssetModal({ ...assetModal, isOpen: false })} disabled={isBusy}>{t('Hủy')}</button>
+                <button type="submit" className="btn btn-primary" disabled={isBusy}>{isBusy ? t('Đang xử lý...') : t('Lưu lại')}</button>
               </div>
             </form>
           </div>
@@ -1114,8 +1175,9 @@ export default function App() {
                 className="btn btn-primary"
                 style={{ background: '#ef4444', borderColor: '#ef4444' }}
                 onClick={confirmDeleteAsset}
+                disabled={isBusy}
               >
-                {t('Xóa')}
+                {isBusy ? t('Đang xử lý...') : t('Xóa')}
               </button>
             </div>
           </div>
@@ -1146,8 +1208,9 @@ export default function App() {
                 className="btn btn-primary"
                 style={{ background: '#ef4444', borderColor: '#ef4444' }}
                 onClick={confirmDeleteHistory}
+                disabled={isBusy}
               >
-                {t('Xóa')}
+                {isBusy ? t('Đang xử lý...') : t('Xóa')}
               </button>
             </div>
           </div>
@@ -3116,6 +3179,7 @@ function PortfolioPage({
   onSetupDeleteAllocation,
   onSetupAllocationAmountChange,
   onApplyToAsset,
+  onApplyAllToAssets,
   allocationHistoryRecords,
   onRestoreAllocationHistory,
   onDeleteAllocationHistory,
@@ -3150,6 +3214,7 @@ function PortfolioPage({
   onSetupDeleteAllocation: (id: string) => void;
   onSetupAllocationAmountChange: (id: string, amount: number) => void;
   onApplyToAsset: (allocation: any) => void;
+  onApplyAllToAssets?: (list: any[]) => Promise<void>;
   allocationHistoryRecords: any[];
   onRestoreAllocationHistory: (historyId: string) => void;
   onDeleteAllocationHistory: (historyId: string) => void;
@@ -3222,19 +3287,29 @@ function PortfolioPage({
     const calc = [...calculatedExpenses, ...calculatedSavings, ...calculatedInvestments].find(c => c.Id === al.Id);
     return calc?.isExcluded;
   }).length;
-  // Global apply handler
+  // Global apply handler — 1 overlay duy nhất cho cả đợt, chống spam toàn bộ quá trình
   const handleGlobalApply = async () => {
+    if (isGlobalBusy() || isApplying) return;
     const applyList = [...sortedExpenses, ...sortedSavings, ...sortedInvestments].filter(a => !!a.AssetId);
     if (applyList.length === 0) {
       addToast({ title: t('Chưa liên kết tài sản'), description: t('Vui lòng liên kết danh mục với tài sản trong Thiết lập mới.'), variant: 'warning' });
       return;
     }
     setIsApplying(true);
-    for (const al of applyList) {
-      try { await onApplyToAsset(al); } catch {}
+    try {
+      if (onApplyAllToAssets) {
+        await onApplyAllToAssets(applyList);
+      } else {
+        await runExclusiveGlobalLoading(async () => {
+          for (const al of applyList) {
+            try { await onApplyToAsset(al); } catch {}
+          }
+        }, t('Đang áp dụng sang tài sản...'));
+      }
+    } finally {
+      setIsApplying(false);
+      setConfirmOpen(false);
     }
-    setIsApplying(false);
-    setConfirmOpen(false);
   };
 
   if (showSetup) {
@@ -3910,6 +3985,7 @@ function GoalsPage({ goals, userId, totalCurrent, onRefresh }: {
   onRefresh: () => Promise<void>;
 }) {
   const { t } = useLanguage();
+  const { isBusy: isGoalBusy } = useGlobalBusy();
   const [showModal, setShowModal] = useState(false);
   const [editGoal, setEditGoal] = useState<any>(null);
   const [formName, setFormName] = useState('');
@@ -3918,6 +3994,24 @@ function GoalsPage({ goals, userId, totalCurrent, onRefresh }: {
   const [formDueDate, setFormDueDate] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [showErrorPopup, setShowErrorPopup] = useState(false);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+
+  // Close overflow menu on outside click / Escape
+  useEffect(() => {
+    if (!openMenuId) return;
+    const onDown = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest('.goals-menu-wrap')) setOpenMenuId(null);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpenMenuId(null);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [openMenuId]);
 
   const openCreate = () => {
     setEditGoal(null);
@@ -3939,6 +4033,7 @@ function GoalsPage({ goals, userId, totalCurrent, onRefresh }: {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isGlobalBusy()) return;
     if (formAmount <= 0) {
       setErrorMessage(t('Số tiền mục tiêu phải lớn hơn 0'));
       setShowErrorPopup(true);
@@ -3949,70 +4044,82 @@ function GoalsPage({ goals, userId, totalCurrent, onRefresh }: {
       setShowErrorPopup(true);
       return;
     }
-    try {
-      const payload = {
-        Name: formName,
-        TargetAmount: formAmount,
-        StartDate: formStartDate ? new Date(formStartDate).toISOString() : undefined,
-        DueDate: new Date(formDueDate).toISOString()
-      };
-      if (editGoal) {
-        await goalService.update(editGoal.Id, payload, userId);
-      } else {
-        await goalService.create(payload, userId);
+    await runExclusiveGlobalLoading(async () => {
+      try {
+        const payload = {
+          Name: formName,
+          TargetAmount: formAmount,
+          StartDate: formStartDate ? new Date(formStartDate).toISOString() : undefined,
+          DueDate: new Date(formDueDate).toISOString()
+        };
+        if (editGoal) {
+          await goalService.update(editGoal.Id, payload, userId);
+        } else {
+          await goalService.create(payload, userId);
+        }
+        setShowModal(false);
+        await onRefresh();
+      } catch (err: any) {
+        setErrorMessage(err.message);
+        setShowErrorPopup(true);
       }
-      setShowModal(false);
-      await onRefresh();
-    } catch (err: any) {
-      setErrorMessage(err.message);
-      setShowErrorPopup(true);
-    }
+    }, t('Đang lưu mục tiêu...'));
   };
 
   const handleDelete = async (id: string) => {
+    if (isGlobalBusy()) return;
     if (!window.confirm(t('Bạn có chắc chắn muốn xóa mục tiêu này?'))) return;
-    try {
-      await goalService.delete(id);
-      await onRefresh();
-    } catch (err: any) {
-      setErrorMessage(err.message);
-      setShowErrorPopup(true);
-    }
+    await runExclusiveGlobalLoading(async () => {
+      try {
+        await goalService.delete(id);
+        await onRefresh();
+      } catch (err: any) {
+        setErrorMessage(err.message);
+        setShowErrorPopup(true);
+      }
+    }, t('Đang xóa mục tiêu...'));
   };
 
   const handleStart = async (id: string) => {
-    try {
-      await goalService.start(id);
-      await onRefresh();
-    } catch (err: any) {
-      setErrorMessage(err.message);
-      setShowErrorPopup(true);
-    }
+    if (isGlobalBusy()) return;
+    await runExclusiveGlobalLoading(async () => {
+      try {
+        await goalService.start(id);
+        await onRefresh();
+      } catch (err: any) {
+        setErrorMessage(err.message);
+        setShowErrorPopup(true);
+      }
+    }, t('Đang xử lý...'));
   };
 
   const handleCancel = async (id: string) => {
+    if (isGlobalBusy()) return;
     if (!window.confirm(t('Bạn có chắc chắn muốn hủy mục tiêu này?'))) return;
-    try {
-      await goalService.cancel(id);
-      await onRefresh();
-    } catch (err: any) {
-      setErrorMessage(err.message);
-      setShowErrorPopup(true);
-    }
+    await runExclusiveGlobalLoading(async () => {
+      try {
+        await goalService.cancel(id);
+        await onRefresh();
+      } catch (err: any) {
+        setErrorMessage(err.message);
+        setShowErrorPopup(true);
+      }
+    }, t('Đang hủy mục tiêu...'));
   };
 
-  const getStatusBadge = (status: string) => {
-    const styles: Record<string, { bg: string; color: string; label: string }> = {
-      NotStarted: { bg: 'rgba(100,116,139,0.15)', color: '#94a3b8', label: t('Chưa bắt đầu') },
-      Processing: { bg: 'rgba(99,102,241,0.15)', color: '#6366f1', label: t('Đang thực hiện') },
-      Successed: { bg: 'rgba(16,185,129,0.15)', color: '#10b981', label: t('Thành công') },
-      Failed: { bg: 'rgba(244,63,94,0.15)', color: '#f43f5e', label: t('Thất bại') },
-      Cancelled: { bg: 'rgba(100,116,139,0.15)', color: '#64748b', label: t('Đã hủy') },
+  // Quiet status language: colored dot + text, no pills (display only)
+  const renderStatusDot = (status: string) => {
+    const map: Record<string, { cls: string; label: string }> = {
+      NotStarted: { cls: 'neutral', label: t('Chưa bắt đầu') },
+      Processing: { cls: 'active', label: t('Đang thực hiện') },
+      Successed: { cls: 'success', label: t('Thành công') },
+      Failed: { cls: 'failed', label: t('Thất bại') },
+      Cancelled: { cls: 'neutral', label: t('Đã hủy') },
     };
-    const s = styles[status] || styles.NotStarted;
+    const s = map[status] || map.NotStarted;
     return (
-      <span style={{ fontSize: '0.75rem', padding: '3px 10px', borderRadius: '10px', fontWeight: 600, background: s.bg, color: s.color }}>
-        {s.label}
+      <span className={`journey-status ${s.cls}`}>
+        <i aria-hidden="true" />{s.label}
       </span>
     );
   };
@@ -4042,130 +4149,260 @@ function GoalsPage({ goals, userId, totalCurrent, onRefresh }: {
     return new Date(b.CreatedAt).getTime() - new Date(a.CreatedAt).getTime();
   });
 
-  return (
-    <div>
-      <div className="tab-header">
-        <div>
-          <h2 className="section-title">{t('Thiết lập mục tiêu')}</h2>
-          <p className="section-desc">{t('Quản lý mục tiêu tài chính')}</p>
-        </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button className="btn btn-primary" onClick={openCreate} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            {t('Thêm mục tiêu')}
-          </button>
-        </div>
-      </div>
+  // Hero = first Processing, else first NotStarted (display only, logic unchanged)
+  const activeGoal = sortedGoals.find(g => g.Status === 'Processing')
+    || sortedGoals.find(g => g.Status === 'NotStarted')
+    || null;
 
-      {/* Summary Cards */}
-      <div className="grid-3" style={{ marginBottom: '20px' }}>
-        <div className="card">
-          <div className="metric-header">
-            <span className="metric-title">{t('Tổng số mục tiêu')}</span>
-          </div>
-          <div className="metric-value" style={{ fontSize: '1.8rem' }}>{goals.length}</div>
-        </div>
-        <div className="card">
-          <div className="metric-header">
-            <span className="metric-title">{t('Số tiền hiện có')}</span>
-          </div>
-          <div className="metric-value" style={{ fontSize: '1.8rem', color: 'var(--success)' }}>{formatCurrency(totalCurrent)}</div>
-        </div>
-        <div className="card">
-          <div className="metric-header">
-            <span className="metric-title">{t('Mục tiêu gần nhất')}</span>
-          </div>
-          <div className="metric-value" style={{ fontSize: '1.5rem' }}>
-            {sortedGoals.find(g => g.Status === 'Processing')?.Name || sortedGoals.find(g => g.Status === 'NotStarted')?.Name || '--'}
-          </div>
-        </div>
-      </div>
+  const isFinishedStatus = (s: string) => s === 'Successed' || s === 'Failed' || s === 'Cancelled';
+  // Every goal stays visible: non-hero active goals → upcoming, finished ones → history
+  const upcomingGoals = sortedGoals.filter(g => !(activeGoal && g.Id === activeGoal.Id) && !isFinishedStatus(g.Status));
+  const finishedGoals = sortedGoals.filter(g => !(activeGoal && g.Id === activeGoal.Id) && isFinishedStatus(g.Status));
+  const processingCount = goals.filter(g => g.Status === 'Processing').length;
 
-      {/* Goals List */}
-      <div className="table-container">
-        <table className="custom-table">
-          <thead>
-            <tr>
-              <th>{t('Tên mục tiêu')}</th>
-              <th style={{ textAlign: 'right' }}>{t('Số tiền mục tiêu')}</th>
-              <th style={{ textAlign: 'right' }}>{t('Ngày bắt đầu')}</th>
-              <th style={{ textAlign: 'right' }}>{t('Ngày đến hạn')}</th>
-              <th style={{ textAlign: 'right' }}>{t('Thời gian còn lại')}</th>
-              <th style={{ textAlign: 'right' }}>{t('Tiến độ')}</th>
-              <th style={{ textAlign: 'center' }}>{t('Trạng thái')}</th>
-              <th style={{ textAlign: 'center', width: '160px' }}>{t('Hành động')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sortedGoals.length === 0 ? (
-              <tr>
-                <td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '30px' }}>
-                  {t('Chưa có mục tiêu nào. Hãy tạo mục tiêu mới!')}
-                </td>
-              </tr>
-            ) : (
-              sortedGoals.map((goal) => {
-                const progress = getProgressPercent(goal);
-                return (
-                  <tr key={goal.Id}>
-                    <td style={{ fontWeight: 600 }}>{goal.Name}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)' }}>{formatCurrency(goal.TargetAmount)}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)' }}>
-                      {goal.StartDate ? new Date(goal.StartDate).toLocaleDateString('en-GB') : '--'}
-                    </td>
-                    <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)' }}>
-                      {goal.DueDate ? new Date(goal.DueDate).toLocaleDateString('en-GB') : '--'}
-                    </td>
-                    <td style={{ textAlign: 'right', fontFamily: 'var(--font-display)', color: goal.Status === 'Failed' || goal.Status === 'Cancelled' ? 'var(--danger)' : 'var(--text-secondary)' }}>
-                      {goal.Status === 'Cancelled' ? '--' : getTimeRemaining(goal.DueDate)}
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-end' }}>
-                        <div style={{ flex: 1, maxWidth: '120px', height: '6px', background: 'rgba(255,255,255,0.06)', borderRadius: '3px', overflow: 'hidden' }}>
-                          <div style={{
-                            width: `${progress}%`, height: '100%', borderRadius: '3px', transition: 'width 0.5s ease',
-                            background: goal.Status === 'Successed' ? '#10b981' : goal.Status === 'Failed' ? '#f43f5e' : progress >= 100 ? '#10b981' : '#6366f1'
-                          }} />
-                        </div>
-                        <span style={{ fontFamily: 'var(--font-display)', fontSize: '0.85rem', fontWeight: 600, minWidth: '45px' }}>{progress}%</span>
-                      </div>
-                    </td>
-                    <td style={{ textAlign: 'center' }}>{getStatusBadge(goal.Status)}</td>
-                    <td style={{ textAlign: 'center' }}>
-                      <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                        {goal.Status === 'NotStarted' && (
-                          <button className="btn-icon" onClick={() => handleStart(goal.Id)} title={t('Bắt đầu')}
-                            style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '4px', padding: '4px 8px', color: '#10b981', fontSize: '0.7rem', fontWeight: 600 }}>
-                            {t('Bắt đầu')}
-                          </button>
-                        )}
-                        {goal.Status === 'Processing' && (
-                          <button className="btn-icon" onClick={() => handleCancel(goal.Id)} title={t('Hủy mục tiêu')}
-                            style={{ background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.3)', borderRadius: '4px', padding: '4px 8px', color: '#f43f5e', fontSize: '0.7rem', fontWeight: 600 }}>
-                            {t('Hủy')}
-                          </button>
-                        )}
-                        <button className="btn-icon edit" onClick={() => openEdit(goal)} title={t('Sửa')}>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
-                          </svg>
-                        </button>
-                        <button className="btn-icon delete" onClick={() => handleDelete(goal.Id)} title={t('Xóa')}>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                          </svg>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
+  const formatDueDate = (iso: string) => {
+    if (!iso) return '--';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleDateString('en-GB');
+  };
+
+  const RING_R = 78;
+  const RING_C = 2 * Math.PI * RING_R;
+
+  // Shared ••• menu — same actions everywhere (edit / start / cancel / delete)
+  const renderGoalMenu = (goal: any) => {
+    const menuOpen = openMenuId === goal.Id;
+    return (
+      <div className="goals-menu-wrap">
+        <button
+          className="goals-menu-btn"
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          aria-label={t('Tùy chọn')}
+          title={t('Tùy chọn')}
+          disabled={isGoalBusy}
+          onClick={() => setOpenMenuId(menuOpen ? null : goal.Id)}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" />
+          </svg>
+        </button>
+        {menuOpen && (
+          <div className="goals-menu" role="menu">
+            <button
+              className="goals-menu-item"
+              role="menuitem"
+              onClick={() => { setOpenMenuId(null); openEdit(goal); }}
+            >
+              {t('Chỉnh sửa')}
+            </button>
+            {goal.Status === 'NotStarted' && (
+              <button
+                className="goals-menu-item"
+                role="menuitem"
+                onClick={() => { setOpenMenuId(null); handleStart(goal.Id); }}
+              >
+                {t('Bắt đầu')}
+              </button>
             )}
-          </tbody>
-        </table>
+            {goal.Status === 'Processing' && (
+              <button
+                className="goals-menu-item"
+                role="menuitem"
+                onClick={() => { setOpenMenuId(null); handleCancel(goal.Id); }}
+              >
+                {t('Hủy mục tiêu')}
+              </button>
+            )}
+            <div className="goals-menu-divider" />
+            <button
+              className="goals-menu-item danger"
+              role="menuitem"
+              onClick={() => { setOpenMenuId(null); handleDelete(goal.Id); }}
+            >
+              {t('Xóa')}
+            </button>
+          </div>
+        )}
       </div>
+    );
+  };
+
+  // Hero derived values (display only)
+  const heroProgress = activeGoal ? getProgressPercent(activeGoal) : 0;
+  const heroCurrent = activeGoal ? Math.min(totalCurrent, activeGoal.TargetAmount || 0) : 0;
+  const heroRemaining = activeGoal ? Math.max(0, (activeGoal.TargetAmount || 0) - totalCurrent) : 0;
+  const heroIsSuccess = !!activeGoal && (activeGoal.Status === 'Successed' || heroProgress >= 100);
+  const heroIsFailed = !!activeGoal && activeGoal.Status === 'Failed';
+  const heroRingTone = heroIsSuccess ? 'success' : heroIsFailed ? 'failed' : '';
+  const heroExpiredLabel = t('Đã hết hạn');
+  const heroRawTime = activeGoal
+    ? (activeGoal.Status === 'Cancelled' ? '--' : getTimeRemaining(activeGoal.DueDate))
+    : '--';
+  const heroIsExpired = !!activeGoal && activeGoal.Status !== 'Cancelled' && heroRawTime === heroExpiredLabel;
+
+  return (
+    <div className="goals-page">
+      <div className="goals-header">
+        <div className="goals-header-text">
+          <h2 className="goals-title">{t('Thiết lập mục tiêu')}</h2>
+          <p className="goals-subtitle">{t('Theo dõi tiến độ các mục tiêu tài chính')}</p>
+        </div>
+        <button className="btn btn-primary goals-cta" onClick={openCreate} disabled={isGoalBusy}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          {t('Thêm mục tiêu')}
+        </button>
+      </div>
+
+      {/* ACTIVE GOAL — editorial split hero: full figure + thin ring gauge */}
+      {activeGoal ? (
+        <section className="journey-hero" aria-label={activeGoal.Name}>
+          <div className="journey-hero-main">
+            <div className="journey-hero-info">
+              <div className="journey-hero-top">
+                {renderStatusDot(activeGoal.Status)}
+                {renderGoalMenu(activeGoal)}
+              </div>
+              <h3 className="journey-hero-name" title={activeGoal.Name}>{activeGoal.Name}</h3>
+              <div className="journey-hero-current" title={`${formatCurrency(heroCurrent)} ₫`}>
+                {formatCurrency(heroCurrent)}<span> ₫</span>
+              </div>
+              <div className="journey-hero-sub">
+                {t('đã tích lũy')} <span aria-hidden="true">·</span> {t('mục tiêu')}{' '}
+                <b title={`${formatCurrency(activeGoal.TargetAmount)} ₫`}>
+                  {formatCurrency(activeGoal.TargetAmount)} ₫
+                </b>
+              </div>
+              <div className="journey-hero-stats">
+                <div>
+                  <span>{t('Còn thiếu')}</span>
+                  {heroIsSuccess ? (
+                    <b className="ok">{t('Đã hoàn thành')}</b>
+                  ) : (
+                    <b title={`${formatCurrency(heroRemaining)} ₫`}>
+                      {formatCurrency(heroRemaining)} ₫
+                    </b>
+                  )}
+                </div>
+                <div>
+                  <span>{t('Thời gian còn lại')}</span>
+                  <b className={heroIsExpired || heroIsFailed ? 'bad' : ''}>{heroRawTime}</b>
+                </div>
+              </div>
+            </div>
+            <div className="journey-hero-gauge">
+              <div className="journey-ring">
+                <svg viewBox="0 0 180 180" aria-hidden="true">
+                  <circle className="track" cx="90" cy="90" r={RING_R} />
+                  <circle
+                    className={`fill ${heroRingTone}`}
+                    cx="90" cy="90" r={RING_R}
+                    strokeDasharray={`${(RING_C * heroProgress) / 100} ${RING_C}`}
+                    transform="rotate(-90 90 90)"
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <div
+                  className="journey-ring-center"
+                  role="progressbar"
+                  aria-valuenow={heroProgress}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label={`${activeGoal.Name} ${heroProgress}%`}
+                >
+                  <b>{heroProgress}%</b>
+                  <span>{t('hoàn thành')}</span>
+                </div>
+              </div>
+              <div className="journey-hero-range">
+                {formatDueDate(activeGoal.StartDate)} → {formatDueDate(activeGoal.DueDate)}
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : sortedGoals.length === 0 ? (
+        <div className="goals-empty">
+          {t('Chưa có mục tiêu nào. Hãy tạo mục tiêu mới!')}
+        </div>
+      ) : (
+        <div className="journey-ledger-note">
+          {goals.length} {t('mục tiêu')} · {processingCount} {t('đang thực hiện')}
+        </div>
+      )}
+
+      {/* UPCOMING — quiet ledger rows, no hero treatment */}
+      {upcomingGoals.length > 0 && (
+        <section className="journey-section" aria-label={t('Kế hoạch sắp tới')}>
+          <div className="journey-section-title">{t('KẾ HOẠCH SẮP TỚI')}<span>{upcomingGoals.length}</span></div>
+          <div className="journey-uplist">
+            {upcomingGoals.map((goal) => {
+              const progress = getProgressPercent(goal);
+              return (
+                <div key={goal.Id} className="journey-urow">
+                  <div className="journey-urow-main">
+                    <span className="journey-urow-name" title={goal.Name}>{goal.Name}</span>
+                    <span className="journey-urow-meta">
+                      {goal.StartDate ? formatDueDate(goal.StartDate) : '--'}
+                      {' → '}
+                      {formatDueDate(goal.DueDate)}
+                    </span>
+                  </div>
+                  <div
+                    className="journey-urow-amount"
+                    title={`${formatCurrency(goal.TargetAmount)} ₫`}
+                  >
+                    {formatCompactValue(goal.TargetAmount)}
+                  </div>
+                  <div className="journey-urow-pct">{progress}%</div>
+                  {renderStatusDot(goal.Status)}
+                  {renderGoalMenu(goal)}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* HISTORY — compact timeline of finished goals */}
+      {finishedGoals.length > 0 && (
+        <section className="journey-section" aria-label={t('Mục tiêu đã kết thúc')}>
+          <div className="journey-section-title">{t('MỤC TIÊU ĐÃ KẾT THÚC')}<span>{finishedGoals.length}</span></div>
+          <div className="journey-hlist">
+            {finishedGoals.map((goal) => {
+              const progress = getProgressPercent(goal);
+              const tone = goal.Status === 'Successed' || progress >= 100
+                ? 'success'
+                : goal.Status === 'Failed' ? 'failed' : 'neutral';
+              const share = Math.min(totalCurrent, goal.TargetAmount || 0);
+              return (
+                <div key={goal.Id} className={`journey-hrow ${tone}`}>
+                  <span className="journey-hnode" aria-hidden="true" />
+                  <div className="journey-hmain">
+                    <div className="journey-hname" title={goal.Name}>{goal.Name}</div>
+                    <div className="journey-hmeta">
+                      {goal.StartDate ? formatDueDate(goal.StartDate) : '--'}
+                      {' → '}
+                      {formatDueDate(goal.DueDate)}
+                    </div>
+                  </div>
+                  <div
+                    className="journey-hamount"
+                    title={`${formatCurrency(share)} / ${formatCurrency(goal.TargetAmount)} ₫`}
+                  >
+                    {formatCompactValue(share)} / {formatCompactValue(goal.TargetAmount)}
+                  </div>
+                  <div className="journey-hpct">{progress}%</div>
+                  {renderStatusDot(goal.Status)}
+                  {renderGoalMenu(goal)}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* Error Popup */}
       {showErrorPopup && (
@@ -4220,8 +4457,8 @@ function GoalsPage({ goals, userId, totalCurrent, onRefresh }: {
                   onChange={(e) => setFormDueDate(e.target.value)} />
               </div>
               <div className="modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>{t('Hủy')}</button>
-                <button type="submit" className="btn btn-primary">{t('Lưu lại')}</button>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)} disabled={isGoalBusy}>{t('Hủy')}</button>
+                <button type="submit" className="btn btn-primary" disabled={isGoalBusy}>{isGoalBusy ? t('Đang xử lý...') : t('Lưu lại')}</button>
               </div>
             </form>
           </div>
@@ -4284,6 +4521,7 @@ function MoneyInput({ value, onChange, className = '', style, placeholder }: {
 // 5. DEBT MANAGEMENT — Premium Debt Control Center
 function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; onRefresh: () => void }) {
   const { t } = useLanguage();
+  const { isBusy: isDebtBusy } = useGlobalBusy();
   const [formName, setFormName] = useState('');
   const [formTotalDebt, setFormTotalDebt] = useState('');
   const [formBorrowDate, setFormBorrowDate] = useState('');
@@ -4358,19 +4596,22 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
     }
   };
   const doSaveDebt = async (payload: any) => {
-    try {
-      if (editingDebt) {
-        await debtService.update(editingDebt.Id, payload, userId);
-      } else {
-        await debtService.create(payload, userId);
+    if (isGlobalBusy()) return;
+    await runExclusiveGlobalLoading(async () => {
+      try {
+        if (editingDebt) {
+          await debtService.update(editingDebt.Id, payload, userId);
+        } else {
+          await debtService.create(payload, userId);
+        }
+        setShowModal(false);
+        setSaveConfirmData(null);
+        setEditingDebt(null);
+        onRefresh();
+      } catch (err: any) {
+        alert(err.message || t('Có lỗi xảy ra'));
       }
-      setShowModal(false);
-      setSaveConfirmData(null);
-      setEditingDebt(null);
-      onRefresh();
-    } catch (err: any) {
-      alert(err.message || t('Có lỗi xảy ra'));
-    }
+    }, t('Đang lưu khoản nợ...'));
   };
   const handleDelete = async (id: string) => {
     setDeleteConfirmId(id);
@@ -4378,15 +4619,18 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
   };
   const confirmDelete = async () => {
     if (!deleteConfirmId) return;
-    try {
-      await debtService.delete(deleteConfirmId);
-      setDeleteConfirmId(null);
-      if (drawerDebt?.Id === deleteConfirmId) setDrawerDebt(null);
-      onRefresh();
-    } catch (err: any) {
-      alert(err.message || t('Có lỗi xảy ra'));
-      setDeleteConfirmId(null);
-    }
+    if (isGlobalBusy()) return;
+    await runExclusiveGlobalLoading(async () => {
+      try {
+        await debtService.delete(deleteConfirmId);
+        setDeleteConfirmId(null);
+        if (drawerDebt?.Id === deleteConfirmId) setDrawerDebt(null);
+        onRefresh();
+      } catch (err: any) {
+        alert(err.message || t('Có lỗi xảy ra'));
+        setDeleteConfirmId(null);
+      }
+    }, t('Đang xóa khoản nợ...'));
   };
   const handleClose = async (id: string) => {
     setCloseConfirmId(id);
@@ -4394,14 +4638,17 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
   };
   const confirmClose = async () => {
     if (!closeConfirmId) return;
-    try {
-      await debtService.close(closeConfirmId);
-      setCloseConfirmId(null);
-      onRefresh();
-    } catch (err: any) {
-      alert(err.message || t('Có lỗi xảy ra'));
-      setCloseConfirmId(null);
-    }
+    if (isGlobalBusy()) return;
+    await runExclusiveGlobalLoading(async () => {
+      try {
+        await debtService.close(closeConfirmId);
+        setCloseConfirmId(null);
+        onRefresh();
+      } catch (err: any) {
+        alert(err.message || t('Có lỗi xảy ra'));
+        setCloseConfirmId(null);
+      }
+    }, t('Đang đóng khoản nợ...'));
   };
   const openPaymentModal = (debt: any) => {
     setPayingDebt(debt);
@@ -4415,24 +4662,27 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
   const handleAddPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!payingDebt) return;
+    if (isGlobalBusy()) return;
     const amount = parseFloat(paymentAmount.replace(/,/g, '')) || 0;
     if (amount <= 0) { setPayingError(t('Số tiền phải lớn hơn 0')); return; }
     const remaining = payingDebt.RemainingAmount ?? (payingDebt.TotalDebt - payingDebt.PaidAmount);
     if (amount > remaining) {
       if (!window.confirm(t('Số tiền thanh toán vượt quá số dư còn lại. Bạn có chắc muốn tiếp tục?'))) return;
     }
-    try {
-      await debtService.addPayment(payingDebt.Id, {
-        PaymentDate: paymentDate,
-        Amount: amount,
-        Note: paymentNote || undefined
-      });
-      setShowPaymentModal(false);
-      setPayingDebt(null);
-      onRefresh();
-    } catch (err: any) {
-      setPayingError(err.message || t('Có lỗi xảy ra'));
-    }
+    await runExclusiveGlobalLoading(async () => {
+      try {
+        await debtService.addPayment(payingDebt.Id, {
+          PaymentDate: paymentDate,
+          Amount: amount,
+          Note: paymentNote || undefined
+        });
+        setShowPaymentModal(false);
+        setPayingDebt(null);
+        onRefresh();
+      } catch (err: any) {
+        setPayingError(err.message || t('Có lỗi xảy ra'));
+      }
+    }, t('Đang thêm thanh toán...'));
   };
   // legacy toggle kept for compat
   void expandedId; void setExpandedId;
@@ -5046,8 +5296,8 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
                 <input className="form-control" value={formNote} onChange={e=> setFormNote(e.target.value)} placeholder={t('Ghi chú ngắn...')} />
               </div>
               <div className="modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={()=> setShowModal(false)}>{t('Hủy')}</button>
-                <button type="submit" className="btn btn-primary">{editingDebt ? t('Lưu') : t('Thêm')}</button>
+                <button type="button" className="btn btn-secondary" onClick={()=> setShowModal(false)} disabled={isDebtBusy}>{t('Hủy')}</button>
+                <button type="submit" className="btn btn-primary" disabled={isDebtBusy}>{isDebtBusy ? t('Đang xử lý...') : (editingDebt ? t('Lưu') : t('Thêm'))}</button>
               </div>
             </form>
           </div>
@@ -5094,8 +5344,8 @@ function DebtPage({ debts, userId, onRefresh }: { debts: any[]; userId: string; 
               </div>
               {payingError && <div style={{color:'#FF4D67',fontSize:12,marginBottom:8}}>{payingError}</div>}
               <div className="modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={()=> {setShowPaymentModal(false); setPayingDebt(null);}}>{t('Hủy')}</button>
-                <button type="submit" className="btn btn-primary" style={{background:'#18C995',borderColor:'#18C995'}}>{t('Xác nhận thanh toán')}</button>
+                <button type="button" className="btn btn-secondary" onClick={()=> {setShowPaymentModal(false); setPayingDebt(null);}} disabled={isDebtBusy}>{t('Hủy')}</button>
+                <button type="submit" className="btn btn-primary" style={{background:'#18C995',borderColor:'#18C995'}} disabled={isDebtBusy}>{isDebtBusy ? t('Đang xử lý...') : t('Xác nhận thanh toán')}</button>
               </div>
             </form>
           </div>
@@ -5298,17 +5548,20 @@ function ProfilePage({ user, onUserUpdate }: { user: any; onUserUpdate: (u: any)
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!displayName.trim()) return;
+    if (isGlobalBusy()) return;
     setProfileLoading(true);
-    try {
-      const api = await import('./services/api');
-      const result = await api.authService.updateProfile(user?.id, displayName.trim(), email.trim() || undefined);
-      onUserUpdate(result);
-      addToast({ title: t('Cập nhật hồ sơ thành công!'), variant: 'success' });
-    } catch (err: any) {
-      addToast({ title: t('Lỗi cập nhật hồ sơ'), description: err.message, variant: 'error' });
-    } finally {
-      setProfileLoading(false);
-    }
+    await runExclusiveGlobalLoading(async () => {
+      try {
+        const api = await import('./services/api');
+        const result = await api.authService.updateProfile(user?.id, displayName.trim(), email.trim() || undefined);
+        onUserUpdate(result);
+        addToast({ title: t('Cập nhật hồ sơ thành công!'), variant: 'success' });
+      } catch (err: any) {
+        addToast({ title: t('Lỗi cập nhật hồ sơ'), description: err.message, variant: 'error' });
+      } finally {
+        setProfileLoading(false);
+      }
+    }, t('Đang cập nhật hồ sơ...'));
   };
 
   const handleChangePassword = async (e: React.FormEvent) => {
@@ -5318,19 +5571,22 @@ function ProfilePage({ user, onUserUpdate }: { user: any; onUserUpdate: (u: any)
       return;
     }
     if (!currentPassword || !newPassword) return;
+    if (isGlobalBusy()) return;
     setPasswordLoading(true);
-    try {
-      const api = await import('./services/api');
-      await api.authService.changePassword(user?.id, currentPassword, newPassword);
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-      addToast({ title: t('Đổi mật khẩu thành công!'), variant: 'success' });
-    } catch (err: any) {
-      addToast({ title: t('Lỗi đổi mật khẩu'), description: err.message, variant: 'error' });
-    } finally {
-      setPasswordLoading(false);
-    }
+    await runExclusiveGlobalLoading(async () => {
+      try {
+        const api = await import('./services/api');
+        await api.authService.changePassword(user?.id, currentPassword, newPassword);
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+        addToast({ title: t('Đổi mật khẩu thành công!'), variant: 'success' });
+      } catch (err: any) {
+        addToast({ title: t('Lỗi đổi mật khẩu'), description: err.message, variant: 'error' });
+      } finally {
+        setPasswordLoading(false);
+      }
+    }, t('Đang đổi mật khẩu...'));
   };
 
   return (
